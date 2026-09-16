@@ -43,7 +43,7 @@ import java.util.zip.ZipOutputStream
  * Importante: o workflow exposto aqui é deliberadamente LOCAL. Execução
  * autorizada no Sandbox usa BrainSandboxController/BrainSandboxExecutionBridge.
  */
-class BrainIntegrationFacade(private val context: Context, stateDir: File) {
+class BrainIntegrationFacade(private val context: Context, private val stateDir: File) {
     private val skills = SkillRegistry()
     private val workflows = WorkflowEngine(File(stateDir, "workflows.json"))
     private val memory: ExperienceMemory = FileExperienceMemory(File(stateDir, "memory.jsonl"))
