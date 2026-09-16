@@ -34,6 +34,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -210,7 +211,14 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
             modifier = Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = { viewModel.quoteEvent(event) }),
             horizontalArrangement = Arrangement.End
         ) {
-            Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(12.dp))
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = MaterialTheme.shapes.medium
+            ) {
+                SelectionContainer {
+                    Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+                }
+            }
         }
         is ThreadEvent.Agent -> Column(
             modifier = Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = { viewModel.quoteEvent(event) }),
@@ -218,7 +226,9 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
         ) {
             val blocks = extractCodeBlocks(event.text)
             if (blocks.isEmpty()) {
-                Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
+                SelectionContainer {
+                    Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
+                }
             } else {
                 var cursor = 0
                 Regex("```([^\\n]*)\\n([\\s\\S]*?)```").findAll(event.text).forEach { match ->
