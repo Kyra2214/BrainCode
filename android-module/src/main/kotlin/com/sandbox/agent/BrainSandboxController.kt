@@ -145,7 +145,11 @@ class BrainSandboxController(
     )
 
     /** Entrada real do chat: objetivo → planner no caller → ciclo autorizado → dispatcher/gateway/sandbox. */
-    fun executeObjective(objective: String, runId: String = "chat-${System.currentTimeMillis()}"): ResultadoCiclo {
+    fun executeObjective(
+        objective: String,
+        runId: String = "chat-${System.currentTimeMillis()}",
+        onPasso: (ResultadoPasso) -> Unit = {}
+    ): ResultadoCiclo {
         emit(runId, "chat", "TaskCreated", mapOf("objective" to objective.take(500)))
         val classification = intentClassifier.classify(objective)
         val planner = com.brain.planner.KeywordPlanner()
@@ -160,7 +164,21 @@ class BrainSandboxController(
             manifest = WorkflowManifest("brain-plan", "1.0.0", listOf(WorkflowNode("plan", "brain.plan"))),
             authorize = { it == "brain.plan" },
             execute = { node, attempt ->
-                cycle = executeWithEvents(plan, runId) { bridge.authorizeAndExecute(plan, runId, actor) }
+                cycle = executeWithEvents(plan, runId) {
+                    bridge.authorizeAndExecute(plan, runId, actor) { passo ->
+                        emit(
+                            runId,
+                            passo.passoId,
+                            "StepCompleted",
+                            mapOf(
+                                "passoId" to passo.passoId,
+                                "status" to passo.status.name,
+                                "motivo" to (passo.motivo ?: "")
+                            )
+                        )
+                        onPasso(passo)
+                    }
+                }
                 WorkflowStepResult(
                     nodeId = node.id,
                     success = cycle?.aprovado == true,

@@ -53,7 +53,7 @@ class CicloExecucaoPlano(
 
     /** Fronteira Agent/Sandbox: não aceita PlanoExecucao cru. */
     @Suppress("UNUSED_PARAMETER")
-    fun executar(autorizado: AuthorizedPlan, runId: String, actor: String): ResultadoCiclo {
+    fun executar(autorizado: AuthorizedPlan, runId: String, actor: String, onPasso: (ResultadoPasso) -> Unit = {}): ResultadoCiclo {
         val plano = autorizado.plan
         val resultados = mutableListOf<ResultadoPasso>()
         val concluidos = mutableSetOf<String>()
@@ -61,22 +61,25 @@ class CicloExecucaoPlano(
         for (passo in plano.ordemDeExecucao) {
             if (abortado) {
                 resultados += ResultadoPasso(passo.id, StatusPasso.BLOQUEADO_POR_DEPENDENCIA, motivo = "ciclo abortado por passo anterior")
+                onPasso(resultados.last())
                 continue
             }
             val dependencia = passo.dependeDe.firstOrNull { it !in concluidos }
             if (dependencia != null) {
                 resultados += ResultadoPasso(passo.id, StatusPasso.BLOQUEADO_POR_DEPENDENCIA, motivo = "depende de '$dependencia'")
+                onPasso(resultados.last())
                 continue
             }
             val resultado = processarPasso(passo, autorizado.authorizations.getValue(passo.id), autorizado.decisions[passo.id])
             resultados += resultado
+            onPasso(resultado)
             if (resultado.status == StatusPasso.APROVADO) concluidos += passo.id else abortado = true
         }
         return ResultadoCiclo(plano.objetivo, runId, resultados)
     }
 
     /** Autoriza todos os passos antes de emitir o wrapper aceito pelo Agent. */
-    fun autorizarEExecutar(plano: PlanoExecucao, runId: String, actor: String): ResultadoCiclo {
+    fun autorizarEExecutar(plano: PlanoExecucao, runId: String, actor: String, onPasso: (ResultadoPasso) -> Unit = {}): ResultadoCiclo {
         val authorizations = linkedMapOf<String, ExecutionAuthorization>()
         val decisions = linkedMapOf<String, PolicyDecision>()
         for (passo in plano.ordemDeExecucao) {
@@ -103,13 +106,15 @@ class CicloExecucaoPlano(
                 val bloqueados = plano.ordemDeExecucao.dropWhile { it.id != passo.id }.drop(1).map {
                     ResultadoPasso(it.id, StatusPasso.BLOQUEADO_POR_DEPENDENCIA, motivo = "ciclo abortado por passo anterior")
                 }
+                onPasso(resultadoInicial)
+                bloqueados.forEach(onPasso)
                 return ResultadoCiclo(plano.objetivo, runId, listOf(resultadoInicial) + bloqueados)
             }
             authorizations[passo.id] = ExecutionAuthorization.fromDecision(decision)
-                ?: return ResultadoCiclo(plano.objetivo, runId, listOf(ResultadoPasso(passo.id, StatusPasso.NEGADO_PELA_POLICY, decisaoPolicy = decision, motivo = "autorização inválida")))
+                ?: return ResultadoCiclo(plano.objetivo, runId, listOf(ResultadoPasso(passo.id, StatusPasso.NEGADO_PELA_POLICY, decisaoPolicy = decision, motivo = "autorização inválida"))).also { onPasso(it.passos.single()) }
             decisions[passo.id] = decision
         }
-        return executar(AuthorizedPlan.issue(plano, authorizations, decisions), runId, actor)
+        return executar(AuthorizedPlan.issue(plano, authorizations, decisions), runId, actor, onPasso)
     }
 
     fun retomar(plano: PlanoExecucao, runId: String, actor: String, approvalId: String): ResultadoCiclo {

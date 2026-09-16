@@ -10,11 +10,11 @@ import com.brain.planner.PlanoExecucao
  * que toda sessão nasce de uma autorização emitida pela Policy.
  */
 class BrainSandboxExecutionBridge(private val ciclo: CicloExecucaoPlano) {
-    fun execute(autorizado: AuthorizedPlan, runId: String, actor: String): ResultadoCiclo =
-        ciclo.executar(autorizado, runId, actor)
+    fun execute(autorizado: AuthorizedPlan, runId: String, actor: String, onPasso: (ResultadoPasso) -> Unit = {}): ResultadoCiclo =
+        ciclo.executar(autorizado, runId, actor, onPasso)
 
-    fun authorizeAndExecute(plano: PlanoExecucao, runId: String, actor: String): ResultadoCiclo =
-        ciclo.autorizarEExecutar(plano, runId, actor)
+    fun authorizeAndExecute(plano: PlanoExecucao, runId: String, actor: String, onPasso: (ResultadoPasso) -> Unit = {}): ResultadoCiclo =
+        ciclo.autorizarEExecutar(plano, runId, actor, onPasso)
 
     fun resume(plano: PlanoExecucao, runId: String, actor: String, approvalId: String): ResultadoCiclo =
         ciclo.retomar(plano, runId, actor, approvalId)

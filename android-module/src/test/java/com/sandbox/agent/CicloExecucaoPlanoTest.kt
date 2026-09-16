@@ -69,6 +69,25 @@ class CicloExecucaoPlanoTest {
     }
 
     @Test
+    fun `callback recebe cada passo assim que o ciclo o conclui`() {
+        val root = Files.createTempDirectory("ciclo-stream-").toFile()
+        try {
+            val recebidos = mutableListOf<String>()
+            val plano = PlanoExecucao(
+                objetivo = "cadeia",
+                passos = listOf(
+                    passo("primeiro"),
+                    passo("segundo", dependeDe = listOf("primeiro"))
+                )
+            )
+            val resultado = ciclo(root).autorizarEExecutar(plano, "run-stream", "agent-1") { recebidos += it.passoId }
+
+            assertTrue(resultado.aprovado)
+            assertEquals(listOf("primeiro", "segundo"), recebidos)
+        } finally { root.deleteRecursively() }
+    }
+
+    @Test
     fun `capacidade nao registrada na policy nega o passo e bloqueia quem depende dele`() {
         val root = Files.createTempDirectory("ciclo-").toFile()
         try {
