@@ -54,6 +54,7 @@ class BrainSandboxController(
     promptLibrary: PromptLibrary? = null,
     capabilityProviders: List<CapabilityProvider> = emptyList(),
     capabilityExecutors: Map<String, ActionExecutor> = emptyMap(),
+    private val apiKeyAvailable: () -> Boolean = { true },
     private val events: EventStore = InMemoryEventStore()
 ) {
     private val dynamicCapabilityProviders = capabilityProviders
@@ -155,6 +156,9 @@ class BrainSandboxController(
         val classification = intentClassifier.classify(objective)
         val planner = com.brain.planner.KeywordPlanner()
         val basePlan = runBlockingPlanner { planner.planejar(classification.intent.objective) }
+        if (basePlan.passos.any { it.capacidade == "brain.analyze" } && !apiKeyAvailable()) {
+            throw IllegalStateException("Nenhuma chave de API válida está configurada no catálogo. Configure uma chave em Configurações antes de usar o diagnóstico por fallback.")
+        }
         val promptHit = promptRetrieval?.retrieve(RetrievalQuery(objective))?.hit
         val plan = if (promptHit != null) basePlan.copy(assumptions = basePlan.assumptions + "prompt-template:${promptHit.id}") else basePlan
         var cycle: ResultadoCiclo? = null

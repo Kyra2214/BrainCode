@@ -111,12 +111,14 @@ fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
             androidx.compose.runtime.LaunchedEffect(events.size) {
                 if (events.isNotEmpty()) listState.animateScrollToItem(events.size - 1)
             }
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(events) { event -> ThreadEventCard(event, viewModel) }
+            SelectionContainer {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(events) { event -> ThreadEventCard(event, viewModel) }
+                }
             }
             ThreadComposer(viewModel)
         }
@@ -225,9 +227,7 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = MaterialTheme.shapes.medium
             ) {
-                SelectionContainer {
-                    Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
-                }
+                Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
             }
         }
         is ThreadEvent.Agent -> Column(
@@ -236,9 +236,7 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
         ) {
             val blocks = extractCodeBlocks(event.text)
             if (blocks.isEmpty()) {
-                SelectionContainer {
-                    Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
-                }
+                Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
             } else {
                 var cursor = 0
                 Regex("```([^\\n]*)\\n([\\s\\S]*?)```").findAll(event.text).forEach { match ->
@@ -305,7 +303,7 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
                     Text(event.title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                     TextButton(onClick = { copy(event.body) }) { Text("Copiar") }
                 }
-                SelectionContainer { Text(event.body, fontFamily = if (event.title == "Git status") FontFamily.Monospace else FontFamily.Default, style = MaterialTheme.typography.bodySmall) }
+                Text(event.body, fontFamily = if (event.title == "Git status") FontFamily.Monospace else FontFamily.Default, style = MaterialTheme.typography.bodySmall)
             }
         }
         is ThreadEvent.Diff -> Card {

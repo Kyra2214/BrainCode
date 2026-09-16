@@ -518,6 +518,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 brainController = BrainSandboxController(
                     prepared,
                     File(dir, "rootfs"),
+                    apiKeyAvailable = { hasApiKeyInCatalog() },
                     promptLibrary = promptLibrary,
                     capabilityProviders = listOf(
                         PluginCatalogCapabilityProvider(statusOf = { id -> statusCache[id]?.state })
@@ -553,22 +554,42 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /** Monta o objetivo com as últimas mensagens do chat antes de enviá-lo ao Brain/Gateway. */
+    private fun buildChatObjective(currentPrompt: String): String {
+        val recent = chatMessages.takeLast(8)
+        if (recent.isEmpty()) return currentPrompt
+        val context = recent.joinToString("\n") { message ->
+            val role = when (message.role) {
+                ChatRole.USER -> "Usuário"
+                ChatRole.ASSISTANT -> "Assistente"
+                ChatRole.ERROR -> "Erro"
+                ChatRole.STEP -> "Passo"
+            }
+            "$role: ${message.content}"
+        }
+        return "Conversa recente:\n$context\n\nNova solicitação: $currentPrompt"
+    }
+
+    private fun hasApiKeyInCatalog(): Boolean =
+        apiProviders.any { provider -> apiKeyStore.get(provider.id)?.trim()?.isNotEmpty() == true }
+
     /** Regra estrutural: a conversa Android entra no Brain; nenhum executor local é chamado pelo chat. */
     fun sendChatMessage() {
         val prompt = chatInput.trim(); if (prompt.isEmpty() || chatRunning) return
         chatMessages.add(ChatMessage(ChatRole.USER, prompt)); chatInput = ""; chatRunning = true
         appendThreadEvent(ThreadEvent.User(prompt))
+        val objective = buildChatObjective(prompt)
         viewModelScope.launch {
             val response = withContext(Dispatchers.IO) {
                 runCatching {
                     val controller = brainController
                     if (controller != null && phase == SandboxPhase.Ready) {
-                        val cycle = controller.executeObjective(prompt, "chat-${System.currentTimeMillis()}") { passo ->
+                        val cycle = controller.executeObjective(objective, "chat-${System.currentTimeMillis()}") { passo ->
                             viewModelScope.launch(Dispatchers.Main.immediate) { publishStep(passo) }
                         }
                         ChatMessage(ChatRole.ASSISTANT, cycle.resposta ?: "Plano concluído: ${cycle.aprovado}")
                     } else {
-                        ChatMessage(ChatRole.ASSISTANT, brainApiGateway.complete(prompt).text)
+                        ChatMessage(ChatRole.ASSISTANT, brainApiGateway.complete(objective).text)
                     }
                 }
                     .getOrElse { ChatMessage(ChatRole.ERROR, "Brain não conseguiu responder: ${it.message ?: it.javaClass.simpleName}") }
