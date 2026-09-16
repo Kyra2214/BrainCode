@@ -60,6 +60,15 @@ class DynamicFreeApiCatalog(
         return models[providerId].orEmpty()
     }
 
+    /**
+     * Verifica se pelo menos um provider do catálogo consegue descobrir modelos
+     * usando as credenciais atualmente fornecidas ao discovery. O seed sozinho
+     * não conta como credencial válida.
+     */
+    fun hasUsableApiKey(): Boolean = providers.any { provider ->
+        discovery.refresh(provider).isNotEmpty()
+    }
+
     fun refreshAll(): List<ProviderModel> {
         providers.forEach { refreshProvider(it.providerId) }
         return models.values.flatten()
