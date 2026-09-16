@@ -3,24 +3,21 @@ package com.sandbox.android
 import android.content.Context
 import android.os.Build
 import com.sandbox.agent.Sandbox
-import com.sandbox.resource.SandboxResourceManager
 import com.sandbox.resource.Ed25519RootfsSignatureVerifier
+import com.sandbox.resource.SandboxResourceManager
 import com.sandbox.runtime.FileExecutionLogRepository
 import com.sandbox.runtime.FileRuntimeEventStore
 import com.sandbox.runtime.ManagedSandboxRuntime
+import com.sandbox.runtime.PackagedRuntime
 import com.sandbox.runtime.ProotProcessLauncher
 import com.sandbox.runtime.ProotResourceLimits
 import com.sandbox.runtime.SandboxRuntime
-import com.sandbox.runtime.PackagedRuntime
 import com.sandbox.runtime.TarGzExtractor
 import java.io.File
 import java.util.zip.ZipFile
 
 class AndroidSandboxFactory(private val context: Context) {
     private companion object {
-        // 5: composição base + agent-extra + agent-android. O valor 4
-        // identificava a extração de uma única camada e não pode ser
-        // reutilizado após a migração para os três artefatos.
         private const val EXTRACTOR_VERSION = "5"
         private const val SESSION_PREFS = "sandbox_runtime"
         private const val SESSION_ID = "session_id"
@@ -82,7 +79,6 @@ class AndroidSandboxFactory(private val context: Context) {
         return SandboxResourceManager(downloadedArchives[layer], rootfsVerifier)
     }
 
-    /** Gerenciador de artefatos de modelo; mantém a mini-LLM fora do RootFS. */
     fun modelResourceManager(modelId: String): SandboxResourceManager {
         require(modelId.matches(Regex("[a-z0-9][a-z0-9._-]*"))) { "ID de modelo inválido" }
         modelDir.mkdirs()
@@ -91,21 +87,6 @@ class AndroidSandboxFactory(private val context: Context) {
 
     fun modelFile(modelId: String): File = File(modelDir, "$modelId.gguf")
 
-    /**
-     * O .gguf baixado fica em [modelDir], FORA do rootfs (de propósito —
-     * ver o comentário da classe). Só que um processo rodando via proot
-     * (o chatbox de teste da mini-LLM, por exemplo) não enxerga caminhos
-     * fora do rootfs sem um bind explícito. Em vez de mexer no launcher
-     * do proot pra adicionar mais um bind, este método faz um hard link
-     * do arquivo pra dentro do rootfs (mesmo filesystem — não duplica os
-     * ~100 MiB em disco) em /home/sandbox/models/<modelId>.gguf, caminho
-     * já resolvível pelo comando guest. Cai pra cópia se o SO recusar o
-     * link (ex.: partições diferentes).
-     *
-     * Retorna o caminho absoluto GUEST (dentro do rootfs) do modelo, ou
-     * null se o .gguf ainda não foi baixado ou se o rootfs ainda não foi
-     * extraído.
-     */
     fun ensureLocalModelLinkedIntoRootfs(modelId: String): String? {
         val source = modelFile(modelId)
         if (!source.isFile || !extractedRootfsDir.isDirectory) return null
@@ -114,32 +95,17 @@ class AndroidSandboxFactory(private val context: Context) {
         if (!destination.exists() || destination.length() != source.length()) {
             destination.parentFile?.mkdirs()
             destination.delete()
-            val linked = runCatching {
-                java.nio.file.Files.createLink(destination.toPath(), source.toPath())
-            }.isSuccess
-            if (!linked) {
-                val copied = runCatching { source.copyTo(destination, overwrite = true) }.isSuccess
-                if (!copied) return null
-            }
+            val linked = runCatching { java.nio.file.Files.createLink(destination.toPath(), source.toPath()) }.isSuccess
+            if (!linked && runCatching { source.copyTo(destination, overwrite = true) }.isFailure) return null
         }
         return "/$guestRelativePath"
     }
 
-    /**
-     * Monta o comando que o chatbox de teste manda pro sandbox. Isto é
-     * deliberadamente um CHATBOX DE TESTE, não uma UI final: o app ainda
-     * não empacota um motor de inferência (llama.cpp ou similar) dentro
-     * do rootfs — ver docs/LOCAL_MODEL.md. Por isso o script procura por
-     * um binário conhecido em tempo de execução e, se não achar, devolve
-     * um erro claro em vez de fingir sucesso — isso já é suficiente pra
-     * validar visualmente o caminho completo (UI → runtime → rootfs)
-     * mesmo antes do motor de inferência existir.
-     */
     fun buildLocalModelChatCommand(modelPathInGuest: String, prompt: String, maxTokens: Int = 200): List<String> {
         val script = """
             BIN=${'$'}(command -v llama-cli 2>/dev/null || command -v llama-server 2>/dev/null || command -v llama 2>/dev/null || command -v main 2>/dev/null)
             if [ -z "${'$'}BIN" ]; then
-              echo "LLAMA_CPP_NAO_ENCONTRADO: nenhum binario de inferencia (llama-cli/llama-server/llama/main) foi encontrado no rootfs. Falta empacotar o motor de inferencia (veja docs/LOCAL_MODEL.md) — este chatbox serve pra testar o fluxo ate aqui." >&2
+              echo "LLAMA_CPP_NAO_ENCONTRADO: nenhum binario de inferencia foi encontrado no rootfs." >&2
               exit 127
             fi
             exec "${'$'}BIN" -m "$modelPathInGuest" -p "${'$'}1" -n $maxTokens --temp 0.7
@@ -147,83 +113,45 @@ class AndroidSandboxFactory(private val context: Context) {
         return listOf("/bin/bash", "-c", script, "chat", prompt)
     }
 
-    /**
-     * True quando o rootfs já foi extraído com sucesso e está íntegro
-     * (marcador de versão bate e as entradas essenciais existem). Quando
-     * isto é true, os arquivos baixados (rootfs-*.tar.gz) não são mais
-     * necessários — só servem de "instalador", e podem já ter sido
-     * removidos por [prepareRuntime] para liberar espaço.
-     */
     fun isRootfsReady(): Boolean = rootfsExtractionValid()
 
     private fun rootfsExtractionValid(): Boolean =
-        extractedRootfsDir.exists() &&
-            !extractedRootfsDir.list().isNullOrEmpty() &&
-            extractionMarker.readTextOrNull() == EXTRACTOR_VERSION &&
-            hasRequiredRootfsEntries()
+        extractedRootfsDir.exists() && !extractedRootfsDir.list().isNullOrEmpty() &&
+            extractionMarker.readTextOrNull() == EXTRACTOR_VERSION && hasRequiredRootfsEntries()
 
-    /**
-     * Apaga os arquivos .tar.gz baixados (e eventuais .part remanescentes).
-     * Só deve ser chamado depois que a extração foi validada com sucesso:
-     * assim como um instalador, uma vez que o conteúdo já foi "instalado"
-     * (extraído e verificado) em [extractedRootfsDir], os pacotes de
-     * origem só ocupam espaço à toa.
-     */
-    private fun deleteDownloadedArchives() {
-        downloadedArchives.forEach { archive ->
-            SandboxResourceManager(archive).purge()
-        }
-    }
+    private fun deleteDownloadedArchives() = downloadedArchives.forEach { SandboxResourceManager(it).purge() }
 
     fun prepareRuntime(
         forceReExtract: Boolean = false,
         progressListener: ((completed: Long, total: Long, stage: String) -> Unit)? = null
     ): SandboxRuntime {
         if (forceReExtract && extractedRootfsDir.exists()) extractedRootfsDir.deleteRecursively()
-        val needsReExtract = forceReExtract || !rootfsExtractionValid()
-        if (needsReExtract) {
-            // As camadas só precisam existir em disco quando é preciso
-            // (re)extrair. Se o rootfs já está extraído e válido, os
-            // arquivos baixados podem já ter sido apagados por uma
-            // preparação anterior — nesse caso nem chegamos aqui.
-            require(downloadedArchives.all { it.exists() }) {
-                "As três camadas RootFS ainda não foram baixadas. Prepare o sandbox novamente."
-            }
-            if (extractedRootfsDir.exists()) extractedRootfsDir.deleteRecursively()
+        if (forceReExtract || !rootfsExtractionValid()) {
+            require(downloadedArchives.all { it.exists() }) { "As três camadas RootFS ainda não foram baixadas. Prepare o sandbox novamente." }
+            extractedRootfsDir.deleteRecursively()
             extractionMarker.delete()
             val totalArchiveBytes = downloadedArchives.sumOf { it.length() }.coerceAtLeast(1L)
             var completedArchiveBytes = 0L
             downloadedArchives.forEachIndexed { index, archive ->
                 progressListener?.invoke(completedArchiveBytes, totalArchiveBytes, "Extraindo camada ${index + 1}/3")
                 TarGzExtractor.extract(archive, extractedRootfsDir) { bytesRead ->
-                    progressListener?.invoke(
-                        (completedArchiveBytes + bytesRead).coerceAtMost(totalArchiveBytes),
-                        totalArchiveBytes,
-                        "Extraindo camada ${index + 1}/3"
-                    )
+                    progressListener?.invoke((completedArchiveBytes + bytesRead).coerceAtMost(totalArchiveBytes), totalArchiveBytes, "Extraindo camada ${index + 1}/3")
                 }
                 completedArchiveBytes += archive.length()
             }
             validateExtractedRootfs()
             extractionMarker.writeText(EXTRACTOR_VERSION)
-            // "Instalação" concluída e validada: os .tar.gz baixados não
-            // servem mais pra nada (só pra re-extrair do zero, e pra isso
-            // dá pra baixar de novo) — apaga pra liberar espaço no device.
             deleteDownloadedArchives()
         }
         progressListener?.invoke(1L, 1L, "Inicializando runtime")
         ensureResolvConf()
-        val packagedRuntime = PackagedRuntime(context, extractedRootfsDir)
-        packagedRuntime.prepare()
+        val packagedRuntime = PackagedRuntime(context, extractedRootfsDir).also { it.prepare() }
         val runtime = SandboxRuntime(
             prootExecutable = packagedRuntime.preparedRunnerPath,
             rootfsDir = extractedRootfsDir,
             tmpDir = packagedRuntime.prootTmpPath,
             nativeLibraryDir = packagedRuntime.nativeLibraryPath,
             prootLoader = packagedRuntime.packagedLoaderPath,
-            // Explícito (não só o default) para deixar claro na composição
-            // real de produção que todo comando via proot carrega RLIMIT_*
-            // real — ver ProotResourceLimits.kt e AUDITORIA_PESADA.md item 4.
             resourceLimits = ProotResourceLimits.DEFAULT
         )
         ensureVenv(runtime)
@@ -234,16 +162,8 @@ class AndroidSandboxFactory(private val context: Context) {
         sessionId: String = persistentSessionId(),
         progressListener: ((completed: Long, total: Long, stage: String) -> Unit)? = null
     ): ManagedSandboxRuntime {
-        // A checagem de que as 3 camadas existem só faz sentido quando uma
-        // (re)extração é realmente necessária — e quem decide isso, de
-        // forma consistente com a limpeza pós-instalação, é prepareRuntime.
         prepareRuntime(progressListener = progressListener)
-        val packagedRuntime = PackagedRuntime(context, extractedRootfsDir)
-        packagedRuntime.prepare()
-        val logDir = File(sandboxBaseDir, "execution-logs")
-        val eventDir = File(sandboxBaseDir, "runtime-events")
-        val repository = FileExecutionLogRepository(logDir)
-        val eventStore = FileRuntimeEventStore(eventDir)
+        val packagedRuntime = PackagedRuntime(context, extractedRootfsDir).also { it.prepare() }
         val launcher = ProotProcessLauncher(
             prootExecutable = packagedRuntime.preparedRunnerPath,
             rootfsDir = extractedRootfsDir,
@@ -252,30 +172,26 @@ class AndroidSandboxFactory(private val context: Context) {
             prootLoader = packagedRuntime.packagedLoaderPath,
             resourceLimits = ProotResourceLimits.DEFAULT
         )
-        return ManagedSandboxRuntime(launcher, repository, sessionId, runtimeEventRepository = eventStore)
+        return ManagedSandboxRuntime(
+            launcher,
+            FileExecutionLogRepository(File(sandboxBaseDir, "execution-logs")),
+            sessionId,
+            runtimeEventRepository = FileRuntimeEventStore(File(sandboxBaseDir, "runtime-events"))
+        )
     }
 
-    /**
-     * Etapa 3: monta o [Sandbox] real de device, já sabendo onde o rootfs
-     * foi extraído. Chame [prepareManagedRuntime] antes (ou deixe este
-     * método chamar via [prepareManagedRuntime] internamente) — aqui ele
-     * é chamado sempre, então basta o rootfs já ter sido baixado.
-     */
     fun createSandbox(sessionId: String = persistentSessionId()): Sandbox =
         Sandbox(runtime = prepareManagedRuntime(sessionId), rootfsDir = extractedRootfsDir)
 
     fun persistentSessionId(): String {
         val prefs = context.getSharedPreferences(SESSION_PREFS, Context.MODE_PRIVATE)
-        val existing = prefs.getString(SESSION_ID, null)
-        if (!existing.isNullOrBlank()) return existing
+        prefs.getString(SESSION_ID, null)?.takeIf { it.isNotBlank() }?.let { return it }
         val created = FileExecutionLogRepository.newId()
         prefs.edit().putString(SESSION_ID, created).apply()
         return created
     }
 
-    fun clearPersistentSession() {
-        context.getSharedPreferences(SESSION_PREFS, Context.MODE_PRIVATE).edit().remove(SESSION_ID).apply()
-    }
+    fun clearPersistentSession() = context.getSharedPreferences(SESSION_PREFS, Context.MODE_PRIVATE).edit().remove(SESSION_ID).apply()
 
     fun inspectExtractedRootfs(): String {
         if (!extractedRootfsDir.exists()) return "Rootfs ainda não foi extraído (pasta ${extractedRootfsDir.path} não existe)."
@@ -284,14 +200,9 @@ class AndroidSandboxFactory(private val context: Context) {
         report.appendLine("Marcador de versão: ${extractionMarker.readTextOrNull() ?: "(ausente)"}")
         val topLevel = extractedRootfsDir.listFiles()?.sortedBy { it.name } ?: emptyList()
         report.appendLine("Entradas na raiz (${topLevel.size}): ${topLevel.joinToString(", ") { it.name }}")
-        var totalFiles = 0
-        var totalDirs = 0
-        var totalSymlinks = 0
-        var totalBytes = 0L
-        var walkErrors = 0
+        var totalFiles = 0; var totalDirs = 0; var totalSymlinks = 0; var totalBytes = 0L; var walkErrors = 0
         fun walk(dir: File) {
-            val children = runCatching { dir.listFiles() }.getOrNull() ?: return
-            for (child in children) {
+            for (child in runCatching { dir.listFiles() }.getOrNull().orEmpty()) {
                 try {
                     when {
                         java.nio.file.Files.isSymbolicLink(child.toPath()) -> totalSymlinks++
@@ -318,16 +229,43 @@ class AndroidSandboxFactory(private val context: Context) {
         }
         report.appendLine()
         report.appendLine("Cadeia de interpretador:")
-        listOf("bin/bash", "lib/ld-linux-aarch64.so.1").forEach { relativePath ->
-            report.appendLine("  $relativePath: ${describeInterpreterChain(File(extractedRootfsDir, relativePath))}")
-        }
+        listOf("bin/bash", "lib/ld-linux-aarch64.so.1").forEach { path -> report.appendLine("  $path: ${describeInterpreterChain(File(extractedRootfsDir, path))}") }
         report.appendLine()
-        report.appendLine("Teste de execução direta (sem proot):")
-        report.appendLine("  ${directExecProbe()}")
+        report.appendLine("Teste funcional do Bash via Proot:")
+        report.appendLine("  ${prootBashProbe()}")
+        report.appendLine()
+        report.appendLine("Teste host direto (informativo; não é teste do RootFS):")
+        report.appendLine("  ${directHostExecProbe()}")
         return report.toString()
     }
 
-    private fun directExecProbe(): String {
+    private fun prootBashProbe(): String {
+        if (!hasRequiredRootfsEntries()) return "NÃO EXECUTADO: RootFS não passou na validação estrutural."
+        return runCatching {
+            val packagedRuntime = PackagedRuntime(context, extractedRootfsDir).also { it.prepare() }
+            val launcher = ProotProcessLauncher(
+                prootExecutable = packagedRuntime.preparedRunnerPath,
+                rootfsDir = extractedRootfsDir,
+                tmpDir = packagedRuntime.prootTmpPath,
+                nativeLibraryDir = packagedRuntime.nativeLibraryPath,
+                prootLoader = packagedRuntime.packagedLoaderPath,
+                resourceLimits = ProotResourceLimits.DEFAULT
+            )
+            val process = launcher.launch(listOf("/bin/bash", "--version"), "/home/sandbox")
+            val output = process.inputStream.bufferedReader().readText().trim()
+            val finished = process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
+            if (!finished) {
+                process.destroyForcibly()
+                "FALHOU: timeout de 5s"
+            } else if (process.exitValue() == 0) {
+                "OK, exit code 0: ${output.take(160)}"
+            } else {
+                "FALHOU, exit code ${process.exitValue()}: ${output.take(160)}"
+            }
+        }.getOrElse { e -> "FALHOU: ${e.javaClass.simpleName}: ${e.message.orEmpty()}" }
+    }
+
+    private fun directHostExecProbe(): String {
         val bash = File(extractedRootfsDir, "usr/bin/bash")
         if (!bash.isFile) return "usr/bin/bash não é um arquivo regular, não dá pra testar."
         return try {
@@ -339,9 +277,9 @@ class AndroidSandboxFactory(private val context: Context) {
         } catch (e: Exception) {
             val message = e.message.orEmpty()
             val interpretation = when {
-                message.contains("error=13") || message.contains("Permission denied") -> " → EACCES: forte indício de restrição de exec do Android."
-                message.contains("error=2") || message.contains("No such file") -> " → ENOENT esperado fora do proot; o kernel procura o loader na raiz real do Android."
-                else -> " → erro sem padrão reconhecido."
+                message.contains("error=13") || message.contains("Permission denied") -> " → EACCES: restrição de exec do Android."
+                message.contains("error=2") || message.contains("No such file") -> " → ENOENT esperado: o host Android não resolve o loader dentro do RootFS."
+                else -> " → erro host sem padrão reconhecido."
             }
             "FALHOU: ${e.javaClass.simpleName}: $message$interpretation"
         }
@@ -374,14 +312,7 @@ class AndroidSandboxFactory(private val context: Context) {
                 else "QUEBRADO: alvo final ${relativeLabel(current.toFile())} não é um arquivo regular"
             }
             val link = java.nio.file.Files.readSymbolicLink(current)
-            // Caminhos absolutos no RootFS são absolutos para o guest, não
-            // para o Android host. Sem este prefixo, /usr/bin/... é resolvido
-            // fora da árvore extraída e uma cadeia válida aparece quebrada.
-            current = (if (link.isAbsolute) {
-                extractedRootfsDir.toPath().resolve(link.toString().removePrefix("/"))
-            } else {
-                current.parent.resolve(link)
-            }).normalize()
+            current = (if (link.isAbsolute) extractedRootfsDir.toPath().resolve(link.toString().removePrefix("/")) else current.parent.resolve(link)).normalize()
             chain.add(current)
         }
         return "QUEBRADO: cadeia de symlink excede $maxHops saltos (possível loop) — " + chain.joinToString(" -> ") { relativeLabel(it.toFile()) }
@@ -406,7 +337,7 @@ class AndroidSandboxFactory(private val context: Context) {
     }
 
     fun purgeAll() {
-        downloadedArchives.forEach { archive -> SandboxResourceManager(archive).purge() }
+        downloadedArchives.forEach { SandboxResourceManager(it).purge() }
         if (extractedRootfsDir.exists()) extractedRootfsDir.deleteRecursively()
         if (extractionMarker.exists()) extractionMarker.delete()
         if (prootTmpDir.exists()) prootTmpDir.deleteRecursively()
