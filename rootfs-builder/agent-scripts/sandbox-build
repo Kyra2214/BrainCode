@@ -1,8 +1,38 @@
 #!/bin/sh
 set -eu
-if [ -f package.json ]; then exec npm run build -- "$@"; fi
-if [ -f Cargo.toml ]; then exec cargo build "$@"; fi
-if [ -f go.mod ]; then exec go build ./... "$@"; fi
-if [ -f pyproject.toml ]; then exec python3 -m build "$@"; fi
+
+# Detect and build from the project root. Prefer project-local wrappers so the
+# build uses the project's declared toolchain instead of assuming a global one.
+if [ -f package.json ]; then
+    exec npm run build -- "$@"
+fi
+
+if [ -f Cargo.toml ]; then
+    exec cargo build "$@"
+fi
+
+if [ -f go.mod ]; then
+    exec go build ./... "$@"
+fi
+
+if [ -f pyproject.toml ]; then
+    exec python3 -m build "$@"
+fi
+
+# Android/Gradle projects were previously invisible to the detector. Support
+# both Kotlin and Groovy Gradle settings files and prefer the Gradle wrapper.
+if [ -f gradlew ]; then
+    chmod +x gradlew 2>/dev/null || true
+    exec ./gradlew assembleDebug --no-daemon "$@"
+fi
+
+if [ -f settings.gradle.kts ] || [ -f settings.gradle ] || [ -f build.gradle.kts ] || [ -f build.gradle ]; then
+    if command -v gradle >/dev/null 2>&1; then
+        exec gradle assembleDebug --no-daemon "$@"
+    fi
+    echo 'Projeto Gradle detectado, mas nenhum Gradle Wrapper/Gradle instalado foi encontrado.' >&2
+    exit 3
+fi
+
 echo 'Nenhum build suportado detectado.' >&2
 exit 2
