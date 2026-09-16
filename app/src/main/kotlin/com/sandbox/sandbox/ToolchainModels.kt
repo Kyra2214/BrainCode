@@ -58,16 +58,10 @@ object BuiltInToolchains {
 /** Detecta somente comandos declarados pelo perfil; nunca aceita entrada do usuário como shell. */
 class ToolchainDetector(private val executor: SandboxCommandExecutor) {
     fun detect(profile: ToolchainProfile): ToolchainDetection {
-        val command = if (profile.id == "java") {
-            // Android/proot can fail to reserve the default JVM heap even when Java is installed.
-            // Keep the version probe small so detection does not depend on the default heap size.
-            listOf(
-                "bash", "-c",
-                "export JAVA_TOOL_OPTIONS='-Xmx64m -XX:MaxMetaspaceSize=32m'; exec java --version"
-            )
-        } else {
-            listOf(profile.executable) + profile.versionArguments
-        }
+        // Java must use the same direct allowlisted execution path as every other toolchain.
+        // The previous implementation wrapped `java --version` in `bash -c`, which is
+        // intentionally rejected by SecureCommandExecutor as unrestricted shell execution.
+        val command = listOf(profile.executable) + profile.versionArguments
         val result = executor.execute(command, timeoutSeconds = 30)
         if (result.succeeded) {
             return ToolchainDetection(profile, true, result.stdout.take(4096), null)
