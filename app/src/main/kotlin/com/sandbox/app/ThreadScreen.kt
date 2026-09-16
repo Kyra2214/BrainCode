@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -272,7 +271,7 @@ private fun ThreadComposer(viewModel: SandboxViewModel) {
     Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         val input = viewModel.chatInput
         if (viewModel.phase == SandboxPhase.Ready && input.startsWith("/")) {
-            val matches = THREAD_SLASH_COMMANDS.filter { it.startsWith(input, ignoreCase = true) && it != input }
+            val matches = viewModel.sugestoesDeComando.filter { it.startsWith(input, ignoreCase = true) && it != input }.take(30)
             if (matches.isNotEmpty()) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(matches) { command ->
@@ -301,4 +300,4 @@ private fun ThreadComposer(viewModel: SandboxViewModel) {
     }
 }
 
-private val THREAD_SLASH_COMMANDS = listOf("/testlab", "/security", "/git status", "/git diff", "/workflow", "/approval demo", "/workspace new", "/sqlite start", "/sqlite stop", "/discovery", "/deliver")
+// Lista de sugestões agora vem de viewModel.sugestoesDeComando (operacionais + catálogo /comandos, ver SandboxViewModel.kt).

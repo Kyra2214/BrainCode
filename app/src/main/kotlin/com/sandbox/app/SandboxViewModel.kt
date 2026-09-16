@@ -108,6 +108,12 @@ val QUICK_COMMANDS = listOf(
     QuickCommand("gcc/make", "gcc --version | head -n 1 && make --version | head -n 1"), QuickCommand("apt list", "apt list --installed 2>/dev/null | wc -l")
 )
 
+/** Comandos com execução real (não vêm do catálogo /comandos). Sempre prioritários no dispatcher. */
+val OPERATIONAL_SLASH_COMMANDS = listOf(
+    "/run ", "/testlab", "/security", "/git status", "/git diff", "/workflow", "/approval demo",
+    "/workspace new ", "/sqlite start", "/sqlite stop", "/discovery", "/deliver"
+)
+
 class SandboxViewModel(application: Application) : AndroidViewModel(application) {
     private val factory = AndroidSandboxFactory(application)
     val namespaceSupport = NamespaceSupport.detect()
@@ -136,6 +142,13 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
 
     private val apiKeyStore = ApiKeyStore(application)
     val apiProviders: List<ApiProvider> = runCatching { ApiKeyCatalogLoader.load(application) }.getOrElse { emptyList() }
+
+    /** Catálogo /comandos (344 entradas PROMPT). Comandos operacionais reais têm prioridade — ver submitThreadInput. */
+    val catalogoComandos: List<ComandoCatalogo> = runCatching { ComandosCatalogoLoader.load(application) }.getOrElse { emptyList() }
+    private val catalogoPorComando: Map<String, ComandoCatalogo> = ComandosCatalogoLoader.indexar(catalogoComandos)
+
+    /** Sugestões de autocomplete do composer: comandos operacionais primeiro, depois o catálogo. */
+    val sugestoesDeComando: List<String> = (OPERATIONAL_SLASH_COMMANDS + catalogoComandos.map { it.comando }).distinct()
 
     /** UI -> Brain. O chat não chama runtime, llama.cpp, provider ou HTTP diretamente. */
     private val brainApiGateway = BrainApiGateway(
@@ -229,7 +242,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun runGitDiff() {
-        val p = platform ?: return
+        val p = platform ?: run { appendThreadEvent(ThreadEvent.System("Git diff indisponível: sandbox não está pronto.")); return }
         val project = workspaceProjects.firstOrNull { it.name == workspaceProjectName } ?: run {
             appendThreadEvent(ThreadEvent.System("Crie ou selecione um workspace antes de usar /git diff")); return
         }
@@ -461,8 +474,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun runCommand() {
-        val active = runtime ?: return
-        if (phase != SandboxPhase.Ready) return
+        val active = runtime ?: run { appendThreadEvent(ThreadEvent.System("Comando indisponível: sandbox não está pronto.")); return }
+        if (phase != SandboxPhase.Ready) { appendThreadEvent(ThreadEvent.System("Comando indisponível: sandbox ocupado.")); return }
         val command = commandInput.trim()
         if (command.isEmpty()) return
         viewModelScope.launch {
@@ -474,7 +487,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     })
                 }.getOrNull()
             }
-            if (e != null) { lastExecution = e; lastResult = e.toUiResult() }
+            if (e != null) { lastExecution = e; lastResult = e.toUiResult() } else appendThreadEvent(ThreadEvent.System("Comando falhou ao executar."))
             phase = SandboxPhase.Ready
         }
     }
@@ -519,8 +532,47 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             lower == "/sqlite start" -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; startSqliteService() }
             lower == "/sqlite stop" -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; stopSqliteService() }
             lower == "/discovery" -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; runDiscovery() }
+            lower.startsWith("/run ") -> { val script = command.substringAfter(" ").trim(); if (script.isNotBlank()) { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; commandInput = script; runCommand() } }
             lower == "/deliver" -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; publishLocalDelivery() }
+            command.startsWith("/") && command.length > 1 -> {
+                val espaco = command.indexOf(' ')
+                val base = (if (espaco == -1) command else command.take(espaco)).lowercase()
+                val instrucao = if (espaco == -1) "" else command.substring(espaco + 1).trim()
+                val doCatalogo = catalogoPorComando[base]
+                chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""
+                if (doCatalogo != null) executarComandoDoCatalogo(doCatalogo, instrucao)
+                else appendThreadEvent(ThreadEvent.System("Comando \"$base\" não reconhecido — nenhum comando operacional ou do catálogo corresponde a ele."))
+            }
             else -> sendChatMessage()
+        }
+    }
+
+    /** Roda uma entrada PROMPT do catálogo /comandos pelo mesmo caminho do chat livre (Brain), com prompt especializado. */
+    private fun executarComandoDoCatalogo(entrada: ComandoCatalogo, instrucaoLivre: String) {
+        val prompt = buildString {
+            append(entrada.explicacao.ifBlank { entrada.descricaoCurta })
+            append("\n\nObjetivo: "); append(entrada.objetivo)
+            if (instrucaoLivre.isNotBlank()) { append("\n\nInstrução do usuário: "); append(instrucaoLivre) }
+        }
+        chatRunning = true
+        viewModelScope.launch {
+            val response = withContext(Dispatchers.IO) {
+                runCatching {
+                    val controller = brainController
+                    if (controller != null && phase == SandboxPhase.Ready) {
+                        val cycle = controller.executeObjective(prompt, "cmd-${entrada.slug}-${System.currentTimeMillis()}")
+                        val summary = cycle.passos.joinToString("\n") { step ->
+                            "${step.passoId}: ${step.status.name}${step.motivo?.let { " — $it" } ?: ""}"
+                        }
+                        ChatMessage(ChatRole.ASSISTANT, summary.ifBlank { "Plano concluído: ${cycle.aprovado}" })
+                    } else {
+                        ChatMessage(ChatRole.ASSISTANT, brainApiGateway.complete(prompt).text)
+                    }
+                }
+                    .getOrElse { ChatMessage(ChatRole.ERROR, "Brain não conseguiu responder ao comando ${entrada.comando}: ${it.message ?: it.javaClass.simpleName}") }
+            }
+            chatMessages.add(response); chatRunning = false
+            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content) else ThreadEvent.System(response.content))
         }
     }
     fun clearChat() { chatMessages.clear() }
@@ -535,7 +587,16 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch { val o = withContext(Dispatchers.IO) { ApiKeyTester.test(model.endpoint, model.id, key) }; apiKeyTestState[providerId] = when (o) { is ApiKeyTestOutcome.Success -> ApiKeyTestUiState.Success("Chave OK — HTTP ${o.statusCode} em ${o.latencyMs} ms"); is ApiKeyTestOutcome.Failure -> ApiKeyTestUiState.Failure(o.message) } }
     }
     fun cancelCommand() { viewModelScope.launch(Dispatchers.IO) { runtime?.cancel() } }
-    fun runBrainHealthCheck() { val c = brainController ?: return; if (phase != SandboxPhase.Ready) return; viewModelScope.launch { phase = SandboxPhase.Running; lastBrainCycle = withContext(Dispatchers.IO) { runCatching { c.healthCheck(factory.persistentSessionId()) }.getOrNull() }; phase = SandboxPhase.Ready } }
+    fun runBrainHealthCheck() {
+        val c = brainController ?: run { appendThreadEvent(ThreadEvent.System("Verificação indisponível: Brain ainda não inicializado.")); return }
+        if (phase != SandboxPhase.Ready) { appendThreadEvent(ThreadEvent.System("Verificação indisponível: sandbox ocupado.")); return }
+        viewModelScope.launch {
+            phase = SandboxPhase.Running
+            lastBrainCycle = withContext(Dispatchers.IO) { runCatching { c.healthCheck(factory.persistentSessionId()) }.getOrNull() }
+            phase = SandboxPhase.Ready
+            if (lastBrainCycle == null) appendThreadEvent(ThreadEvent.System("Verificação pelo Brain falhou ao executar."))
+        }
+    }
     fun runTestLab(projectPath: String = "/home/sandbox/workspace") {
         val p = platform ?: run { appendThreadEvent(ThreadEvent.System("TestLab indisponível: sandbox não está pronto.")); return }
         if (phase != SandboxPhase.Ready) { appendThreadEvent(ThreadEvent.System("TestLab indisponível: sandbox ocupado.")); return }
@@ -550,13 +611,48 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             )
         }
     }
-    fun runSecurityAssessment() { val p = platform ?: return; if (phase != SandboxPhase.Ready) return; viewModelScope.launch { phase = SandboxPhase.Running; lastSecurityAssessment = withContext(Dispatchers.IO) { runCatching { val root = File(getApplication<Application>().filesDir, "sandbox/workspace"); val scan = p.securityScanner.scan(root); p.security.evaluate(scan, p.securityScenarios, emptyList()) }.getOrNull() }; phase = SandboxPhase.Ready; lastSecurityAssessment?.let { appendThreadEvent(ThreadEvent.Report("Security gate", "${if (it.readiness.ready) "APROVADO" else "BLOQUEADO"} — ${it.findings.size} achado(s)")) } } }
+    fun runSecurityAssessment() {
+        val p = platform ?: run { appendThreadEvent(ThreadEvent.System("Security gate indisponível: sandbox não está pronto.")); return }
+        if (phase != SandboxPhase.Ready) { appendThreadEvent(ThreadEvent.System("Security gate indisponível: sandbox ocupado.")); return }
+        viewModelScope.launch {
+            phase = SandboxPhase.Running
+            lastSecurityAssessment = withContext(Dispatchers.IO) {
+                runCatching {
+                    val root = File(getApplication<Application>().filesDir, "sandbox/workspace")
+                    val scan = p.securityScanner.scan(root)
+                    p.security.evaluate(scan, p.securityScenarios, emptyList())
+                }.getOrNull()
+            }
+            phase = SandboxPhase.Ready
+            val assessment = lastSecurityAssessment
+            appendThreadEvent(
+                if (assessment != null) ThreadEvent.Report("Security gate", "${if (assessment.readiness.ready) "APROVADO" else "BLOQUEADO"} — ${assessment.findings.size} achado(s)")
+                else ThreadEvent.System("Security gate falhou ao executar.")
+            )
+        }
+    }
     fun refreshToolchains() { val p = platform ?: return; viewModelScope.launch(Dispatchers.IO) { val s = com.sandbox.sandbox.BuiltInToolchains.all.associate { it.id to runCatching { p.toolchains.refreshStatus(it.id) }.getOrElse { e -> ToolchainStatus(it.id, com.sandbox.sandbox.ToolchainState.FAILED, error = e.message ?: e.javaClass.simpleName) } }; withContext(Dispatchers.Main) { toolchainStatuses = s } } }
     fun installToolchain(id: String) { val p = platform ?: return; if (phase != SandboxPhase.Ready) return; viewModelScope.launch { phase = SandboxPhase.Running; val s = withContext(Dispatchers.IO) { runCatching { p.toolchains.install(id) }.getOrNull() }; if (s != null) toolchainStatuses = toolchainStatuses + (id to s); phase = SandboxPhase.Ready } }
-    fun requestApprovalDemo() { val c = brainController ?: return; if (phase != SandboxPhase.Ready) return; viewModelScope.launch { phase = SandboxPhase.Running; val plan = c.approvalDemoPlan(); val runId = "approval-${System.currentTimeMillis()}"; val cycle = withContext(Dispatchers.IO) { c.executePlan(plan, runId) }; pendingApprovalPlan = plan; pendingApprovalRunId = runId; pendingApprovalId = cycle.passos.firstOrNull()?.approvalId; lastBrainCycle = cycle; phase = SandboxPhase.Ready; pendingApprovalId?.let { appendThreadEvent(ThreadEvent.Approval(it)) } } }
+    fun requestApprovalDemo() {
+        val c = brainController ?: run { appendThreadEvent(ThreadEvent.System("Approval demo indisponível: Brain ainda não inicializado.")); return }
+        if (phase != SandboxPhase.Ready) { appendThreadEvent(ThreadEvent.System("Approval demo indisponível: sandbox ocupado.")); return }
+        viewModelScope.launch {
+            phase = SandboxPhase.Running
+            val plan = c.approvalDemoPlan(); val runId = "approval-${System.currentTimeMillis()}"
+            val cycle = withContext(Dispatchers.IO) { c.executePlan(plan, runId) }
+            pendingApprovalPlan = plan; pendingApprovalRunId = runId; pendingApprovalId = cycle.passos.firstOrNull()?.approvalId
+            lastBrainCycle = cycle; phase = SandboxPhase.Ready
+            pendingApprovalId?.let { appendThreadEvent(ThreadEvent.Approval(it)) } ?: appendThreadEvent(ThreadEvent.System("Approval demo não gerou uma aprovação pendente."))
+        }
+    }
     fun approveAndResume() { val c = brainController ?: return; val plan = pendingApprovalPlan ?: return; val runId = pendingApprovalRunId ?: return; val id = pendingApprovalId ?: return; if (phase != SandboxPhase.Ready) return; viewModelScope.launch { phase = SandboxPhase.Running; lastBrainCycle = withContext(Dispatchers.IO) { c.resumePlan(plan, runId, id) }; pendingApprovalId = null; pendingApprovalPlan = null; pendingApprovalRunId = null; phase = SandboxPhase.Ready } }
     fun refreshWorkspace() { val p = platform ?: return; workspaceProjects = p.workspace.listProjects(); sqliteServiceStatus = p.services.status(BuiltInServices.sqlite("/home/sandbox/workspace")) }
-    fun createWorkspaceProject() { val p = platform ?: return; workspaceError = null; runCatching { p.workspace.createProject(workspaceProjectName) }.onSuccess { refreshWorkspace(); appendThreadEvent(ThreadEvent.Report("Workspace", "Projeto criado: $workspaceProjectName")) }.onFailure { workspaceError = it.message ?: "Falha ao criar projeto"; appendThreadEvent(ThreadEvent.System(workspaceError ?: "Falha ao criar projeto")) } }
+    fun createWorkspaceProject() {
+        val p = platform ?: run { appendThreadEvent(ThreadEvent.System("Workspace indisponível: sandbox não está pronto.")); return }
+        if (phase != SandboxPhase.Ready) { appendThreadEvent(ThreadEvent.System("Workspace indisponível: sandbox ocupado.")); return }
+        workspaceError = null
+        runCatching { p.workspace.createProject(workspaceProjectName) }.onSuccess { refreshWorkspace(); appendThreadEvent(ThreadEvent.Report("Workspace", "Projeto criado: $workspaceProjectName")) }.onFailure { workspaceError = it.message ?: "Falha ao criar projeto"; appendThreadEvent(ThreadEvent.System(workspaceError ?: "Falha ao criar projeto")) }
+    }
     fun inspectGitStatus() {
         val p = platform ?: run { appendThreadEvent(ThreadEvent.System("Git status indisponível: sandbox não está pronto.")); return }
         val project = workspaceProjects.firstOrNull { it.name == workspaceProjectName } ?: run {
@@ -569,8 +665,14 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             withContext(Dispatchers.Main) { lastGitStatus = s.stdout.ifBlank { s.stderr }; appendThreadEvent(ThreadEvent.Report("Git status", lastGitStatus.orEmpty())) }
         }
     }
-    fun startSqliteService() { val p = platform ?: return; viewModelScope.launch(Dispatchers.IO) { val s = runCatching { p.services.start(BuiltInServices.sqlite("/home/sandbox/workspace")) }.getOrNull(); withContext(Dispatchers.Main) { sqliteServiceStatus = s; appendThreadEvent(ThreadEvent.Report("SQLite start", if (s?.running == true) "serviço ativo (PID ${s.pid})" else "serviço não iniciou")) } } }
-    fun stopSqliteService() { val p = platform ?: return; viewModelScope.launch(Dispatchers.IO) { val s = p.services.stop(BuiltInServices.sqlite("/home/sandbox/workspace")); withContext(Dispatchers.Main) { sqliteServiceStatus = s; appendThreadEvent(ThreadEvent.Report("SQLite stop", if (s.running) "serviço ainda ativo" else "serviço parado")) } } }
+    fun startSqliteService() {
+        val p = platform ?: run { appendThreadEvent(ThreadEvent.System("SQLite indisponível: sandbox não está pronto.")); return }
+        viewModelScope.launch(Dispatchers.IO) { val s = runCatching { p.services.start(BuiltInServices.sqlite("/home/sandbox/workspace")) }.getOrNull(); withContext(Dispatchers.Main) { sqliteServiceStatus = s; appendThreadEvent(ThreadEvent.Report("SQLite start", if (s?.running == true) "serviço ativo (PID ${s.pid})" else "serviço não iniciou")) } }
+    }
+    fun stopSqliteService() {
+        val p = platform ?: run { appendThreadEvent(ThreadEvent.System("SQLite indisponível: sandbox não está pronto.")); return }
+        viewModelScope.launch(Dispatchers.IO) { val s = p.services.stop(BuiltInServices.sqlite("/home/sandbox/workspace")); withContext(Dispatchers.Main) { sqliteServiceStatus = s; appendThreadEvent(ThreadEvent.Report("SQLite stop", if (s.running) "serviço ainda ativo" else "serviço parado")) } }
+    }
     fun refreshBrainCatalogs() { val i = brainIntegration ?: return; brainSkillSummary = i.enabledSkills().map { "${it.manifest.id} (${it.manifest.capabilities.joinToString()})" }; viewModelScope.launch(Dispatchers.IO) { val r = i.memoryRate(); withContext(Dispatchers.Main) { memorySuccessRate = r } } }
     fun runBrainWorkflow() {
         val i = brainIntegration
@@ -585,8 +687,24 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             }
         }
     }
-    fun runDiscovery() { val i = brainIntegration ?: return; discoverySummary = runCatching { val r = i.discoverBuiltInCandidate(); "${r.radar.accepted} candidato(s) aceito(s), ${r.radar.rejected} rejeitado(s), ${r.workspace.windows.size} janela(s)" }.getOrElse { "Discovery falhou: ${it.message}" }; appendThreadEvent(ThreadEvent.Report("Discovery", discoverySummary.orEmpty())) }
-    fun publishLocalDelivery() { val i = brainIntegration ?: return; if (phase != SandboxPhase.Ready) return; viewModelScope.launch(Dispatchers.IO) { val root = File(getApplication<Application>().filesDir, "sandbox/workspace"); val s = runCatching { val r = i.publishLocalDelivery(root, "delivery-${System.currentTimeMillis()}"); "Recibo local: ${r.artifacts.size} artefato(s), ${r.artifacts.sumOf { it.bytes }} bytes, ${r.artifacts.firstOrNull()?.sha256?.take(12) ?: "sem arquivos"}" }.getOrElse { "Falha na entrega local: ${it.message ?: "erro desconhecido"}" }; withContext(Dispatchers.Main) { deliverySummary = s; appendThreadEvent(ThreadEvent.Report("Delivery", s)) } } }
+    fun runDiscovery() {
+        val i = brainIntegration ?: run { appendThreadEvent(ThreadEvent.System("Discovery indisponível: Brain ainda não inicializado.")); return }
+        viewModelScope.launch {
+            discoverySummary = withContext(Dispatchers.IO) {
+                runCatching { val r = i.discoverBuiltInCandidate(); "${r.radar.accepted} candidato(s) aceito(s), ${r.radar.rejected} rejeitado(s), ${r.workspace.windows.size} janela(s)" }.getOrElse { "Discovery falhou: ${it.message}" }
+            }
+            appendThreadEvent(ThreadEvent.Report("Discovery", discoverySummary.orEmpty()))
+        }
+    }
+    fun publishLocalDelivery() {
+        val i = brainIntegration ?: run { appendThreadEvent(ThreadEvent.System("Delivery indisponível: Brain ainda não inicializado.")); return }
+        if (phase != SandboxPhase.Ready) { appendThreadEvent(ThreadEvent.System("Delivery indisponível: sandbox ocupado.")); return }
+        viewModelScope.launch(Dispatchers.IO) {
+            val root = File(getApplication<Application>().filesDir, "sandbox/workspace")
+            val s = runCatching { val r = i.publishLocalDelivery(root, "delivery-${System.currentTimeMillis()}"); "Recibo local: ${r.artifacts.size} artefato(s), ${r.artifacts.sumOf { it.bytes }} bytes, ${r.artifacts.firstOrNull()?.sha256?.take(12) ?: "sem arquivos"}" }.getOrElse { "Falha na entrega local: ${it.message ?: "erro desconhecido"}" }
+            withContext(Dispatchers.Main) { deliverySummary = s; appendThreadEvent(ThreadEvent.Report("Delivery", s)) }
+        }
+    }
     fun resetSandbox() { viewModelScope.launch { withContext(Dispatchers.IO) { runtime?.reset { factory.purgeAll() }; runtime = null; brainController = null; brainIntegration = null; factory.clearPersistentSession() }; platform = null; installingComponentIds = emptySet(); statusCache = emptyMap(); pluginSnapshots = emptyList(); pluginHistory = emptyList(); pluginListVersion++; lastResult = null; lastExecution = null; diagnosticsReport = null; lastBrainCycle = null; lastTestLabReport = null; lastSecurityAssessment = null; toolchainStatuses = emptyMap(); pendingApprovalId = null; pendingApprovalPlan = null; pendingApprovalRunId = null; workspaceProjects = emptyList(); lastGitStatus = null; sqliteServiceStatus = null; workspaceError = null; brainSkillSummary = emptyList(); lastWorkflowStatus = null; memorySuccessRate = null; discoverySummary = null; deliverySummary = null; selfCheckReport = null; selfCheckStage = null; selfCheckRunning = false; phase = SandboxPhase.NotReady } }
     fun recentExecutions(limit: Int = 20): List<ExecutionLog> = runtime?.getRecentExecutions(limit) ?: emptyList()
     fun pluginComponents(kind: ComponentKind, query: String, installedOnly: Boolean): List<SandboxComponent> { val base = (platform?.plugins?.components() ?: BuiltInCatalog.all).filter { it.kind == kind }; val searched = if (query.isBlank()) base else base.filter { it.name.contains(query, true) || it.description.contains(query, true) || it.id.contains(query, true) }; return if (!installedOnly) searched else searched.filter { statusCache[it.id]?.state == InstallationState.INSTALLED } }

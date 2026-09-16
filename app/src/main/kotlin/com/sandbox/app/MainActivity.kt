@@ -318,12 +318,14 @@ fun StatusSection(viewModel: SandboxViewModel) {
                     Text(if (expanded) "menos ▲" else "mais ▼", style = MaterialTheme.typography.labelSmall)
                 }
             }
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                StatusPrimaryActions(viewModel)
+            if (!expanded) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    StatusPrimaryActions(viewModel)
+                }
             }
             if (expanded) {
                 StatusDetails(viewModel)
@@ -334,7 +336,6 @@ fun StatusSection(viewModel: SandboxViewModel) {
 
 private fun statusHeadline(viewModel: SandboxViewModel): String {
     viewModel.selfCheckStage?.let { return it }
-    val compat = if (viewModel.namespaceSupport.compatibilityMode) " · modo compatibilidade" else ""
     return when (val phase = viewModel.phase) {
         is SandboxPhase.NotReady -> "Sandbox não preparado"
         is SandboxPhase.Downloading -> {
@@ -345,7 +346,7 @@ private fun statusHeadline(viewModel: SandboxViewModel): String {
             val pct = if (phase.totalBytes > 0) " ${(phase.bytesCompleted * 100 / phase.totalBytes)}%" else ""
             "${phase.stage}$pct"
         }
-        is SandboxPhase.Ready -> "Sandbox pronto$compat"
+        is SandboxPhase.Ready -> "Sandbox pronto"
         is SandboxPhase.Running -> "Executando comando…"
         is SandboxPhase.Blocked -> "Bloqueado: ${phase.reason}"
     }
@@ -377,12 +378,6 @@ private fun StatusDetails(viewModel: SandboxViewModel) {
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            if (viewModel.namespaceSupport.compatibilityMode)
-                "Modo compatibilidade: user namespaces indisponíveis no kernel. Executando via proot com isolamento reduzido (${viewModel.namespaceSupport.reason})."
-            else "User namespaces disponíveis; o runtime continuará usando proot por compatibilidade.",
-            style = MaterialTheme.typography.bodySmall
-        )
         when (val phase = viewModel.phase) {
             is SandboxPhase.Downloading -> if (phase.totalBytes > 0) Text("${phase.bytesDownloaded / 1024} KB / ${phase.totalBytes / 1024} KB", style = MaterialTheme.typography.bodySmall)
             is SandboxPhase.Preparing -> {
@@ -404,7 +399,7 @@ private fun StatusDetails(viewModel: SandboxViewModel) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Teste geral", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
                     TextButton(onClick = {
-                        val text = report.sections.joinToString("\n") { s -> "${s.title}:\n" + s.items.joinToString("\n") { "  ${it.status} ${it.name} — ${it.detail}" } }
+                        val text = report.sections.joinToString("\n") { s -> "${s.title}:\n" + s.items.joinToString("\n") { "  ${it.status} ${it.label} — ${it.detail}" } }
                         clipboard.setText(AnnotatedString(text)); Toast.makeText(context, "Copiado", Toast.LENGTH_SHORT).show()
                     }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)) { Text("Copiar", style = MaterialTheme.typography.labelSmall) }
                 }
