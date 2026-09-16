@@ -16,9 +16,15 @@ object PromptLibraryRetrievalSource {
                     id = template.id,
                     layer = RetrievalLayer.PROMPT_LIBRARY,
                     content = template.textoTemplate,
-                    confidence = template.taxaSucesso.coerceIn(0.01, 1.0),
+                    // confidence representa relevância do retrieval; taxaSucesso é telemetria histórica.
+                    // A busca da PromptLibrary já devolve os candidatos em ordem de relevância.
+                    confidence = 0.5,
                     validated = true,
-                    provenance = listOf("prompt-library:${template.id}", "version:${template.versao}")
+                    provenance = listOf(
+                        "prompt-library:${template.id}",
+                        "version:${template.versao}",
+                        "historical-success:${"%.3f".format(java.util.Locale.US, template.taxaSucesso)}"
+                    )
                 )
             }
         }
