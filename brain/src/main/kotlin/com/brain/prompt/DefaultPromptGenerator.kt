@@ -7,15 +7,11 @@ import com.brain.core.Submodulo
 import com.brain.core.Tarefa
 
 /**
- * Implementação mínima do PromptGenerator (Fase C). Reúne as duas peças
- * que no IaBrain viviam juntas em PromptGenerationFlow.kt:
- * ContextualPromptGenerator (monta o texto final) e PromptLibraryService
- * (busca template antes de gerar do zero — reuso antes de criação).
- *
- * Taxa de sucesso mínima pra reusar um template salvo em vez de gerar
- * do zero. Abaixo disso, o Brain prefere pagar o custo de gerar de novo
- * a arriscar reaproveitar algo que historicamente não funciona bem.
+ * Geração de prompts para tarefas de projeto com reuso contextual.
+ * A biblioteca é consultada primeiro; só reutiliza um template quando a
+ * finalidade/contexto realmente tem compatibilidade suficiente com a tarefa.
  */
+private const val COMPATIBILIDADE_MINIMA = 0.5
 private const val TAXA_SUCESSO_MINIMA_PARA_REUSO = 0.5
 
 class DefaultPromptGenerator : PromptGenerator {
@@ -35,16 +31,28 @@ class DefaultPromptGenerator : PromptGenerator {
     }
 
     override suspend fun gerarPromptDeCorrecao(tarefa: Tarefa, motivoReprovacao: String, library: PromptLibrary): PromptGerado {
-        val texto = buildString {
-            appendLine(HEADER_DESENVOLVEDOR)
-            appendLine()
-            appendLine("CORREÇÃO NECESSÁRIA")
-            appendLine("Tarefa: ${tarefa.descricao} (id: ${tarefa.id})")
-            appendLine("Motivo da reprovação: $motivoReprovacao")
-            appendLine()
-            appendLine("Corrija especificamente o que causou a reprovação acima, sem reabrir escopo já aprovado.")
-        }.trim()
-        return PromptGerado(tarefaId = tarefa.id, texto = texto, origem = "ROUTER_TASK:${tarefa.id}:CORRECAO")
+        val candidatos = library.buscarPorContexto(tarefa.descricao)
+        val template = candidatos
+            .map { it to compatibilidade(tarefa.descricao, it) }
+            .filter { (it, score) -> it.taxaSucesso >= TAXA_SUCESSO_MINIMA_PARA_REUSO && score >= COMPATIBILIDADE_MINIMA }
+            .maxByOrNull { (_, score) -> score }
+            ?.first
+
+        val texto = if (template != null) {
+            renderizarCorrecaoComTemplate(tarefa, motivoReprovacao, template)
+        } else {
+            buildString {
+                appendLine(HEADER_DESENVOLVEDOR)
+                appendLine()
+                appendLine("CORREÇÃO NECESSÁRIA")
+                appendLine("Tarefa: ${tarefa.descricao} (id: ${tarefa.id})")
+                appendLine("Motivo da reprovação: $motivoReprovacao")
+                appendLine()
+                appendLine("Corrija especificamente o que causou a reprovação acima, sem reabrir escopo já aprovado.")
+            }.trim()
+        }
+        val origem = if (template != null) "ROUTER_TASK:${tarefa.id}:CORRECAO:TEMPLATE:${template.id}" else "ROUTER_TASK:${tarefa.id}:CORRECAO"
+        return PromptGerado(tarefaId = tarefa.id, texto = texto, origem = origem)
     }
 
     private suspend fun gerarParaTarefa(
@@ -55,9 +63,13 @@ class DefaultPromptGenerator : PromptGenerator {
         roadmap: Roadmap,
         library: PromptLibrary
     ): PromptGerado {
-        val contextoBusca = "${fase.nome} ${modulo.nome} ${submodulo.nome} ${tarefa.descricao}"
+        val contextoBusca = "${fase.nome} ${modulo.nome} ${submodulo.nome} ${tarefa.descricao} ${roadmap.projectIntent.projectType} ${roadmap.projectIntent.platform ?: ""}"
         val candidatos = library.buscarPorContexto(contextoBusca)
-        val templateReusavel = candidatos.firstOrNull { it.taxaSucesso >= TAXA_SUCESSO_MINIMA_PARA_REUSO }
+        val templateReusavel = candidatos
+            .map { it to compatibilidade(contextoBusca, it) }
+            .filter { (it, score) -> it.taxaSucesso >= TAXA_SUCESSO_MINIMA_PARA_REUSO && score >= COMPATIBILIDADE_MINIMA }
+            .maxByOrNull { (_, score) -> score }
+            ?.first
 
         val texto = if (templateReusavel != null) {
             renderizarComTemplate(tarefa, fase, modulo, submodulo, roadmap, templateReusavel)
@@ -70,9 +82,27 @@ class DefaultPromptGenerator : PromptGenerator {
         } else {
             "ROUTER_TASK:${tarefa.id}:GERADO"
         }
-
         return PromptGerado(tarefaId = tarefa.id, texto = texto, origem = origem)
     }
+
+    private fun compatibilidade(pedido: String, template: PromptTemplate): Double {
+        val pedidoTokens = tokenizar(pedido)
+        if (pedidoTokens.isEmpty()) return 0.0
+        val contextoTokens = tokenizar(template.contextoDeUso)
+        val finalidadeTokens = tokenizar(template.finalidade)
+        val todos = contextoTokens + finalidadeTokens
+        if (todos.isEmpty()) return 0.0
+        val acertos = pedidoTokens.count { token -> todos.any { candidato -> candidato == token || candidato.contains(token) || token.contains(candidato) } }
+        val cobertura = acertos.toDouble() / pedidoTokens.size
+        val densidade = acertos.toDouble() / todos.distinct().size.coerceAtLeast(1)
+        return (cobertura * 0.7 + densidade * 0.3).coerceIn(0.0, 1.0)
+    }
+
+    private fun tokenizar(texto: String): Set<String> =
+        texto.lowercase()
+            .split(Regex("[^\\p{L}\\p{N}]+"))
+            .filter { it.length > 2 }
+            .toSet()
 
     private fun renderizarComTemplate(
         tarefa: Tarefa,
@@ -85,12 +115,41 @@ class DefaultPromptGenerator : PromptGenerator {
         appendLine(HEADER_DESENVOLVEDOR)
         appendLine()
         appendLine("TEMPLATE REUTILIZADO: ${template.id} (taxa de sucesso ${"%.0f".format(template.taxaSucesso * 100)}%)")
-        appendLine(template.textoTemplate)
+        appendLine("INSTRUÇÃO DO TEMPLATE")
+        appendLine(adaptarTemplate(template.textoTemplate, tarefa.descricao))
         appendLine()
         appendCabecalhoContexto(fase, modulo, submodulo, roadmap)
         appendLine("TAREFA")
         appendLine(tarefa.descricao)
     }.trim()
+
+    private fun renderizarCorrecaoComTemplate(tarefa: Tarefa, motivo: String, template: PromptTemplate): String = buildString {
+        appendLine(HEADER_DESENVOLVEDOR)
+        appendLine()
+        appendLine("CORREÇÃO NECESSÁRIA")
+        appendLine("Tarefa: ${tarefa.descricao} (id: ${tarefa.id})")
+        appendLine("Motivo da reprovação: $motivo")
+        appendLine()
+        appendLine("TEMPLATE REUTILIZADO: ${template.id}")
+        appendLine(adaptarTemplate(template.textoTemplate, tarefa.descricao))
+        appendLine()
+        appendLine("Corrija especificamente o que causou a reprovação acima, sem reabrir escopo já aprovado.")
+    }.trim()
+
+    private fun adaptarTemplate(template: String, tarefa: String): String {
+        val placeholders = Regex("\\{([A-Za-z0-9_]+)\\}")
+        var resultado = template
+        val nomes = placeholders.findAll(template).map { it.groupValues[1] }.toList()
+        if (nomes.isEmpty()) return template
+        for (nome in nomes) {
+            val valor = when (nome.uppercase()) {
+                "PEDIDO", "OBJETIVO", "TAREFA", "DESCRICAO", "DESCRIÇÃO" -> tarefa
+                else -> "[${nome}: definir conforme a tarefa]"
+            }
+            resultado = resultado.replace("{$nome}", valor)
+        }
+        return resultado
+    }
 
     private fun gerarDoZero(
         tarefa: Tarefa,
@@ -127,7 +186,6 @@ class DefaultPromptGenerator : PromptGenerator {
     }
 
     companion object {
-        /** Igual ao DeveloperPromptStandard.HEADER do IaBrain (brain/PromptGenerationFlow.kt). */
         const val HEADER_DESENVOLVEDOR = """MODO DE EXECUÇÃO SILENCIOSA
 FASE → MÓDULO → SUBMÓDULO
 - Executar sempre do menor peso para o maior peso
