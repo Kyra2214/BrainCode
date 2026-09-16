@@ -31,10 +31,7 @@ class ToolchainModelsTest {
         val result = ToolchainDetector(executor).detect(profile)
 
         assertTrue(result.installed)
-        assertEquals("bash", executor.lastCommand?.getOrNull(0))
-        assertEquals("-c", executor.lastCommand?.getOrNull(1))
-        assertTrue(executor.lastCommand?.getOrNull(2)?.contains("JAVA_TOOL_OPTIONS='-Xmx64m -XX:MaxMetaspaceSize=32m'") == true)
-        assertTrue(executor.lastCommand?.getOrNull(2)?.contains("exec java --version") == true)
+        assertEquals(listOf("java", "--version"), executor.lastCommand)
         assertEquals("tool 1.2.3", result.versionOutput)
     }
 
