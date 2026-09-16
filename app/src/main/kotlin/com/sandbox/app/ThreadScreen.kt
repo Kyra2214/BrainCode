@@ -4,10 +4,12 @@ import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -15,19 +17,26 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -44,6 +53,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -316,6 +326,7 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
     }
 }
 
+/** Composer no estilo do app do Claude: campo em pílula arredondada com botão de envio circular embutido, sem rótulo nem botão "Enviar" em linha separada. */
 @Composable
 private fun ThreadComposer(viewModel: SandboxViewModel) {
     Column(
@@ -331,21 +342,50 @@ private fun ThreadComposer(viewModel: SandboxViewModel) {
                 }
             }
         }
-        OutlinedTextField(
-            value = viewModel.chatInput,
-            onValueChange = { viewModel.chatInput = it },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !viewModel.chatRunning && viewModel.phase == SandboxPhase.Ready,
-            label = { Text(if (viewModel.chatRunning) "Executando…" else "Descreva a tarefa ou use /comando") },
-            minLines = 2,
-            maxLines = 5
-        )
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (viewModel.chatRunning) {
-                CircularProgressIndicator()
-                OutlinedButton(onClick = { viewModel.cancelCommand() }) { Text("Parar") }
-            } else {
-                Button(onClick = { viewModel.submitThreadInput() }, enabled = viewModel.chatInput.isNotBlank() && viewModel.phase == SandboxPhase.Ready, modifier = Modifier.fillMaxWidth()) { Text("Enviar") }
+        val enabled = !viewModel.chatRunning && viewModel.phase == SandboxPhase.Ready
+        val canSend = viewModel.chatInput.isNotBlank() && viewModel.phase == SandboxPhase.Ready
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 2.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(start = 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Box(modifier = Modifier.weight(1f).heightIn(min = 40.dp).padding(vertical = 8.dp)) {
+                    if (viewModel.chatInput.isEmpty()) {
+                        Text(
+                            if (viewModel.chatRunning) "Executando…" else "Descreva a tarefa ou use /comando",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    BasicTextField(
+                        value = viewModel.chatInput,
+                        onValueChange = { viewModel.chatInput = it },
+                        enabled = enabled,
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        maxLines = 6
+                    )
+                }
+                if (viewModel.chatRunning) {
+                    FilledIconButton(
+                        onClick = { viewModel.cancelCommand() },
+                        shape = CircleShape,
+                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) { Icon(Icons.Filled.Stop, contentDescription = "Parar") }
+                } else {
+                    FilledIconButton(
+                        onClick = { viewModel.submitThreadInput() },
+                        enabled = canSend,
+                        shape = CircleShape
+                    ) { Icon(Icons.Filled.ArrowUpward, contentDescription = "Enviar") }
+                }
             }
         }
     }

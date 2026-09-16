@@ -163,6 +163,22 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             activeSessionId = sessions.maxByOrNull { it.updatedAt }?.id
             restoreChatFromActiveSession()
         }
+        autoResumeSandboxIfAlreadyPrepared()
+    }
+
+    /**
+     * O rootfs extraído persiste em disco entre aberturas do app, mas o estado `phase`
+     * (em memória) sempre volta a NotReady quando o processo é recriado. Sem isto, o
+     * usuário precisava tocar em "Preparar sandbox" de novo a cada abertura, mesmo com
+     * o diagnóstico confirmando que o sandbox já estava pronto. Aqui checamos o disco e,
+     * se já estiver pronto, refazemos a preparação (rápida, sem novo download/extração)
+     * automaticamente, sem exigir toque do usuário.
+     */
+    private fun autoResumeSandboxIfAlreadyPrepared() {
+        viewModelScope.launch {
+            val ready = withContext(Dispatchers.IO) { factory.isRootfsReady() }
+            if (ready) prepareSandbox()
+        }
     }
 
     fun createSession() {
@@ -429,7 +445,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 val missing = rootfsText.contains("AUSENTE")
                 val m = Regex("Total: (\\d+) arquivos, (\\d+) pastas, (\\d+) symlinks, (\\d+) MB").find(rootfsText)
                 val detail = m?.let { "${it.groupValues[1]} arquivos, ${it.groupValues[2]} pastas, ${it.groupValues[4]} MB no disco" } ?: "tamanho não determinado"
-                selfCheckReport = SelfCheckReport(
+                val report = SelfCheckReport(
                     System.currentTimeMillis(),
                     listOf(
                         SelfCheckSection("Toolchains", toolchainItems),
@@ -438,6 +454,12 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         SelfCheckSection("Rootfs no disco", listOf(SelfCheckItem("Rootfs extraído (caminhos essenciais)", if (missing) SelfCheckStatus.FAILED else SelfCheckStatus.OK, detail)))
                     )
                 )
+                selfCheckReport = report
+                val summary = report.sections.joinToString("\n\n") { s ->
+                    "${s.title}: ${s.items.count { it.status == SelfCheckStatus.OK }}/${s.items.size} OK\n" +
+                        s.items.joinToString("\n") { "  ${it.status} ${it.name} — ${it.detail}" }
+                }
+                appendThreadEvent(ThreadEvent.Report("Teste geral", summary))
             } finally {
                 selfCheckStage = null; selfCheckRunning = false; phase = if (runtime != null) SandboxPhase.Ready else SandboxPhase.NotReady
             }
@@ -448,7 +470,9 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         if (diagnosticsRunning) return
         viewModelScope.launch {
             diagnosticsRunning = true
-            diagnosticsReport = withContext(Dispatchers.IO) { runCatching { factory.inspectExtractedRootfs() }.getOrElse { "Falha ao inspecionar rootfs: ${it.message}" } }
+            val report = withContext(Dispatchers.IO) { runCatching { factory.inspectExtractedRootfs() }.getOrElse { "Falha ao inspecionar rootfs: ${it.message}" } }
+            diagnosticsReport = report
+            appendThreadEvent(ThreadEvent.Report("Diagnóstico", report))
             diagnosticsRunning = false
         }
     }
@@ -617,9 +641,30 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         if (phase != SandboxPhase.Ready) { appendThreadEvent(ThreadEvent.System("Verificação indisponível: sandbox ocupado.")); return }
         viewModelScope.launch {
             phase = SandboxPhase.Running
-            lastBrainCycle = withContext(Dispatchers.IO) { runCatching { c.healthCheck(factory.persistentSessionId()) }.getOrNull() }
+            val cycle = withContext(Dispatchers.IO) { runCatching { c.healthCheck(factory.persistentSessionId()) }.getOrNull() }
+            lastBrainCycle = cycle
             phase = SandboxPhase.Ready
-            if (lastBrainCycle == null) appendThreadEvent(ThreadEvent.System("Verificação pelo Brain falhou ao executar."))
+            if (cycle == null) {
+                appendThreadEvent(ThreadEvent.System("Verificação pelo Brain falhou ao executar."))
+            } else {
+                val summary = buildString {
+                    appendLine("objetivo=${cycle.objetivo}")
+                    appendLine("runId=${cycle.runId}")
+                    appendLine("aprovado=${cycle.aprovado}")
+                    cycle.passos.forEachIndexed { index, passo ->
+                        appendLine("\n--- passo ${index + 1} ---")
+                        appendLine("passoId=${passo.passoId}")
+                        appendLine("status=${passo.status}")
+                        appendLine("decisaoPolicy=${passo.decisaoPolicy}")
+                        appendLine("decisaoRouter=${passo.decisaoRouter}")
+                        appendLine("execucao=${passo.execucao}")
+                        appendLine("evidencias=${passo.evidencias}")
+                        appendLine("motivo=${passo.motivo}")
+                        appendLine("approvalId=${passo.approvalId}")
+                    }
+                }
+                appendThreadEvent(ThreadEvent.Report("Verificação do Brain", summary))
+            }
         }
     }
     fun runTestLab(projectPath: String = "/home/sandbox/workspace") {

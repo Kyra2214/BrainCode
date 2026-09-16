@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,7 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -35,11 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import com.sandbox.sandbox.SelfCheckStatus
 
 open class MainActivity : ComponentActivity() {
     private val viewModel: SandboxViewModel by viewModels()
@@ -70,12 +64,11 @@ fun SandboxMobileApp(viewModel: SandboxViewModel) {
 fun StatusSection(viewModel: SandboxViewModel) {
     var expandedManual by remember { mutableStateOf(false) }
     val expanded = expandedManual
-    androidx.compose.runtime.LaunchedEffect(viewModel.selfCheckReport) {
-        if (viewModel.selfCheckReport != null) expandedManual = true
-    }
-    androidx.compose.runtime.LaunchedEffect(viewModel.diagnosticsReport) {
-        if (viewModel.diagnosticsReport != null) expandedManual = true
-    }
+    // Há detalhe relevante pra expandir só durante download/extração (bytes, aviso de
+    // não fechar o app). Diagnóstico e Teste geral saíram desta tela: os resultados vão
+    // pro chat, e os botões que os disparam moraram para a aba "Diagnóstico" das
+    // Configurações — por isso não há mais motivo pra auto-expandir aqui.
+    val hasExpandableDetail = viewModel.phase is SandboxPhase.Downloading || viewModel.phase is SandboxPhase.Preparing
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -87,11 +80,13 @@ fun StatusSection(viewModel: SandboxViewModel) {
                     color = if (viewModel.phase is SandboxPhase.Blocked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f)
                 )
-                TextButton(onClick = { expandedManual = !expandedManual }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)) {
-                    Text(if (expanded) "menos ▲" else "mais ▼", style = MaterialTheme.typography.labelSmall)
+                if (hasExpandableDetail) {
+                    TextButton(onClick = { expandedManual = !expandedManual }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)) {
+                        Text(if (expanded) "menos ▲" else "mais ▼", style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             }
-            if (!expanded) {
+            if (!expanded || !hasExpandableDetail) {
                 Row(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -100,7 +95,7 @@ fun StatusSection(viewModel: SandboxViewModel) {
                     StatusPrimaryActions(viewModel)
                 }
             }
-            if (expanded) {
+            if (expanded && hasExpandableDetail) {
                 StatusDetails(viewModel)
             }
         }
@@ -132,11 +127,6 @@ private fun StatusPrimaryActions(viewModel: SandboxViewModel) {
         is SandboxPhase.Downloading, is SandboxPhase.Preparing -> LinearProgressIndicator(modifier = Modifier.width(140.dp))
         is SandboxPhase.Ready -> {
             OutlinedButton(onClick = { viewModel.resetSandbox() }) { Text("Resetar") }
-            OutlinedButton(onClick = { viewModel.runDiagnostics() }, enabled = !viewModel.diagnosticsRunning) { Text("Diagnóstico") }
-            if (viewModel.diagnosticsRunning) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-            Button(onClick = { viewModel.runFullSelfCheck() }, enabled = !viewModel.selfCheckRunning) { Text("Teste geral") }
-            if (viewModel.selfCheckRunning) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-            Button(onClick = { viewModel.runBrainHealthCheck() }) { Text("Verificar Brain") }
         }
         is SandboxPhase.Running -> {
             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -148,8 +138,6 @@ private fun StatusPrimaryActions(viewModel: SandboxViewModel) {
 
 @Composable
 private fun StatusDetails(viewModel: SandboxViewModel) {
-    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
-    val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         when (val phase = viewModel.phase) {
             is SandboxPhase.Downloading -> if (phase.totalBytes > 0) Text("${phase.bytesDownloaded / 1024} KB / ${phase.totalBytes / 1024} KB", style = MaterialTheme.typography.bodySmall)
@@ -158,77 +146,6 @@ private fun StatusDetails(viewModel: SandboxViewModel) {
                 Text("Não feche o aplicativo durante esta etapa.", style = MaterialTheme.typography.bodySmall)
             }
             else -> {}
-        }
-        viewModel.lastBrainCycle?.let { cycle ->
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Resultado completo do Brain/Agente", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
-                    TextButton(onClick = {
-                        val text = buildString {
-                            appendLine("objetivo=${cycle.objetivo}")
-                            appendLine("runId=${cycle.runId}")
-                            appendLine("aprovado=${cycle.aprovado}")
-                            cycle.passos.forEachIndexed { index, passo ->
-                                appendLine("\n--- passo ${index + 1} ---")
-                                appendLine("passoId=${passo.passoId}")
-                                appendLine("status=${passo.status}")
-                                appendLine("decisaoPolicy=${passo.decisaoPolicy}")
-                                appendLine("decisaoRouter=${passo.decisaoRouter}")
-                                appendLine("execucao=${passo.execucao}")
-                                appendLine("evidencias=${passo.evidencias}")
-                                appendLine("motivo=${passo.motivo}")
-                                appendLine("approvalId=${passo.approvalId}")
-                            }
-                        }
-                        clipboard.setText(AnnotatedString(text)); Toast.makeText(context, "Resultado completo copiado", Toast.LENGTH_SHORT).show()
-                    }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)) { Text("Copiar tudo", style = MaterialTheme.typography.labelSmall) }
-                }
-                SelectionContainer {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("objetivo=${cycle.objetivo}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-                        Text("runId=${cycle.runId}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-                        Text("aprovado=${cycle.aprovado}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-                        cycle.passos.forEachIndexed { index, passo ->
-                            Card(modifier = Modifier.fillMaxWidth()) {
-                                Column(modifier = Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text("--- passo ${index + 1} ---", style = MaterialTheme.typography.labelMedium)
-                                    Text("passoId=${passo.passoId}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-                                    Text("status=${passo.status}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-                                    Text("decisaoPolicy=${passo.decisaoPolicy}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-                                    Text("decisaoRouter=${passo.decisaoRouter}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-                                    Text("execucao=${passo.execucao}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-                                    Text("evidencias=${passo.evidencias}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-                                    Text("motivo=${passo.motivo}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-                                    Text("approvalId=${passo.approvalId}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        viewModel.selfCheckReport?.let { report ->
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Teste geral", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
-                    TextButton(onClick = {
-                        val text = report.sections.joinToString("\n") { s -> "${s.title}:\n" + s.items.joinToString("\n") { "  ${it.status} ${it.name} — ${it.detail}" } }
-                        clipboard.setText(AnnotatedString(text)); Toast.makeText(context, "Copiado", Toast.LENGTH_SHORT).show()
-                    }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)) { Text("Copiar", style = MaterialTheme.typography.labelSmall) }
-                }
-                report.sections.forEach { section ->
-                    Text("${section.title}: ${section.items.count { it.status == SelfCheckStatus.OK }}/${section.items.size} OK", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
-        viewModel.diagnosticsReport?.let { text ->
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Diagnóstico", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { clipboard.setText(AnnotatedString(text)); Toast.makeText(context, "Copiado", Toast.LENGTH_SHORT).show() }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)) { Text("Copiar", style = MaterialTheme.typography.labelSmall) }
-                }
-                SelectionContainer { Text(text.take(2000), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) }
-            }
         }
     }
 }

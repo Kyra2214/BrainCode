@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -47,7 +48,7 @@ fun SettingsScreen(viewModel: SandboxViewModel, onBack: () -> Unit) {
                 .padding(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            listOf("Provedores", "Extensões", "Workspace", "Toolchains").forEachIndexed { index, label ->
+            listOf("Provedores", "Extensões", "Workspace", "Toolchains", "Diagnóstico").forEachIndexed { index, label ->
                 FilterChip(selected = section == index, onClick = { section = index }, label = { Text(label) })
             }
         }
@@ -55,8 +56,40 @@ fun SettingsScreen(viewModel: SandboxViewModel, onBack: () -> Unit) {
             0 -> ApiKeysScreen(viewModel)
             1 -> ExtensionsSettings(viewModel)
             2 -> WorkspaceSettings(viewModel)
-            else -> ToolchainSettings(viewModel)
+            3 -> ToolchainSettings(viewModel)
+            else -> DiagnosticsSettings(viewModel)
         }
+    }
+}
+
+/**
+ * Diagnóstico, Teste geral e Verificação do Brain moraram na tela principal
+ * (StatusPrimaryActions) e agora vivem aqui — são ferramentas de manutenção, não
+ * parte do fluxo de chat. Os resultados completos aparecem como mensagens no chat
+ * (ThreadEvent.Report); aqui só ficam os botões que disparam cada checagem.
+ */
+@Composable
+private fun DiagnosticsSettings(viewModel: SandboxViewModel) {
+    val ready = viewModel.phase == SandboxPhase.Ready
+    LazyColumn(modifier = Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Text("Diagnóstico e testes", style = MaterialTheme.typography.titleMedium) }
+        item { Text("Os resultados aparecem como mensagens no chat.", style = MaterialTheme.typography.bodySmall) }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                OutlinedButton(onClick = { viewModel.runDiagnostics() }, enabled = ready && !viewModel.diagnosticsRunning) { Text("Diagnóstico") }
+                if (viewModel.diagnosticsRunning) androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Button(onClick = { viewModel.runFullSelfCheck() }, enabled = ready && !viewModel.selfCheckRunning) { Text("Teste geral") }
+                if (viewModel.selfCheckRunning) androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+            }
+        }
+        item {
+            Button(onClick = { viewModel.runBrainHealthCheck() }, enabled = ready) { Text("Verificar Brain") }
+        }
+        if (!ready) item { Text("Disponível quando o sandbox estiver pronto.", style = MaterialTheme.typography.bodySmall) }
     }
 }
 

@@ -85,9 +85,16 @@ class GatewayBackedSandboxExecutor(
                 provenance = listOf("android:sandbox", "command:${command.first()}")
             )
         )
+        // Se o executor chegou a rodar (há um ExecutionLog registrado), devolvemos esse
+        // log tal como está — mesmo quando o comando falhou (ex.: binário ainda não
+        // instalado, exit 127). Isso é um resultado normal de execução, não um bloqueio
+        // do gateway, e quem chama (ex.: ToolchainDetector) precisa do log para decidir
+        // "não instalado" em vez de receber uma exceção e reportar "FAILED" incorretamente.
+        // Só lançamos exceção quando o próprio gateway bloqueou a ação antes de executar
+        // (política negou, capability não encontrada etc.) — nesse caso não existe log.
+        executionLogs.remove(actionId)?.let { return it }
         check(result.success) { result.execution?.error ?: "ActionGateway bloqueou $capability" }
-        return executionLogs.remove(actionId)
-            ?: error("executor do Sandbox não devolveu ExecutionLog para $actionId")
+        return error("executor do Sandbox não devolveu ExecutionLog para $actionId")
     }
 
     private fun capabilityFor(executable: String): String = when (executable.substringAfterLast('/')) {
