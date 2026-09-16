@@ -23,7 +23,9 @@ class SandboxActionExecutor(
         decision: com.brain.policy.PolicyDecision
     ): com.brain.gateway.ActionExecution {
         val executable = request.parameters["executable"] ?: executableFor(capability.id)
-        require(executable.matches(Regex("^[a-zA-Z0-9._/-]+$"))) { "executável não permitido" }
+        // Tool executables may contain '+' (e.g. g++). Keep this a lexical guard,
+        // while capabilityFor() remains the allowlist boundary for what may run.
+        require(executable.matches(Regex("^[a-zA-Z0-9._/+\\-]+$"))) { "executável não permitido" }
         val args = request.parameters
             .filterKeys { it.startsWith("argument.") }
             .toSortedMap()
