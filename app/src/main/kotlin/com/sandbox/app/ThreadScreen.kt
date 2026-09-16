@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -24,7 +23,6 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
@@ -34,7 +32,6 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Icon
@@ -83,14 +80,15 @@ private fun extractCodeBlocks(text: String): List<CodeBlock> {
     }.toList()
 }
 
-private fun hasCodeBlocks(text: String): Boolean = extractCodeBlocks(text).isNotEmpty()
-
 @Composable
 fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
     var sidebarOpen by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
-    Column(modifier = Modifier.fillMaxSize().imePadding()) {
+
+    // O IME deve deslocar somente o composer. Se o imePadding ficar no
+    // container raiz, toda a thread (inclusive top bar) é empurrada para cima.
+    Column(modifier = Modifier.fillMaxSize()) {
         ThreadTopBar(viewModel, searchOpen = searchOpen, onToggleSidebar = { sidebarOpen = !sidebarOpen }, onOpenSettings = onOpenSettings, onSearch = { searchOpen = !searchOpen })
         if (sidebarOpen) {
             TaskSidebar(viewModel, onClose = { sidebarOpen = false })
@@ -328,7 +326,7 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
 @Composable
 private fun ThreadComposer(viewModel: SandboxViewModel) {
     Column(
-        modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().imePadding().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         val input = viewModel.chatInput
