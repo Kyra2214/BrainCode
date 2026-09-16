@@ -25,6 +25,13 @@ import androidx.compose.ui.unit.dp
 import com.sandbox.sandbox.BuiltInToolchains
 import com.sandbox.sandbox.ComponentKind
 
+private fun formatBytes(bytes: Long): String = when {
+    bytes >= 1024L * 1024L * 1024L -> "%.2f GiB".format(bytes / (1024.0 * 1024.0 * 1024.0))
+    bytes >= 1024L * 1024L -> "%.1f MiB".format(bytes / (1024.0 * 1024.0))
+    bytes >= 1024L -> "%.1f KiB".format(bytes / 1024.0)
+    else -> "$bytes B"
+}
+
 @Composable
 fun SettingsScreen(viewModel: SandboxViewModel, onBack: () -> Unit) {
     var section by remember { mutableIntStateOf(0) }
@@ -94,7 +101,19 @@ private fun ToolchainSettings(viewModel: SandboxViewModel) {
         items(BuiltInToolchains.all) { profile ->
             val status = viewModel.toolchainStatuses[profile.id]
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column { Text(profile.displayName); Text(status?.versionOutput.orEmpty(), style = MaterialTheme.typography.bodySmall) }
+                Column {
+                    Text(profile.displayName)
+                    Text(
+                        buildString {
+                            append(status?.versionOutput.orEmpty())
+                            if (status != null && status.installedBytes > 0L) {
+                                if (isNotEmpty()) append(" · ")
+                                append(formatBytes(status.installedBytes))
+                            }
+                        },
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
                 Button(onClick = { viewModel.installToolchain(profile.id) }, enabled = viewModel.phase == SandboxPhase.Ready) { Text(status?.state?.name ?: "Instalar") }
             }
         }
