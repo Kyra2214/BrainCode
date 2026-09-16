@@ -1,18 +1,21 @@
 package com.sandbox.app
 
+import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
@@ -45,7 +48,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import android.widget.Toast
 import com.sandbox.runtime.SandboxExecutionResult
 
 data class DiffLine(val prefix: Char, val text: String)
@@ -61,12 +63,23 @@ sealed interface ThreadEvent {
     data class System(val text: String, val progress: Float? = null) : ThreadEvent
 }
 
+private data class CodeBlock(val language: String, val code: String)
+
+private fun extractCodeBlocks(text: String): List<CodeBlock> {
+    val regex = Regex("```([^\\n]*)\\n([\\s\\S]*?)```")
+    return regex.findAll(text).map { match ->
+        CodeBlock(match.groupValues[1].trim(), match.groupValues[2].trimEnd())
+    }.toList()
+}
+
+private fun hasCodeBlocks(text: String): Boolean = extractCodeBlocks(text).isNotEmpty()
+
 @Composable
 fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
     var sidebarOpen by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().imePadding()) {
         ThreadTopBar(viewModel, searchOpen = searchOpen, onToggleSidebar = { sidebarOpen = !sidebarOpen }, onOpenSettings = onOpenSettings, onSearch = { searchOpen = !searchOpen })
         if (sidebarOpen) {
             TaskSidebar(viewModel, onClose = { sidebarOpen = false })
@@ -193,19 +206,39 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
     val context = LocalContext.current
     fun copy(text: String) { clipboard.setText(AnnotatedString(text)); Toast.makeText(context, "Copiado", Toast.LENGTH_SHORT).show() }
     when (event) {
-        is ThreadEvent.User -> Card(modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { viewModel.quoteEvent(event) })) {
-            Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                SelectionContainer(modifier = Modifier.weight(1f)) { Text(event.text, style = MaterialTheme.typography.bodyMedium) }
-                IconButton(onClick = { copy(event.text) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.ContentCopy, contentDescription = "Copiar") }
-            }
+        is ThreadEvent.User -> Row(
+            modifier = Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = { viewModel.quoteEvent(event) }),
+            horizontalArrangement = Arrangement.End
+        ) {
+            Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(12.dp))
         }
-        is ThreadEvent.Agent -> Card(modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { viewModel.quoteEvent(event) })) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Turno do agente", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-                    IconButton(onClick = { copy(event.text) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.ContentCopy, contentDescription = "Copiar") }
+        is ThreadEvent.Agent -> Column(
+            modifier = Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = { viewModel.quoteEvent(event) }),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val blocks = extractCodeBlocks(event.text)
+            if (blocks.isEmpty()) {
+                Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
+            } else {
+                var cursor = 0
+                Regex("```([^\\n]*)\\n([\\s\\S]*?)```").findAll(event.text).forEach { match ->
+                    val prose = event.text.substring(cursor, match.range.first).trim()
+                    if (prose.isNotEmpty()) Text(prose, style = MaterialTheme.typography.bodyMedium)
+                    val language = match.groupValues[1].trim().ifBlank { "arquivo" }
+                    val code = match.groupValues[2].trimEnd()
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text(language, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                                TextButton(onClick = { copy(code) }) { Text("Copiar") }
+                            }
+                            SelectionContainer { Text(code, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) }
+                        }
+                    }
+                    cursor = match.range.last + 1
                 }
-                SelectionContainer { Text(event.text, style = MaterialTheme.typography.bodyMedium) }
+                val tail = event.text.substring(cursor).trim()
+                if (tail.isNotEmpty()) Text(tail, style = MaterialTheme.typography.bodyMedium)
             }
         }
         is ThreadEvent.System -> Card {
@@ -233,7 +266,7 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Terminal · ${if (event.result.exitCode == 0) "sucesso" else "falha"}", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                    IconButton(onClick = { copy(terminalText) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.ContentCopy, contentDescription = "Copiar terminal completo") }
+                    TextButton(onClick = { copy(terminalText) }) { Text("Copiar") }
                 }
                 event.execution?.let { Text("${it.durationMs} ms · ${it.terminationReason.name}", style = MaterialTheme.typography.labelSmall) }
                 SelectionContainer { Text(terminalText, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) }
@@ -250,7 +283,7 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(event.title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                    IconButton(onClick = { copy(event.body) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.ContentCopy, contentDescription = "Copiar") }
+                    TextButton(onClick = { copy(event.body) }) { Text("Copiar") }
                 }
                 SelectionContainer { Text(event.body, fontFamily = if (event.title == "Git status") FontFamily.Monospace else FontFamily.Default, style = MaterialTheme.typography.bodySmall) }
             }
@@ -275,7 +308,10 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
 
 @Composable
 private fun ThreadComposer(viewModel: SandboxViewModel) {
-    Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(
+        modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
         val input = viewModel.chatInput
         if (viewModel.phase == SandboxPhase.Ready && input.startsWith("/")) {
             val matches = viewModel.sugestoesDeComando.filter { it.startsWith(input, ignoreCase = true) && it != input }.take(30)
@@ -299,7 +335,7 @@ private fun ThreadComposer(viewModel: SandboxViewModel) {
                 CircularProgressIndicator()
                 OutlinedButton(onClick = { viewModel.cancelCommand() }) { Text("Parar") }
             } else {
-                Button(onClick = { viewModel.submitThreadInput() }, enabled = viewModel.chatInput.isNotBlank() && viewModel.phase == SandboxPhase.Ready, modifier = Modifier.fillMaxWidth()) { Text("Executar") }
+                Button(onClick = { viewModel.submitThreadInput() }, enabled = viewModel.chatInput.isNotBlank() && viewModel.phase == SandboxPhase.Ready, modifier = Modifier.fillMaxWidth()) { Text("Enviar") }
             }
         }
     }
