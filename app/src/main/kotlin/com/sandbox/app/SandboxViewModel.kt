@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.sandbox.android.AndroidSandboxFactory
 import com.sandbox.agent.BrainSandboxController
 import com.sandbox.agent.ResultadoCiclo
+import com.sandbox.agent.ResultadoPasso
 import com.sandbox.resource.SandboxResourceManager
 import com.sandbox.runtime.ExecutionLog
 import com.sandbox.runtime.ManagedSandboxRuntime
@@ -57,7 +58,7 @@ sealed interface SandboxPhase {
 
 data class QuickCommand(val label: String, val command: String)
 
-enum class ChatRole { USER, ASSISTANT, ERROR }
+enum class ChatRole { USER, ASSISTANT, ERROR, STEP }
 data class ChatMessage(val role: ChatRole, val content: String)
 
 enum class SessionStatus { IDLE, RUNNING, AWAITING_APPROVAL, DONE, FAILED, BLOCKED }
@@ -555,11 +556,10 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 runCatching {
                     val controller = brainController
                     if (controller != null && phase == SandboxPhase.Ready) {
-                        val cycle = controller.executeObjective(prompt, "chat-${System.currentTimeMillis()}")
-                        val summary = cycle.passos.joinToString("\n") { step ->
-                            "${step.passoId}: ${step.status.name}${step.motivo?.let { " — $it" } ?: ""}"
+                        val cycle = controller.executeObjective(prompt, "chat-${System.currentTimeMillis()}") { passo ->
+                            viewModelScope.launch(Dispatchers.Main.immediate) { publishStep(passo) }
                         }
-                        ChatMessage(ChatRole.ASSISTANT, summary.ifBlank { "Plano concluído: ${cycle.aprovado}" })
+                        ChatMessage(ChatRole.ASSISTANT, "Plano concluído: ${cycle.aprovado}")
                     } else {
                         ChatMessage(ChatRole.ASSISTANT, brainApiGateway.complete(prompt).text)
                     }
@@ -615,11 +615,10 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 runCatching {
                     val controller = brainController
                     if (controller != null && phase == SandboxPhase.Ready) {
-                        val cycle = controller.executeObjective(prompt, "cmd-${entrada.slug}-${System.currentTimeMillis()}")
-                        val summary = cycle.passos.joinToString("\n") { step ->
-                            "${step.passoId}: ${step.status.name}${step.motivo?.let { " — $it" } ?: ""}"
+                        val cycle = controller.executeObjective(prompt, "cmd-${entrada.slug}-${System.currentTimeMillis()}") { passo ->
+                            viewModelScope.launch(Dispatchers.Main.immediate) { publishStep(passo) }
                         }
-                        ChatMessage(ChatRole.ASSISTANT, summary.ifBlank { "Plano concluído: ${cycle.aprovado}" })
+                        ChatMessage(ChatRole.ASSISTANT, "Plano concluído: ${cycle.aprovado}")
                     } else {
                         ChatMessage(ChatRole.ASSISTANT, brainApiGateway.complete(prompt).text)
                     }
@@ -629,6 +628,11 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             chatMessages.add(response); chatRunning = false
             appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content) else ThreadEvent.System(response.content))
         }
+    }
+    private fun publishStep(passo: ResultadoPasso) {
+        val message = "${passo.passoId}: ${passo.status.name}${passo.motivo?.let { " — $it" } ?: ""}"
+        chatMessages.add(ChatMessage(ChatRole.STEP, message))
+        appendThreadEvent(ThreadEvent.System("Passo: $message"))
     }
     fun clearChat() { chatMessages.clear() }
 
