@@ -110,7 +110,7 @@ val QUICK_COMMANDS = listOf(
 
 /** Comandos com execução real (não vêm do catálogo /comandos). Sempre prioritários no dispatcher. */
 val OPERATIONAL_SLASH_COMMANDS = listOf(
-    "/run ", "/testlab", "/security", "/git status", "/git diff", "/workflow", "/approval demo",
+    "/run ", "/testlab", "/security", "/git status", "/git diff", "/git commit ", "/git push", "/workflow", "/approval demo",
     "/workspace new ", "/sqlite start", "/sqlite stop", "/discovery", "/deliver"
 )
 
@@ -250,6 +250,29 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             val log = p.git.diff("/home/sandbox/workspace/projects/${project.name}")
             val files = parseDiff(log.stdout)
             withContext(Dispatchers.Main) { appendThreadEvent(ThreadEvent.Diff(files)) }
+        }
+    }
+
+    fun commitGit(message: String) {
+        val p = platform ?: run { appendThreadEvent(ThreadEvent.System("Git commit indisponível: sandbox não está pronto.")); return }
+        val project = workspaceProjects.firstOrNull { it.name == workspaceProjectName } ?: run {
+            appendThreadEvent(ThreadEvent.System("Crie ou selecione um workspace antes de usar /git commit")); return
+        }
+        if (message.isBlank()) { appendThreadEvent(ThreadEvent.System("Use /git commit <mensagem>")); return }
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = p.git.commit("/home/sandbox/workspace/projects/${project.name}", message.trim())
+            withContext(Dispatchers.Main) { appendThreadEvent(ThreadEvent.Report("Git commit", result.stdout.ifBlank { result.stderr }.ifBlank { "commit concluído" })) }
+        }
+    }
+
+    fun pushGit() {
+        val p = platform ?: run { appendThreadEvent(ThreadEvent.System("Git push indisponível: sandbox não está pronto.")); return }
+        val project = workspaceProjects.firstOrNull { it.name == workspaceProjectName } ?: run {
+            appendThreadEvent(ThreadEvent.System("Crie ou selecione um workspace antes de usar /git push")); return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = p.git.push("/home/sandbox/workspace/projects/${project.name}")
+            withContext(Dispatchers.Main) { appendThreadEvent(ThreadEvent.Report("Git push", result.stdout.ifBlank { result.stderr }.ifBlank { "push concluído" })) }
         }
     }
 
@@ -526,6 +549,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             lower == "/security" -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; runSecurityAssessment() }
             lower == "/git status" -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; inspectGitStatus() }
             lower == "/git diff" -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; runGitDiff() }
+            lower.startsWith("/git commit ") -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; commitGit(command.substringAfter(" ").substringAfter(" ").trim()) }
+            lower == "/git push" -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; pushGit() }
             lower == "/workflow" -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; runBrainWorkflow() }
             lower == "/approval demo" -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; requestApprovalDemo() }
             lower.startsWith("/workspace new ") -> { val name = command.substringAfter(" ").substringAfter(" ").trim(); if (name.isNotBlank()) { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; workspaceProjectName = name; createWorkspaceProject() } }
@@ -701,7 +726,12 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         if (phase != SandboxPhase.Ready) { appendThreadEvent(ThreadEvent.System("Delivery indisponível: sandbox ocupado.")); return }
         viewModelScope.launch(Dispatchers.IO) {
             val root = File(getApplication<Application>().filesDir, "sandbox/workspace")
-            val s = runCatching { val r = i.publishLocalDelivery(root, "delivery-${System.currentTimeMillis()}"); "Recibo local: ${r.artifacts.size} artefato(s), ${r.artifacts.sumOf { it.bytes }} bytes, ${r.artifacts.firstOrNull()?.sha256?.take(12) ?: "sem arquivos"}" }.getOrElse { "Falha na entrega local: ${it.message ?: "erro desconhecido"}" }
+            val s = runCatching {
+                val runId = "delivery-${System.currentTimeMillis()}"
+                val zip = i.packageLocalDelivery(root, runId)
+                val digest = java.security.MessageDigest.getInstance("SHA-256").digest(zip.readBytes()).joinToString("") { "%02x".format(it) }
+                "ZIP pronto: ${zip.name} (${zip.length()} bytes, sha256 ${digest.take(16)}…)"
+            }.getOrElse { "Falha na entrega local: ${it.message ?: "erro desconhecido"}" }
             withContext(Dispatchers.Main) { deliverySummary = s; appendThreadEvent(ThreadEvent.Report("Delivery", s)) }
         }
     }

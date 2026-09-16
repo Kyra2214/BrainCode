@@ -33,6 +33,9 @@ import com.brain.workflow.WorkflowRunResult
 import com.brain.workflow.WorkflowStepResult
 import java.io.File
 import java.time.Instant
+import java.io.FileInputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 /**
  * Fachada Android para os subsistemas Brain locais e persistentes.
@@ -150,6 +153,22 @@ class BrainIntegrationFacade(private val context: Context, stateDir: File) {
         provider = "local-sandbox",
         startedAt = Instant.now()
     )
+
+    /** Publishes the local receipt and creates a real downloadable archive. */
+    fun packageLocalDelivery(root: File, runId: String): File {
+        publishLocalDelivery(root, runId)
+        val output = File(File(stateDir, "deliveries"), "$runId.zip")
+        output.parentFile?.mkdirs()
+        ZipOutputStream(output.outputStream().buffered()).use { zip ->
+            root.walkTopDown().filter { it.isFile && it != output }.forEach { file ->
+                val relative = file.relativeTo(root).path.replace(File.separatorChar, '/')
+                zip.putNextEntry(ZipEntry(relative))
+                FileInputStream(file).use { input -> input.copyTo(zip) }
+                zip.closeEntry()
+            }
+        }
+        return output
+    }
 
     fun discoverBuiltInCandidate(): com.brain.discovery.ExplorerPipelineResult = discovery.run(
         weekEpochMs = System.currentTimeMillis(),
