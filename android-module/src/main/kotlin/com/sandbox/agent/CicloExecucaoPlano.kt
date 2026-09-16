@@ -34,9 +34,7 @@ data class ResultadoPasso(
 data class ResultadoCiclo(
     val objetivo: String,
     val runId: String,
-    val passos: List<ResultadoPasso>,
-    /** Conteúdo pronto para entrega quando o plano recupera um artefato textual. */
-    val resposta: String? = null
+    val passos: List<ResultadoPasso>
 ) {
     val aprovado: Boolean get() = passos.isNotEmpty() && passos.all { it.status == StatusPasso.APROVADO }
     val resposta: String? get() = passos.asSequence().mapNotNull { it.resultado }.lastOrNull()
