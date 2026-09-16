@@ -83,7 +83,7 @@ class CodeGenerationExecutor(
 
     companion object {
         private const val MAX_FILE_BYTES = 2 * 1024 * 1024
-        private val FILE_BLOCK = Regex("""(?s)```\\s*([^\\n`]+)\\n(.*?)```""")
+        private val FILE_BLOCK = Regex("""(?s)```\s*([^\n`]+)\n(.*?)```""")
 
         fun parseFiles(text: String): List<Pair<String, String>> = FILE_BLOCK.findAll(text)
             .map { match -> match.groupValues[1].trim() to match.groupValues[2].trimEnd() }
