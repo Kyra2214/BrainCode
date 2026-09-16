@@ -14,6 +14,13 @@ class KeywordPlannerTest {
         assertTrue(plano.passos.any { it.capacidade == "sandbox.code" })
     }
 
+    @Test fun `conjugacoes de criar aplicativo geram producao`() = suspendTest {
+        val plano = KeywordPlanner().planejar("crie um aplicativo de IPTV")
+        val produzir = plano.passos.first { it.id == "produzir" }
+        assertEquals("workspace.write", produzir.capacidade)
+        assertEquals("crie um aplicativo de IPTV", produzir.parametros.single())
+    }
+
     @Test fun `objetivo desconhecido permanece seguro e local`() = suspendTest {
         val plano = KeywordPlanner().planejar("organizar ideias")
         assertEquals("brain.analyze", plano.passos.single().capacidade)

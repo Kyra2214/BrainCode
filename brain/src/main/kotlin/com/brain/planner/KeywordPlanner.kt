@@ -15,20 +15,21 @@ class KeywordFunctionSplitter : FunctionSplitter {
         require(texto.isNotBlank()) { "objetivo não pode ser vazio" }
         val normalizado = texto.lowercase()
         val passos = mutableListOf<PassoPlano>()
-        if (normalizado.containsAny("pesquisar", "pesquisa", "analisar", "investigar")) {
+        if (normalizado.containsAny("pesquis", "analis", "investig")) {
             passos += PassoPlano(
                 "pesquisar", "network.research", "evidência de pesquisa disponível",
                 papel = PapelPipeline.PLANEJAMENTO, riskClass = RiskClass.MEDIUM
             )
         }
-        if (normalizado.containsAny("escrever", "criar", "gerar", "documento", "relatório", "relatorio")) {
+        if (normalizado.containsAny("escrev", "cri", "ger", "document", "relatóri", "relatori", "desenvolv", "constru", "mont", "aplicat", "aplicativo", "sistem", "site", "software")) {
             passos += PassoPlano(
                 "produzir", if (normalizado.containsAny("prompt", "template de prompt")) "prompt.library.write" else "workspace.write", "artefato produzido",
+                parametros = listOf(texto),
                 dependeDe = passos.map { it.id }, papel = if (normalizado.containsAny("prompt", "template de prompt")) PapelPipeline.ESCRITA_DE_PROMPT else PapelPipeline.PRODUCAO_DE_ARTEFATO,
                 riskClass = RiskClass.MEDIUM
             )
         }
-        if (normalizado.containsAny("código", "codigo", "programar", "implementar", "compilar", "testar", "teste")) {
+        if (normalizado.containsAny("códig", "codig", "program", "implement", "compil", "test")) {
             passos += PassoPlano(
                 "executar", "sandbox.code", "execução e testes concluídos",
                 dependeDe = passos.map { it.id }, papel = PapelPipeline.EXECUCAO_CODIGO,

@@ -11,6 +11,7 @@ import com.brain.capability.CapabilityProvider
 import com.brain.capability.CapabilityRegistry
 import com.brain.dispatch.Dispatcher
 import com.brain.gateway.ActionGateway
+import com.brain.gateway.ActionExecutor
 import com.brain.gateway.InMemoryActionAuditLog
 import com.brain.job.DurableJobRunner
 import com.brain.job.JobStore
@@ -52,6 +53,7 @@ class BrainSandboxController(
     private val actor: String = "android-app",
     promptLibrary: PromptLibrary? = null,
     capabilityProviders: List<CapabilityProvider> = emptyList(),
+    capabilityExecutors: Map<String, ActionExecutor> = emptyMap(),
     private val events: EventStore = InMemoryEventStore()
 ) {
     private val dynamicCapabilityProviders = capabilityProviders
@@ -61,7 +63,8 @@ class BrainSandboxController(
         listOf(
             capability("sandbox.health", setOf("sandbox.health")),
             capability("sandbox.info", setOf("network.research")),
-            capability("sandbox.build", setOf("workspace.write")),
+            capability("workspace.generate", setOf("workspace.write")),
+            capability("sandbox.build", emptySet()),
             capability("sandbox.test", setOf("sandbox.code")),
             capability("sandbox.diagnose", setOf("brain.analyze")),
             capability("sandbox.clean", emptySet())
@@ -74,7 +77,7 @@ class BrainSandboxController(
     private val actionGateway = ActionGateway(
         registry = capabilities,
         policy = policy,
-        executor = BrainActionExecutor(sandbox),
+        executor = CompositeActionExecutor(capabilityExecutors, BrainActionExecutor(sandbox)),
         audit = InMemoryActionAuditLog()
     )
     private val dispatcher = Dispatcher(CapabilityDiscovery(capabilities), actionGateway)

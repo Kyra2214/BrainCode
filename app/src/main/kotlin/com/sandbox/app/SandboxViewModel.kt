@@ -505,6 +505,11 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 )
                 val preparedPlatform = SandboxPlatform(prepared, File(dir, "workspace"), File(dir, "components.tsv"), File(dir, "services"))
                 platform = preparedPlatform
+                val codeGenerationExecutor = CodeGenerationExecutor(
+                    gateway = brainApiGateway,
+                    workspace = preparedPlatform.workspace,
+                    activeProjectName = { workspaceProjectName }
+                )
                 brainController = BrainSandboxController(
                     prepared,
                     File(dir, "rootfs"),
@@ -512,6 +517,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     capabilityProviders = listOf(
                         PluginCatalogCapabilityProvider(statusOf = { id -> statusCache[id]?.state })
                     ),
+                    capabilityExecutors = mapOf("workspace.generate" to codeGenerationExecutor),
                     events = FileEventStore(File(dir, "brain/chat-events.jsonl"))
                 )
                 brainIntegration = BrainIntegrationFacade(getApplication(), File(dir, "brain"))
