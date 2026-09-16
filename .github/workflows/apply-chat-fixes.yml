@@ -27,18 +27,22 @@ jobs:
                   raise SystemExit(f"pattern not found in {path}: {old[:120]!r}")
               p.write_text(text.replace(old, new, 1))
 
-          # 1) Chat: send recent conversation context into the objective.
           vm = 'app/src/main/kotlin/com/sandbox/app/SandboxViewModel.kt'
           replace_once(vm,
               '''    /** Regra estrutural: a conversa Android entra no Brain; nenhum executor local é chamado pelo chat. */\n    fun sendChatMessage() {\n        val prompt = chatInput.trim(); if (prompt.isEmpty() || chatRunning) return\n        chatMessages.add(ChatMessage(ChatRole.USER, prompt)); chatInput = ""; chatRunning = true\n        appendThreadEvent(ThreadEvent.User(prompt))\n        viewModelScope.launch {\n            val response = withContext(Dispatchers.IO) {\n                runCatching {\n                    val controller = brainController\n                    if (controller != null && phase == SandboxPhase.Ready) {\n                        val cycle = controller.executeObjective(prompt, "chat-${System.currentTimeMillis()}") { passo ->\n                            viewModelScope.launch(Dispatchers.Main.immediate) { publishStep(passo) }\n                        }\n                        ChatMessage(ChatRole.ASSISTANT, cycle.resposta ?: "Plano concluído: ${cycle.aprovado}")\n                    } else {\n                        ChatMessage(ChatRole.ASSISTANT, brainApiGateway.complete(prompt).text)\n                    }\n                }\n                    .getOrElse { ChatMessage(ChatRole.ERROR, "Brain não conseguiu responder: ${it.message ?: it.javaClass.simpleName}") }\n            }\n            chatMessages.add(response); chatRunning = false\n            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content) else ThreadEvent.System(response.content))\n        }\n    }''',
               '''    /** Monta o objetivo com contexto recente para que o Brain não trate cada mensagem como uma conversa isolada. */\n    private fun buildChatObjective(currentPrompt: String): String {\n        val recent = chatMessages.takeLast(8)\n        if (recent.isEmpty()) return currentPrompt\n        val context = recent.joinToString("\\n") { message ->\n            val role = when (message.role) {\n                ChatRole.USER -> "Usuário"\n                ChatRole.ASSISTANT -> "Assistente"\n                ChatRole.ERROR -> "Erro"\n                ChatRole.STEP -> "Passo"\n            }\n            "$role: ${message.content}"\n        }\n        return "Conversa recente:\\n$context\\n\\nNova solicitação: $currentPrompt"\n    }\n\n    private fun hasApiKeyInCatalog(): Boolean =\n        apiProviders.any { provider -> apiKeyStore.get(provider.id)?.trim()?.isNotEmpty() == true }\n\n    /** Regra estrutural: a conversa Android entra no Brain; nenhum executor local é chamado pelo chat. */\n    fun sendChatMessage() {\n        val prompt = chatInput.trim(); if (prompt.isEmpty() || chatRunning) return\n        chatMessages.add(ChatMessage(ChatRole.USER, prompt)); chatInput = ""; chatRunning = true\n        appendThreadEvent(ThreadEvent.User(prompt))\n        val objective = buildChatObjective(prompt)\n        viewModelScope.launch {\n            val response = withContext(Dispatchers.IO) {\n                runCatching {\n                    val controller = brainController\n                    if (controller != null && phase == SandboxPhase.Ready) {\n                        val cycle = controller.executeObjective(objective, "chat-${System.currentTimeMillis()}") { passo ->\n                            viewModelScope.launch(Dispatchers.Main.immediate) { publishStep(passo) }\n                        }\n                        ChatMessage(ChatRole.ASSISTANT, cycle.resposta ?: "Plano concluído: ${cycle.aprovado}")\n                    } else {\n                        ChatMessage(ChatRole.ASSISTANT, brainApiGateway.complete(objective).text)\n                    }\n                }\n                    .getOrElse { ChatMessage(ChatRole.ERROR, "Brain não conseguiu responder: ${it.message ?: it.javaClass.simpleName}") }\n            }\n            chatMessages.add(response); chatRunning = false\n            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content) else ThreadEvent.System(response.content))\n        }\n    }''')
-
-          # Inject the API availability guard into the real controller path.
           replace_once(vm,
               '''                brainController = BrainSandboxController(\n                    prepared,\n                    File(dir, "rootfs"),''',
               '''                brainController = BrainSandboxController(\n                    prepared,\n                    File(dir, "rootfs"),\n                    apiKeyAvailable = { apiProviders.any { provider -> apiKeyStore.get(provider.id)?.trim()?.isNotEmpty() == true } },''')
 
-          # 2) Thread: one outer SelectionContainer handles ordinary chat/report/diff text.
+          controller = 'android-module/src/main/kotlin/com/sandbox/agent/BrainSandboxController.kt'
+          replace_once(controller,
+              '''    capabilityExecutors: Map<String, ActionExecutor> = emptyMap(),\n    private val events: EventStore = InMemoryEventStore()\n) {''',
+              '''    capabilityExecutors: Map<String, ActionExecutor> = emptyMap(),\n    private val apiKeyAvailable: () -> Boolean = { true },\n    private val events: EventStore = InMemoryEventStore()\n) {''')
+          replace_once(controller,
+              '''        val classification = intentClassifier.classify(objective)\n        val planner = com.brain.planner.KeywordPlanner()''',
+              '''        val classification = intentClassifier.classify(objective)\n        if (classification.categories == setOf(com.brain.capability.CapabilityCategory.INTERNAL) && !apiKeyAvailable()) {\n            throw IllegalStateException("Nenhuma chave de API válida está configurada no catálogo. Configure uma chave em Configurações antes de usar o diagnóstico por fallback.")\n        }\n        val planner = com.brain.planner.KeywordPlanner()''')
+
           thread = 'app/src/main/kotlin/com/sandbox/app/ThreadScreen.kt'
           replace_once(thread,
               '''            LazyColumn(\n                state = listState,\n                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp),\n                verticalArrangement = Arrangement.spacedBy(8.dp)\n            ) {\n                items(events) { event -> ThreadEventCard(event, viewModel) }\n            }''',
@@ -53,9 +57,7 @@ jobs:
               '''                SelectionContainer { Text(event.body, fontFamily = if (event.title == "Git status") FontFamily.Monospace else FontFamily.Default, style = MaterialTheme.typography.bodySmall) }''',
               '''                Text(event.body, fontFamily = if (event.title == "Git status") FontFamily.Monospace else FontFamily.Default, style = MaterialTheme.typography.bodySmall)''')
 
-          # 3) Temporary patch workflow removes itself after creating the real source commit.
-          wf = Path('.github/workflows/apply-chat-fixes.yml')
-          wf.unlink()
+          Path('.github/workflows/apply-chat-fixes.yml').unlink()
 
       - name: Commit and push source fixes
         run: |
