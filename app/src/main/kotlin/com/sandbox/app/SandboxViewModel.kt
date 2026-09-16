@@ -467,7 +467,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     ),
                     events = FileEventStore(File(dir, "brain/chat-events.jsonl"))
                 )
-                brainIntegration = BrainIntegrationFacade(File(dir, "brain"))
+                brainIntegration = BrainIntegrationFacade(getApplication(), File(dir, "brain"))
                 pluginListVersion++; refreshStatusCache(); refreshPluginAudit(); phase = SandboxPhase.Ready; refreshToolchains()
             } catch (e: Exception) { runtime = null; phase = SandboxPhase.Blocked(e.message ?: "Falha ao preparar o runtime") }
         }

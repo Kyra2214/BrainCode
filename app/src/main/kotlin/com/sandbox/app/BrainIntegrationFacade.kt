@@ -1,5 +1,6 @@
 package com.sandbox.app
 
+import android.content.Context
 import com.brain.discovery.ExplorerCandidate
 import com.brain.discovery.ExplorerIntelligencePipeline
 import com.brain.discovery.ExplorerItemType
@@ -39,7 +40,7 @@ import java.time.Instant
  * Importante: o workflow exposto aqui é deliberadamente LOCAL. Execução
  * autorizada no Sandbox usa BrainSandboxController/BrainSandboxExecutionBridge.
  */
-class BrainIntegrationFacade(stateDir: File) {
+class BrainIntegrationFacade(private val context: Context, stateDir: File) {
     private val skills = SkillRegistry()
     private val workflows = WorkflowEngine(File(stateDir, "workflows.json"))
     private val memory: ExperienceMemory = FileExperienceMemory(File(stateDir, "memory.jsonl"))
@@ -63,6 +64,11 @@ class BrainIntegrationFacade(stateDir: File) {
                 license = "Apache-2.0"
             )
         )
+        runCatching {
+            SkillsCatalogoLoader.load(context).forEach { entry ->
+                runCatching { skills.register(entry.paraManifest()) }
+            }
+        }
     }
 
     fun enabledSkills(): List<SkillRecord> = skills.listEnabled()
