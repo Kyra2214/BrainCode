@@ -70,7 +70,8 @@ data class ThreadSession(
     val createdAt: Long,
     val updatedAt: Long,
     val status: SessionStatus,
-    val events: List<ThreadEvent>
+    val events: List<ThreadEvent>,
+    val conversationContext: ConversationContext = ConversationContext()
 )
 
 data class SessionSummary(
@@ -138,6 +139,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
 
     var phase by mutableStateOf<SandboxPhase>(SandboxPhase.NotReady); private set
     val chatMessages = mutableStateListOf<ChatMessage>()
+    private val conversationContextEngine = ConversationContextEngine()
     var chatInput by mutableStateOf("")
     var chatRunning by mutableStateOf(false); private set
 
@@ -202,7 +204,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
 
     fun clearActiveSession() {
         val id = activeSessionId ?: return
-        sessions = sessions.map { session -> if (session.id != id) session else session.copy(title = "Nova tarefa", events = emptyList(), updatedAt = System.currentTimeMillis()) }
+        sessions = sessions.map { session -> if (session.id != id) session else session.copy(title = "Nova tarefa", events = emptyList(), conversationContext = ConversationContext(), updatedAt = System.currentTimeMillis()) }
         chatMessages.clear()
         diagnosticsReport = null
         lastBrainCycle = null
@@ -241,6 +243,18 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 else -> Unit
             }
         }
+    }
+
+    private fun resolveConversation(prompt: String): ResolvedObjective {
+        val resolved = conversationContextEngine.resolve(chatMessages.toList(), prompt)
+        val id = activeSessionId
+        if (id != null) {
+            sessions = sessions.map { session ->
+                if (session.id == id) session.copy(conversationContext = resolved.context, updatedAt = System.currentTimeMillis()) else session
+            }
+            persistSessions()
+        }
+        return resolved
     }
 
     private fun eventPreview(event: ThreadEvent?): String = when (event) {
@@ -314,7 +328,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         sessions.forEach { session ->
             val events = JSONArray()
             session.events.forEach { event -> events.put(eventToJson(event)) }
-            array.put(JSONObject().put("id", session.id).put("title", session.title).put("workspace", session.workspaceProjectName ?: JSONObject.NULL).put("createdAt", session.createdAt).put("updatedAt", session.updatedAt).put("status", session.status.name).put("events", events))
+            array.put(JSONObject().put("id", session.id).put("title", session.title).put("workspace", session.workspaceProjectName ?: JSONObject.NULL).put("createdAt", session.createdAt).put("updatedAt", session.updatedAt).put("status", session.status.name).put("events", events).put("conversationContext", contextToJson(session.conversationContext)))
         }
         sessionsFile.writeText(JSONObject().put("sessions", array).toString())
     }
@@ -334,9 +348,24 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         (0 until array.length()).map { index ->
             val item = array.getJSONObject(index)
             val eventsJson = item.optJSONArray("events") ?: JSONArray()
-            ThreadSession(item.getString("id"), item.getString("title"), item.optString("workspace").takeIf { it.isNotBlank() && it != "null" }, item.getLong("createdAt"), item.getLong("updatedAt"), runCatching { SessionStatus.valueOf(item.getString("status")) }.getOrDefault(SessionStatus.IDLE), (0 until eventsJson.length()).mapNotNull { eventFromJson(eventsJson.getJSONObject(it)) })
+            ThreadSession(item.getString("id"), item.getString("title"), item.optString("workspace").takeIf { it.isNotBlank() && it != "null" }, item.getLong("createdAt"), item.getLong("updatedAt"), runCatching { SessionStatus.valueOf(item.getString("status")) }.getOrDefault(SessionStatus.IDLE), (0 until eventsJson.length()).mapNotNull { eventFromJson(eventsJson.getJSONObject(it)) }, contextFromJson(item.optJSONObject("conversationContext")))
         }
     }.getOrDefault(emptyList())
+
+    private fun contextToJson(context: ConversationContext) = JSONObject()
+        .put("idea", context.idea ?: JSONObject.NULL)
+        .put("requirements", JSONArray(context.requirements))
+        .put("decisions", JSONArray(context.decisions))
+        .put("discarded", JSONArray(context.discarded))
+        .put("pending", JSONArray(context.pending))
+        .put("artifacts", JSONArray(context.artifacts))
+        .put("references", JSONArray(context.references))
+
+    private fun contextFromJson(json: JSONObject?): ConversationContext {
+        if (json == null) return ConversationContext()
+        fun list(name: String) = (0 until (json.optJSONArray(name)?.length() ?: 0)).map { json.optJSONArray(name)!!.getString(it) }
+        return ConversationContext(json.optString("idea").takeIf { it.isNotBlank() && it != "null" }, list("requirements"), list("decisions"), list("discarded"), list("pending"), list("artifacts"), list("references"))
+    }
 
     private fun eventFromJson(item: JSONObject): ThreadEvent? = when (item.optString("type")) {
         "user" -> ThreadEvent.User(item.optString("text"))
@@ -554,22 +583,6 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    /** Monta o objetivo com as últimas mensagens do chat antes de enviá-lo ao Brain/Gateway. */
-    private fun buildChatObjective(currentPrompt: String): String {
-        val recent = chatMessages.takeLast(8)
-        if (recent.isEmpty()) return currentPrompt
-        val context = recent.joinToString("\n") { message ->
-            val role = when (message.role) {
-                ChatRole.USER -> "Usuário"
-                ChatRole.ASSISTANT -> "Assistente"
-                ChatRole.ERROR -> "Erro"
-                ChatRole.STEP -> "Passo"
-            }
-            "$role: ${message.content}"
-        }
-        return "Conversa recente:\n$context\n\nNova solicitação: $currentPrompt"
-    }
-
     private fun hasApiKeyInCatalog(): Boolean =
         apiProviders.any { provider -> apiKeyStore.get(provider.id)?.trim()?.isNotEmpty() == true }
 
@@ -578,18 +591,18 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         val prompt = chatInput.trim(); if (prompt.isEmpty() || chatRunning) return
         chatMessages.add(ChatMessage(ChatRole.USER, prompt)); chatInput = ""; chatRunning = true
         appendThreadEvent(ThreadEvent.User(prompt))
-        val objective = buildChatObjective(prompt)
         viewModelScope.launch {
             val response = withContext(Dispatchers.IO) {
                 runCatching {
                     val controller = brainController
                     if (controller != null && phase == SandboxPhase.Ready) {
-                        val cycle = controller.executeObjective(objective, "chat-${System.currentTimeMillis()}") { passo ->
+                        val resolved = resolveConversation(prompt)
+                        val cycle = controller.executeObjective(resolved.toBrainObjective(), "chat-${System.currentTimeMillis()}") { passo ->
                             viewModelScope.launch(Dispatchers.Main.immediate) { publishStep(passo) }
                         }
                         ChatMessage(ChatRole.ASSISTANT, cycle.resposta ?: "Plano concluído: ${cycle.aprovado}")
                     } else {
-                        ChatMessage(ChatRole.ASSISTANT, brainApiGateway.complete(objective).text)
+                        ChatMessage(ChatRole.ASSISTANT, brainApiGateway.complete(prompt).text)
                     }
                 }
                     .getOrElse { ChatMessage(ChatRole.ERROR, "Brain não conseguiu responder: ${it.message ?: it.javaClass.simpleName}") }
@@ -637,13 +650,15 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             append("\n\nObjetivo: "); append(entrada.objetivo)
             if (instrucaoLivre.isNotBlank()) { append("\n\nInstrução do usuário: "); append(instrucaoLivre) }
         }
+        chatMessages.add(ChatMessage(ChatRole.USER, prompt))
+        val resolved = resolveConversation(prompt)
         chatRunning = true
         viewModelScope.launch {
             val response = withContext(Dispatchers.IO) {
                 runCatching {
                     val controller = brainController
                     if (controller != null && phase == SandboxPhase.Ready) {
-                        val cycle = controller.executeObjective(prompt, "cmd-${entrada.slug}-${System.currentTimeMillis()}") { passo ->
+                        val cycle = controller.executeObjective(resolved.toBrainObjective(), "cmd-${entrada.slug}-${System.currentTimeMillis()}") { passo ->
                             viewModelScope.launch(Dispatchers.Main.immediate) { publishStep(passo) }
                         }
                         ChatMessage(ChatRole.ASSISTANT, cycle.resposta ?: "Plano concluído: ${cycle.aprovado}")
