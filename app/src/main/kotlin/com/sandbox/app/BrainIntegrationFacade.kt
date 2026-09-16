@@ -153,8 +153,11 @@ class BrainIntegrationFacade(private val context: Context, stateDir: File) {
 
     fun discoverBuiltInCandidate(): com.brain.discovery.ExplorerPipelineResult = discovery.run(
         weekEpochMs = System.currentTimeMillis(),
-        sources = listOf(ExplorerSource("builtin", "Catálogo local", ExplorerRegion.GLOBAL, priority = 1, official = true)),
-        candidates = listOf(
+        sources = listOf(
+            ExplorerSource("builtin", "Catálogo local", ExplorerRegion.GLOBAL, priority = 1, official = true),
+            ExplorerSource("china-seed", "Explorer China Seed", ExplorerRegion.CHINA, priority = 1, official = true)
+        ),
+        candidates = runCatching { ExplorerSeedLoader.load(context).map { it.paraCandidate() } }.getOrElse { emptyList() } + listOf(
             ExplorerCandidate(
                 id = "braincode",
                 name = "BrainCode",
