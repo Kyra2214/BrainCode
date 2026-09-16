@@ -4,17 +4,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Implementação mínima do PromptLibrary (Fase C, aprende de verdade na
- * Fase D). Carrega o seed real (ver PromptLibraryLoader) e resolve
- * buscarPorContexto() por sobreposição de tokens entre o contexto
- * pedido e o contextoDeUso salvo — mesma ideia de scoring por tags do
- * PromptLibraryService.requireTemplate() do IaBrain (brain/PromptGenerationFlow.kt),
- * só que devolvendo uma lista ranqueada em vez de exigir exatamente um
- * (o PromptGenerator decide o corte de taxaSucesso mínima, não a library).
- *
- * Ainda não persiste entre reinícios — isso é trabalho da Fase D
- * (memory): o ExperienceMemory registra a Experiencia completa, e essa
- * mesma taxaSucesso/custoMedio/tempoMedioMs aqui deve passar a vir de
- * lá, não só do contador em memória local.
+ * Fase D). Carrega o seed real e resolve buscarPorContexto() por sobreposição
+ * de tokens entre o contexto pedido e o contextoDeUso salvo.
  */
 class InMemoryPromptLibrary(
     templatesIniciais: List<PromptTemplate>
@@ -32,9 +23,8 @@ class InMemoryPromptLibrary(
     }
     private val contadores = ConcurrentHashMap<String, Contador>()
 
-    override suspend fun buscarPorContexto(contextoDeUso: String): List<PromptTemplate> {
-        return buscarPorContextoSnapshot(contextoDeUso)
-    }
+    override suspend fun buscarPorContexto(contextoDeUso: String): List<PromptTemplate> =
+        buscarPorContextoSnapshot(contextoDeUso)
 
     override fun buscarPorContextoSnapshot(contextoDeUso: String): List<PromptTemplate> {
         val tokensPedido = tokenizar(contextoDeUso)
@@ -49,6 +39,9 @@ class InMemoryPromptLibrary(
             )
             .map { it.first }
     }
+
+    /** Snapshot completo para persistência e diagnóstico, sem depender de uma consulta textual. */
+    fun snapshotTemplates(): List<PromptTemplate> = templates.values.toList()
 
     override suspend fun salvarNovaVersao(template: PromptTemplate) {
         templates[template.id] = template
