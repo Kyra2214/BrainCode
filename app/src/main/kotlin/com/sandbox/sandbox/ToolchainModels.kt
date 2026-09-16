@@ -98,6 +98,11 @@ class ToolchainDetector(private val executor: SandboxCommandExecutor) {
             .toList()
     }
 
+    fun installedBytes(profile: ToolchainProfile): Long = profile.packages.sumOf { packageName ->
+        val result = executor.execute(listOf("dpkg-query", "-W", "-f=\${Installed-Size}", packageName), timeoutSeconds = 30)
+        result.stdout.trim().toLongOrNull()?.times(1024L) ?: 0L
+    }
+
     fun planInstall(profile: ToolchainProfile): ToolchainInstallPlan {
         return ToolchainInstallPlan(profile, listOf("apt-get", "-o", "Dpkg::Use-Pty=0", "install", "-y", "--no-install-recommends") + profile.packages)
     }
@@ -112,6 +117,8 @@ data class ToolchainStatus(
     val state: ToolchainState,
     val versionOutput: String = "",
     val error: String? = null,
+    /** Espaço alocado pelos pacotes desta toolchain; não é espaço livre do disco. */
+    val installedBytes: Long = 0L,
     val updatedAt: Long = System.currentTimeMillis()
 )
 
@@ -138,7 +145,8 @@ class ToolchainManager(
                 profileId = id,
                 state = if (detected.installed) ToolchainState.INSTALLED else ToolchainState.NOT_INSTALLED,
                 versionOutput = detected.versionOutput,
-                error = detected.diagnostic
+                error = detected.diagnostic,
+                installedBytes = if (detected.installed) detector.installedBytes(profile) else 0L
             )
         }
     }
@@ -154,7 +162,8 @@ class ToolchainManager(
                 profileId = id,
                 state = if (detected.installed) ToolchainState.INSTALLED else ToolchainState.NOT_INSTALLED,
                 versionOutput = detected.versionOutput,
-                error = detected.diagnostic
+                error = detected.diagnostic,
+                installedBytes = if (detected.installed) detector.installedBytes(profile) else 0L
             )
         )
     }
@@ -172,7 +181,7 @@ class ToolchainManager(
             if (!execution.succeeded) error(execution.stderr.ifBlank { "instalação falhou" })
             val after = detector.detect(profile)
             check(after.installed) { "validação pós-instalação falhou" }
-            val installed = persist(ToolchainStatus(id, ToolchainState.INSTALLED, after.versionOutput))
+            val installed = persist(ToolchainStatus(id, ToolchainState.INSTALLED, after.versionOutput, installedBytes = detector.installedBytes(profile)))
             transactionStore.clearSnapshot(id)
             installed
         } catch (error: Exception) {
@@ -228,14 +237,14 @@ class ToolchainManager(
         val file = stateFile(profile)
         if (!file.isFile) return null
         val parts = file.readLines()
-        return runCatching { ToolchainStatus(profile.id, ToolchainState.valueOf(parts.firstOrNull().orEmpty()), parts.getOrNull(1).orEmpty(), parts.getOrNull(2).orEmpty().ifBlank { null }, parts.getOrNull(3)?.toLong() ?: file.lastModified()) }.getOrNull()
+        return runCatching { ToolchainStatus(profile.id, ToolchainState.valueOf(parts.firstOrNull().orEmpty()), parts.getOrNull(1).orEmpty(), parts.getOrNull(2).orEmpty().ifBlank { null }, parts.getOrNull(4)?.toLongOrNull() ?: 0L, parts.getOrNull(3)?.toLong() ?: file.lastModified()) }.getOrNull()
     }
 
     private fun persist(status: ToolchainStatus): ToolchainStatus {
         stateDir.mkdirs()
         val file = stateFile(profile(status.profileId))
         val temp = File(file.parentFile, file.name + ".tmp")
-        temp.writeText(listOf(status.state.name, status.versionOutput.take(4096), status.error.orEmpty().take(4096), status.updatedAt.toString()).joinToString("\n"))
+        temp.writeText(listOf(status.state.name, status.versionOutput.take(4096), status.error.orEmpty().take(4096), status.updatedAt.toString(), status.installedBytes.toString()).joinToString("\n"))
         check(temp.renameTo(file)) { "Não foi possível confirmar estado da toolchain" }
         transactionStore.cache(status)
         return status

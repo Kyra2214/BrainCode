@@ -43,14 +43,14 @@ class ToolchainTransactionStore(private val directory: File) {
     fun clearSnapshot(profileId: String) { snapshotFile(profileId).delete() }
 
     fun cache(status: ToolchainStatus) {
-        write(cacheFile(status.profileId), listOf(status.state.name, status.versionOutput, status.error.orEmpty(), status.updatedAt.toString()).joinToString("\n"))
+        write(cacheFile(status.profileId), listOf(status.state.name, status.versionOutput, status.error.orEmpty(), status.updatedAt.toString(), status.installedBytes.toString()).joinToString("\n"))
     }
 
     fun cached(profileId: String): ToolchainStatus? {
         val values = read(cacheFile(profileId))?.lines() ?: return null
         if (values.size < 4) return null
         return runCatching {
-            ToolchainStatus(profileId, ToolchainState.valueOf(values[0]), values[1], values[2].ifBlank { null }, values[3].toLong())
+            ToolchainStatus(profileId, ToolchainState.valueOf(values[0]), values[1], values[2].ifBlank { null }, values.getOrNull(4)?.toLongOrNull() ?: 0L, values[3].toLong())
         }.getOrNull()
     }
 

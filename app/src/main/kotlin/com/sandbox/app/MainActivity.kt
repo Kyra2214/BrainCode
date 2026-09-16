@@ -53,6 +53,13 @@ import com.sandbox.sandbox.BuiltInToolchains
 import com.sandbox.sandbox.ComponentKind
 import com.sandbox.sandbox.SelfCheckStatus
 
+private fun formatBytes(bytes: Long): String = when {
+    bytes >= 1024L * 1024L * 1024L -> "%.2f GiB".format(bytes / (1024.0 * 1024.0 * 1024.0))
+    bytes >= 1024L * 1024L -> "%.1f MiB".format(bytes / (1024.0 * 1024.0))
+    bytes >= 1024L -> "%.1f KiB".format(bytes / 1024.0)
+    else -> "$bytes B"
+}
+
 open class MainActivity : ComponentActivity() {
     private val viewModel: SandboxViewModel by viewModels()
 
@@ -187,6 +194,9 @@ private fun OperationsScreen(viewModel: SandboxViewModel) {
                         }
                     }
                     status?.versionOutput?.takeIf { it.isNotBlank() }?.let { Text(it.trim(), style = MaterialTheme.typography.bodySmall) }
+                    status?.installedBytes?.takeIf { it > 0L }?.let { bytes ->
+                        Text("Espaço de instalação alocado: ${formatBytes(bytes)}", style = MaterialTheme.typography.bodySmall)
+                    }
                     status?.error?.takeIf { it.isNotBlank() }?.let { Text("Erro: ${it.trim()}", style = MaterialTheme.typography.bodySmall) }
                 }
             }
