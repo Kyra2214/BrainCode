@@ -136,9 +136,7 @@ private fun ThreadTopBar(viewModel: SandboxViewModel, searchOpen: Boolean, onTog
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onToggleSidebar) {
-                Icon(Icons.Default.Menu, contentDescription = "Tarefas")
-            }
+            IconButton(onClick = onToggleSidebar) { Icon(Icons.Default.Menu, contentDescription = "Tarefas") }
             Column(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
                 Text("BrainCode", style = MaterialTheme.typography.titleLarge, maxLines = 1)
                 Text("Converse. Execute. Comprove.", style = MaterialTheme.typography.bodySmall, maxLines = 1)
@@ -150,15 +148,9 @@ private fun ThreadTopBar(viewModel: SandboxViewModel, searchOpen: Boolean, onTog
                     labelColor = if (viewModel.phase is SandboxPhase.Blocked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             )
-            IconButton(onClick = onSearch) {
-                Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, contentDescription = if (searchOpen) "Fechar busca" else "Buscar")
-            }
-            IconButton(onClick = { viewModel.clearActiveSession() }) {
-                Icon(Icons.Default.Delete, contentDescription = "Limpar chat")
-            }
-            IconButton(onClick = onOpenSettings) {
-                Icon(Icons.Default.Settings, contentDescription = "Configurações")
-            }
+            IconButton(onClick = onSearch) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, contentDescription = if (searchOpen) "Fechar busca" else "Buscar") }
+            IconButton(onClick = { viewModel.clearActiveSession() }) { Icon(Icons.Default.Delete, contentDescription = "Limpar chat") }
+            IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, contentDescription = "Configurações") }
         }
     }
 }
@@ -224,13 +216,27 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
             }
         }
         is ThreadEvent.Terminal -> Card {
+            val terminalText = buildString {
+                append("$ ")
+                append(event.execution?.command?.joinToString(" ") ?: "")
+                append("\nexit=")
+                append(event.execution?.exitCode ?: event.result.exitCode)
+                if (event.result.stdout.isNotEmpty()) {
+                    append("\n\n[stdout]\n")
+                    append(event.result.stdout)
+                }
+                if (event.result.stderr.isNotEmpty()) {
+                    append("\n\n[stderr]\n")
+                    append(event.result.stderr)
+                }
+            }
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Terminal · ${if (event.result.exitCode == 0) "sucesso" else "falha"}", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                    event.execution?.let { IconButton(onClick = { copy("$ ${it.command.joinToString(" ")}\nexit=${it.exitCode}\n${it.stdout}") }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.ContentCopy, contentDescription = "Copiar") } }
+                    IconButton(onClick = { copy(terminalText) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.ContentCopy, contentDescription = "Copiar terminal completo") }
                 }
                 event.execution?.let { Text("${it.durationMs} ms · ${it.terminationReason.name}", style = MaterialTheme.typography.labelSmall) }
-                event.execution?.let { SelectionContainer { Text("$ ${it.command.joinToString(" ")}\nexit=${it.exitCode}\n${it.stdout.take(600)}", fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) } }
+                SelectionContainer { Text(terminalText, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) }
             }
         }
         is ThreadEvent.Approval -> Card {
@@ -246,7 +252,7 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
                     Text(event.title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                     IconButton(onClick = { copy(event.body) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.ContentCopy, contentDescription = "Copiar") }
                 }
-                SelectionContainer { Text(event.body.take(1000), fontFamily = if (event.title == "Git status") FontFamily.Monospace else FontFamily.Default, style = MaterialTheme.typography.bodySmall) }
+                SelectionContainer { Text(event.body, fontFamily = if (event.title == "Git status") FontFamily.Monospace else FontFamily.Default, style = MaterialTheme.typography.bodySmall) }
             }
         }
         is ThreadEvent.Diff -> Card {
@@ -275,9 +281,7 @@ private fun ThreadComposer(viewModel: SandboxViewModel) {
             val matches = viewModel.sugestoesDeComando.filter { it.startsWith(input, ignoreCase = true) && it != input }.take(30)
             if (matches.isNotEmpty()) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(matches) { command ->
-                        AssistChip(onClick = { viewModel.chatInput = command }, label = { Text(command) })
-                    }
+                    items(matches) { command -> AssistChip(onClick = { viewModel.chatInput = command }, label = { Text(command) }) }
                 }
             }
         }
