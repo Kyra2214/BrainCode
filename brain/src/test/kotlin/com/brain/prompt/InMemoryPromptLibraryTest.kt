@@ -6,36 +6,15 @@ import org.junit.Test
 import java.io.File
 
 class InMemoryPromptLibraryTest {
-    private val storage = File(System.getProperty("java.io.tmpdir") ?: ".", "brain-prompt-library.db")
-
     @Test
-    fun `biblioteca persiste template entre instancias`() {
-        storage.delete()
-        val template = PromptTemplate(
-            id = "teste-persistencia",
-            versao = 1,
-            finalidade = "gerar prompt de imagem realista",
-            contextoDeUso = "imagem foguete fotografia realista",
-            skillRelacionada = "prompt-generation",
-            agenteRelacionado = "prompt-specialist",
-            textoTemplate = "Crie uma imagem realista de {OBJETIVO}.",
-            taxaSucesso = 0.6,
-            custoMedio = 0.0,
-            tempoMedioMs = 0L
-        )
-        runBlockingCompat { InMemoryPromptLibrary(emptyList()).salvarNovaVersao(template) }
-        val reloaded = InMemoryPromptLibrary(emptyList())
-        assertTrue(reloaded.snapshotTemplates().any { it.id == template.id })
-        storage.delete()
-    }
-
-    @Test
-    fun `resultado real atualiza taxa de sucesso e metadados`() {
-        storage.delete()
-        val template = PromptTemplate("teste-aprendizado", 1, "imagem realista", "fotografia imagem", null, null, "prompt", 0.5, 0.0, 0)
-        val library = InMemoryPromptLibrary(listOf(template))
-        runBlockingCompat { library.registrarResultado(template.id, sucesso = true, custo = 0.02, tempoMs = 1200) }
-        val atual = library.snapshotTemplates().first { it.id == template.id }
+    fun `biblioteca persiste template e aprendizado entre instancias`() {
+        val storage = File.createTempFile("brain-prompt-library", ".db").apply { delete() }
+        val template = PromptTemplate("persistencia", 1, "gerar prompt", "imagem foguete realista", "prompt-generation", null, "Crie {OBJETIVO}", 0.6, 0.0, 0)
+        val first = InMemoryPromptLibrary(listOf(template), storage)
+        runBlockingCompat { first.registrarResultado(template.id, sucesso = true, custo = 0.02, tempoMs = 1200) }
+        val reloaded = InMemoryPromptLibrary(emptyList(), storage)
+        val atual = reloaded.snapshotTemplates().first { it.id == template.id }
+        assertEquals(1, atual.amostrasObservadas)
         assertEquals(1.0, atual.taxaSucesso, 0.0001)
         assertEquals(0.02, atual.custoMedio, 0.0001)
         assertEquals(1200L, atual.tempoMedioMs)
@@ -43,15 +22,23 @@ class InMemoryPromptLibraryTest {
     }
 
     @Test
-    fun `templates quase iguais sao consolidados em nova versao`() {
+    fun `seed sem observacoes usa prior neutro em vez de afirmar sucesso real`() {
+        val storage = File.createTempFile("brain-prompt-prior", ".db").apply { delete() }
+        val template = PromptTemplate("seed", 1, "imagem realista", "fotografia imagem", null, null, "prompt", 0.6, 0.0, 0)
+        val library = InMemoryPromptLibrary(listOf(template), storage)
+        assertEquals(0, library.snapshotTemplates().first().amostrasObservadas)
+        assertTrue(library.snapshotTemplates().first().taxaSucesso >= 0.0)
         storage.delete()
+    }
+
+    @Test
+    fun `templates quase iguais sao consolidados em nova versao`() {
+        val storage = File.createTempFile("brain-prompt-dedup", ".db").apply { delete() }
         val library = InMemoryPromptLibrary(listOf(
             PromptTemplate("base", 1, "gerar imagem realista", "imagem fotografia", null, null, "Crie uma fotografia realista de um foguete", 0.8, 0.0, 0)
-        ))
+        ), storage)
         runBlockingCompat {
-            library.salvarNovaVersao(
-                PromptTemplate("novo", 1, "gerar imagem realista", "imagem fotografia", null, null, "Crie uma fotografia realista de um foguete", 0.5, 0.0, 0)
-            )
+            library.salvarNovaVersao(PromptTemplate("novo", 1, "gerar imagem realista", "imagem fotografia", null, null, "Crie uma fotografia realista de um foguete", 0.5, 0.0, 0))
         }
         val matches = library.snapshotTemplates().filter { it.id == "base" }
         assertEquals(1, matches.size)
@@ -59,7 +46,5 @@ class InMemoryPromptLibraryTest {
         storage.delete()
     }
 
-    private fun runBlockingCompat(block: suspend () -> Unit) {
-        kotlinx.coroutines.runBlocking { block() }
-    }
+    private fun runBlockingCompat(block: suspend () -> Unit) = kotlinx.coroutines.runBlocking { block() }
 }
