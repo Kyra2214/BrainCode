@@ -55,8 +55,7 @@ class PersistentPromptLibrary(
             val merged = LinkedHashMap<String, PromptTemplate>()
             seed.forEach { merged[it.id] = it }
             for (i in 0 until saved.length()) {
-                val obj = saved.getJSONObject(i)
-                val template = fromJson(obj)
+                val template = fromJson(saved.getJSONObject(i))
                 val atual = merged[template.id]
                 if (atual == null || template.versao >= atual.versao) merged[template.id] = template
             }
@@ -68,9 +67,8 @@ class PersistentPromptLibrary(
 
     private fun persist() {
         file.parentFile?.mkdirs()
-        val templates = delegate.buscarPorContextoSnapshot("biblioteca prompt projeto imagem código teste arquitetura")
         val array = JSONArray()
-        templates.forEach { array.put(toJson(it)) }
+        delegate.snapshotTemplates().forEach { array.put(toJson(it)) }
         file.writeText(array.toString())
     }
 
@@ -78,9 +76,7 @@ class PersistentPromptLibrary(
         val left = tokenize("${a.finalidade} ${a.contextoDeUso} ${a.textoTemplate}")
         val right = tokenize("${b.finalidade} ${b.contextoDeUso} ${b.textoTemplate}")
         if (left.isEmpty() || right.isEmpty()) return 0.0
-        val inter = left.intersect(right).size.toDouble()
-        val union = left.union(right).size.toDouble()
-        return inter / union
+        return left.intersect(right).size.toDouble() / left.union(right).size.toDouble()
     }
 
     private fun tokenize(value: String): Set<String> = value.lowercase()
