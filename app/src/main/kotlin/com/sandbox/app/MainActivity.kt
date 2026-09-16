@@ -160,12 +160,52 @@ private fun StatusDetails(viewModel: SandboxViewModel) {
             else -> {}
         }
         viewModel.lastBrainCycle?.let { cycle ->
-            val result = cycle.passos.singleOrNull()
-            Text(
-                if (cycle.aprovado) "Brain → Policy → Sandbox: aprovado" else "Brain → Policy → Sandbox: ${result?.motivo ?: "reprovado"}",
-                color = if (cycle.aprovado) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Resultado completo do Brain/Agente", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                    TextButton(onClick = {
+                        val text = buildString {
+                            appendLine("objetivo=${cycle.objetivo}")
+                            appendLine("runId=${cycle.runId}")
+                            appendLine("aprovado=${cycle.aprovado}")
+                            cycle.passos.forEachIndexed { index, passo ->
+                                appendLine("\n--- passo ${index + 1} ---")
+                                appendLine("passoId=${passo.passoId}")
+                                appendLine("status=${passo.status}")
+                                appendLine("decisaoPolicy=${passo.decisaoPolicy}")
+                                appendLine("decisaoRouter=${passo.decisaoRouter}")
+                                appendLine("execucao=${passo.execucao}")
+                                appendLine("evidencias=${passo.evidencias}")
+                                appendLine("motivo=${passo.motivo}")
+                                appendLine("approvalId=${passo.approvalId}")
+                            }
+                        }
+                        clipboard.setText(AnnotatedString(text)); Toast.makeText(context, "Resultado completo copiado", Toast.LENGTH_SHORT).show()
+                    }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)) { Text("Copiar tudo", style = MaterialTheme.typography.labelSmall) }
+                }
+                SelectionContainer {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("objetivo=${cycle.objetivo}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                        Text("runId=${cycle.runId}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                        Text("aprovado=${cycle.aprovado}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                        cycle.passos.forEachIndexed { index, passo ->
+                            Card(modifier = Modifier.fillMaxWidth()) {
+                                Column(modifier = Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text("--- passo ${index + 1} ---", style = MaterialTheme.typography.labelMedium)
+                                    Text("passoId=${passo.passoId}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                                    Text("status=${passo.status}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                                    Text("decisaoPolicy=${passo.decisaoPolicy}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                                    Text("decisaoRouter=${passo.decisaoRouter}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                                    Text("execucao=${passo.execucao}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                                    Text("evidencias=${passo.evidencias}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                                    Text("motivo=${passo.motivo}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                                    Text("approvalId=${passo.approvalId}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         viewModel.selfCheckReport?.let { report ->
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
