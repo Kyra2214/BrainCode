@@ -2,7 +2,7 @@
 
 BrainCode é um runtime local-first para Android/JVM em que o **Brain decide**, capacidades são descobertas dinamicamente, a **Policy autoriza**, o **Gateway executa**, o **Sandbox protege**, evidências são registradas e o **Critic valida**.
 
-> **Estado do HEAD documentado:** `26ab43afede8c05c6bcb4e981a0e98f70c42c8a6`.
+> **Estado do HEAD documentado:** `8188d927a4d27e467174e9e8eb942263dcf3c507`.
 
 ## Visão curta
 
@@ -115,6 +115,12 @@ O Brain aprende também **onde procurar** quando a proveniência permitir: GitHu
 
 O Sandbox é uma fronteira de execução, não um simples executor de strings. Proot não deve ser descrito como isolamento OS-level completo. Hardening, policy e testes reduzem risco, mas isolamento de filesystem/rede/processos/recursos em nível de kernel continua sendo uma categoria separada.
 
+## Operações da interface
+
+A UI operacional oferece `/git status`, `/git diff`, `/git commit <mensagem>` e `/git push`, sempre limitados ao workspace selecionado. O comando `/deliver` publica o recibo local e também gera um ZIP local dos artefatos, com tamanho e hash SHA-256 exibidos na thread. Os detalhes estão em [`docs/OPERACOES_UI_2026-09-16.md`](docs/OPERACOES_UI_2026-09-16.md).
+
+O status das toolchains mostra o espaço de instalação alocado por ferramenta — Android SDK/NDK, Java, Python, Node.js, C/C++, Rust e Go — separado do espaço livre geral do disco. A especificação está em [`docs/TOOLCHAINS.md`](docs/TOOLCHAINS.md).
+
 ## O que não existe mais como arquitetura
 
 - download/engine de LLM local como parte do Chat;
@@ -127,7 +133,7 @@ O Sandbox é uma fronteira de execução, não um simples executor de strings. P
 
 ## Validação atual
 
-O CI `#101` no commit `26ab43afede8c05c6bcb4e981a0e98f70c42c8a6` passou com:
+O CI final no commit `8188d927a4d27e467174e9e8eb942263dcf3c507` passou com:
 
 - JVM/unit tests;
 - assemble do APK debug;
@@ -135,7 +141,7 @@ O CI `#101` no commit `26ab43afede8c05c6bcb4e981a0e98f70c42c8a6` passou com:
 - upload do APK;
 - upload dos relatórios.
 
-Artefato APK: `BrainCode-debug-apk-26ab43afede8c05c6bcb4e981a0e98f70c42c8a6`.
+Artefato APK: `BrainCode-debug-apk-8188d927a4d27e467174e9e8eb942263dcf3c507`.
 
 ## Documentação canônica
 
