@@ -113,6 +113,9 @@ private fun ToolchainSettings(viewModel: SandboxViewModel) {
                         },
                         style = MaterialTheme.typography.bodySmall
                     )
+                    status?.error?.takeIf { it.isNotBlank() }?.let { error ->
+                        Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
                 }
                 Button(onClick = { viewModel.installToolchain(profile.id) }, enabled = viewModel.phase == SandboxPhase.Ready) { Text(status?.state?.name ?: "Instalar") }
             }

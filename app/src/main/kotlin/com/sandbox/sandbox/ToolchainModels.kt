@@ -38,7 +38,7 @@ data class ToolchainInstallPlan(
     val timeoutSeconds: Long = 900
 ) {
     init {
-        require(command.size >= 6 && command[0] == "apt-get")
+        require(command.size == 3 && command[0] == "bash" && command[1] == "-c")
         require(timeoutSeconds in 60..3600)
     }
 }
@@ -104,7 +104,15 @@ class ToolchainDetector(private val executor: SandboxCommandExecutor) {
     }
 
     fun planInstall(profile: ToolchainProfile): ToolchainInstallPlan {
-        return ToolchainInstallPlan(profile, listOf("apt-get", "-o", "Dpkg::Use-Pty=0", "install", "-y", "--no-install-recommends") + profile.packages)
+        val packageList = profile.packages.joinToString(" ")
+        val script = "set -o pipefail; " +
+            "export DEBIAN_FRONTEND=noninteractive; " +
+            "if ! find /var/lib/apt/lists -type f -print -quit 2>/dev/null | grep -q .; then " +
+            "apt-get update -qq || exit ${'$'}?; " +
+            "fi; " +
+            "apt-get -o Dpkg::Use-Pty=0 install -y --no-install-recommends --fix-missing " +
+            packageList + " 2>&1 | tail -n 120"
+        return ToolchainInstallPlan(profile, listOf("bash", "-c", script))
     }
 
     private fun shellQuote(value: String): String = "'" + value.replace("'", "'\\''") + "'"

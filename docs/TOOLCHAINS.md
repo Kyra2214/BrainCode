@@ -4,7 +4,9 @@
 
 `ToolchainProfile` descreve uma toolchain de forma declarativa: executável de detecção, argumentos de versão, pacotes permitidos e argumentos de validação. `ToolchainDetector` executa apenas a lista de argumentos definida pelo perfil e retorna um diagnóstico estruturado. Ele não aceita uma string de shell arbitrária.
 
-`ToolchainDetector.planInstall` gera um plano explícito com `bash -c`, `apt-get update` e instalação dos pacotes allowlisted. O plano ainda não é executado automaticamente e não substitui a autorização da Policy nem os limites do Sandbox.
+`ToolchainDetector.planInstall` gera um plano explícito com `bash -c`. Antes da instalação, o comando verifica se `/var/lib/apt/lists` contém índices; quando o cache está vazio, executa `apt-get update -qq`. Em seguida instala apenas os pacotes allowlisted com `--no-install-recommends --fix-missing`, preservando a saída final para diagnóstico. O plano ainda não é executado automaticamente e não substitui a autorização da Policy nem os limites do Sandbox.
+
+Essa atualização condicional é necessária para rootfs minimalistas ou recém-criados, nos quais o índice APT pode estar ausente. A tela de Toolchains também exibe `ToolchainStatus.error` quando uma detecção ou instalação falha, tornando o diagnóstico persistido visível para o usuário.
 
 `ToolchainManager` executa esse plano somente por chamada explícita, persiste estados `INSTALLING`, `INSTALLED`, `FAILED`, `REMOVING` e `NOT_INSTALLED`, valida o executável após a instalação e remove apenas os pacotes declarados pelo perfil. Falhas ficam persistidas com diagnóstico para retry ou intervenção da Policy.
 

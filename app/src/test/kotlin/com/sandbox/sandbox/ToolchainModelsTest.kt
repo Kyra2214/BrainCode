@@ -49,14 +49,18 @@ class ToolchainModelsTest {
     }
 
     @Test
-    fun `plano instala somente pacotes declarados sem shell`() {
+    fun `plano atualiza indice vazio e instala somente pacotes declarados`() {
         val detector = ToolchainDetector(Executor(true))
         val profile = BuiltInToolchains.all.first { it.id == "python" }
         val plan = detector.planInstall(profile)
 
-        assertEquals("apt-get", plan.command[0])
-        assertEquals(listOf("python3", "python3-pip"), plan.command.takeLast(2))
-        assertFalse(plan.command.contains("bash"))
+        assertEquals(listOf("bash", "-c"), plan.command.take(2))
+        val script = plan.command[2]
+        assertTrue(script.contains("find /var/lib/apt/lists"))
+        assertTrue(script.contains("apt-get update -qq"))
+        assertTrue(script.contains("--fix-missing"))
+        assertTrue(script.endsWith("python3 python3-pip 2>&1 | tail -n 120"))
+        assertFalse(script.contains("python3;"))
     }
 
     @Test(expected = IllegalArgumentException::class)
