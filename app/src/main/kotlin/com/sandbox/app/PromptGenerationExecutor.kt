@@ -7,10 +7,6 @@ import com.brain.gateway.ActionRequest
 import com.brain.policy.PolicyDecision
 import com.brain.prompt.PromptLibrary
 import com.brain.prompt.PromptTemplate
-import com.brain.retrieval.PromptLibraryRetrievalSource
-import com.brain.retrieval.Retrieval
-import com.brain.retrieval.RetrievalQuery
-import com.brain.retrieval.RetrievalStatus
 import com.brain.router.PapelPipeline
 import kotlinx.coroutines.runBlocking
 import java.util.Locale
@@ -18,17 +14,17 @@ import java.util.Locale
 /**
  * Fluxo operacional de criação/melhoria de prompts:
  * 1) procura primeiro na biblioteca local;
- * 2) só considera reutilizável um candidato com similaridade >= 50%;
- * 3) adapta o template ao pedido atual antes de devolvê-lo;
- * 4) se não houver candidato compatível, usa a API especialista em prompt;
- * 5) TODO prompt produzido por IA é salvo na biblioteca ANTES de ser devolvido;
- * 6) se não houver API/chave válida, retorna erro explícito ao usuário.
+ * 2) avalia compatibilidade usando os metadados do template, não o texto cru com placeholders;
+ * 3) só considera reutilizável um candidato com compatibilidade >= 50%;
+ * 4) adapta o template ao pedido atual antes de devolvê-lo;
+ * 5) se não houver candidato compatível, usa a API especialista em prompt;
+ * 6) toda saída de IA é salva na biblioteca ANTES de ser devolvida;
+ * 7) sem API/chave válida, retorna erro explícito ao usuário.
  */
 class PromptGenerationExecutor(
     private val gateway: BrainApiGateway,
     private val promptLibrary: PromptLibrary
 ) : ActionExecutor {
-    private val retrieval = Retrieval(listOf(PromptLibraryRetrievalSource.from(promptLibrary)))
 
     override fun execute(
         request: ActionRequest,
@@ -40,20 +36,25 @@ class PromptGenerationExecutor(
             return ActionExecution(false, error = "objetivo do prompt ausente", provenance = provenance(capability))
         }
 
-        // Biblioteca primeiro. O Retrieval entrega candidatos ordenados, mas a
-        // decisão de compatibilidade é feita aqui por similaridade do pedido,
-        // não pela taxa histórica de sucesso do template.
-        val busca = retrieval.retrieve(RetrievalQuery(objective))
-        val hit = busca.hit
-        if (busca.status == RetrievalStatus.FOUND && hit != null) {
-            val similaridade = similarity(objective, hit.content)
-            if (similaridade >= MIN_SIMILARITY) {
-                val adapted = adaptPrompt(hit.content, objective)
-                val confiancaPct = (similaridade * 100).toInt()
+        // A biblioteca já ranqueia candidatos por contexto/finalidade.
+        // Não usamos mais o texto cru do template para decidir os 50%, porque
+        // placeholders como {PERSONAGEM}, {LUZ} e {CENARIO} não contêm o
+        // vocabulário do pedido e produziam falsos negativos.
+        val candidato = runBlocking { promptLibrary.buscarPorContexto(objective).firstOrNull() }
+        if (candidato != null) {
+            val compatibilidade = compatibility(objective, candidato)
+            if (compatibilidade >= MIN_COMPATIBILITY) {
+                val adapted = adaptPrompt(candidato, objective)
+                val confiancaPct = (compatibilidade * 100).toInt()
                 return ActionExecution(
                     success = true,
-                    result = "Encontrei um prompt compatível na biblioteca (similaridade $confiancaPct%) e adaptei ao seu pedido:\n\n$adapted",
-                    evidence = hit.provenance + "retrieval:biblioteca-local" + "similarity:${"%.2f".format(Locale.US, similaridade)}",
+                    result = "Encontrei um prompt compatível na biblioteca (compatibilidade $confiancaPct%) e adaptei ao seu pedido:\n\n$adapted",
+                    evidence = listOf(
+                        "prompt-library:${candidato.id}",
+                        "retrieval:biblioteca-local",
+                        "compatibility:${"%.2f".format(Locale.US, compatibilidade)}",
+                        "compatibility-source:metadata"
+                    ),
                     provenance = provenance(capability)
                 )
             }
@@ -110,25 +111,47 @@ class PromptGenerationExecutor(
         }
     }
 
-    private fun similarity(objective: String, candidate: String): Double {
+    /**
+     * Compatibilidade lexical contextual: pedido x finalidade/contexto do
+     * template. O score é calculado contra metadados catalogados, nunca contra
+     * placeholders do template. A interseção é calculada nos dois sentidos e
+     * combinada para evitar que um texto muito curto domine por acidente.
+     */
+    private fun compatibility(objective: String, template: PromptTemplate): Double {
         val requested = tokenize(objective)
         if (requested.isEmpty()) return 0.0
-        val candidateTokens = tokenize(candidate)
-        val overlap = requested.count { it in candidateTokens }
-        return overlap.toDouble() / requested.size.toDouble()
+        val metadata = tokenize("${template.finalidade} ${template.contextoDeUso} ${template.skillRelacionada.orEmpty()}")
+        if (metadata.isEmpty()) return 0.0
+
+        val overlap = requested.count { token -> metadata.any { meta -> meta == token || meta.contains(token) || token.contains(meta) } }
+        val requestCoverage = overlap.toDouble() / requested.size.toDouble()
+        val metadataCoverage = overlap.toDouble() / metadata.size.toDouble().coerceAtLeast(1.0)
+        return (requestCoverage * 0.75 + metadataCoverage * 0.25).coerceIn(0.0, 1.0)
     }
 
-    private fun adaptPrompt(template: String, objective: String): String {
-        var adapted = template
-        val replacements = mapOf(
+    private fun adaptPrompt(template: PromptTemplate, objective: String): String {
+        var adapted = template.textoTemplate
+        val replacements = linkedMapOf(
             "{pedido}" to objective,
             "{objetivo}" to objective,
             "{descricao}" to objective,
+            "{tema}" to objective,
+            "{assunto}" to objective,
+            "{cenario}" to objective,
+            "{cenário}" to objective,
+            "{personagem}" to objective,
             "{{pedido}}" to objective,
             "{{objetivo}}" to objective,
-            "{{descricao}}" to objective
+            "{{descricao}}" to objective,
+            "{{tema}}" to objective,
+            "{{assunto}}" to objective,
+            "{{cenario}}" to objective,
+            "{{cenário}}" to objective,
+            "{{personagem}}" to objective
         )
-        replacements.forEach { (placeholder, value) -> adapted = adapted.replace(placeholder, value, ignoreCase = true) }
+        replacements.forEach { (placeholder, value) ->
+            adapted = adapted.replace(placeholder, value, ignoreCase = true)
+        }
         if (tokenize(adapted).intersect(tokenize(objective)).isEmpty()) {
             adapted = "$adapted\n\nContexto específico do pedido: $objective"
         }
@@ -163,6 +186,6 @@ class PromptGenerationExecutor(
     private fun provenance(capability: CapabilityDefinition) = listOf("app:PromptGenerationExecutor", "capability:${capability.id}")
 
     private companion object {
-        const val MIN_SIMILARITY = 0.50
+        const val MIN_COMPATIBILITY = 0.50
     }
 }
