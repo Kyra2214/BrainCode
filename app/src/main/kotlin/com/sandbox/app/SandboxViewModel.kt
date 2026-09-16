@@ -511,6 +511,10 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     workspace = preparedPlatform.workspace,
                     activeProjectName = { workspaceProjectName }
                 )
+                val promptGenerationExecutor = PromptGenerationExecutor(
+                    gateway = brainApiGateway,
+                    promptLibrary = promptLibrary
+                )
                 brainController = BrainSandboxController(
                     prepared,
                     File(dir, "rootfs"),
@@ -518,7 +522,10 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     capabilityProviders = listOf(
                         PluginCatalogCapabilityProvider(statusOf = { id -> statusCache[id]?.state })
                     ),
-                    capabilityExecutors = mapOf("workspace.generate" to codeGenerationExecutor),
+                    capabilityExecutors = mapOf(
+                        "workspace.generate" to codeGenerationExecutor,
+                        "prompt.library.generate" to promptGenerationExecutor
+                    ),
                     events = FileEventStore(File(dir, "brain/chat-events.jsonl"))
                 )
                 brainIntegration = BrainIntegrationFacade(getApplication(), File(dir, "brain"))
@@ -559,7 +566,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         val cycle = controller.executeObjective(prompt, "chat-${System.currentTimeMillis()}") { passo ->
                             viewModelScope.launch(Dispatchers.Main.immediate) { publishStep(passo) }
                         }
-                        ChatMessage(ChatRole.ASSISTANT, "Plano concluído: ${cycle.aprovado}")
+                        ChatMessage(ChatRole.ASSISTANT, cycle.resposta ?: "Plano concluído: ${cycle.aprovado}")
                     } else {
                         ChatMessage(ChatRole.ASSISTANT, brainApiGateway.complete(prompt).text)
                     }
@@ -618,7 +625,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         val cycle = controller.executeObjective(prompt, "cmd-${entrada.slug}-${System.currentTimeMillis()}") { passo ->
                             viewModelScope.launch(Dispatchers.Main.immediate) { publishStep(passo) }
                         }
-                        ChatMessage(ChatRole.ASSISTANT, "Plano concluído: ${cycle.aprovado}")
+                        ChatMessage(ChatRole.ASSISTANT, cycle.resposta ?: "Plano concluído: ${cycle.aprovado}")
                     } else {
                         ChatMessage(ChatRole.ASSISTANT, brainApiGateway.complete(prompt).text)
                     }

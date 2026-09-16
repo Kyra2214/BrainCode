@@ -64,6 +64,7 @@ class BrainSandboxController(
             capability("sandbox.health", setOf("sandbox.health")),
             capability("sandbox.info", setOf("network.research")),
             capability("workspace.generate", setOf("workspace.write")),
+            capability("prompt.library.generate", setOf("prompt.library.write")),
             capability("sandbox.build", emptySet()),
             capability("sandbox.test", setOf("sandbox.code")),
             capability("sandbox.diagnose", setOf("brain.analyze")),
@@ -161,7 +162,7 @@ class BrainSandboxController(
             jobId = "job-$runId",
             runId = runId,
             taskId = "plan",
-            manifest = WorkflowManifest("brain-plan", "1.0.0", listOf(WorkflowNode("plan", "brain.plan"))),
+            manifest = WorkflowManifest("brain-plan", "1.0.0", listOf(WorkflowNode("plan", "brain.plan", retryLimit = 0))),
             authorize = { it == "brain.plan" },
             execute = { node, attempt ->
                 cycle = executeWithEvents(plan, runId) {

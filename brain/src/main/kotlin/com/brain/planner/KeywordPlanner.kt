@@ -15,17 +15,18 @@ class KeywordFunctionSplitter : FunctionSplitter {
         require(texto.isNotBlank()) { "objetivo não pode ser vazio" }
         val normalizado = texto.lowercase()
         val passos = mutableListOf<PassoPlano>()
+        val pedidoDePrompt = normalizado.containsAny("prompt", "template de prompt")
         if (normalizado.containsAny("pesquis", "analis", "investig")) {
             passos += PassoPlano(
                 "pesquisar", "network.research", "evidência de pesquisa disponível",
                 papel = PapelPipeline.PLANEJAMENTO, riskClass = RiskClass.MEDIUM
             )
         }
-        if (normalizado.containsAny("escrev", "cri", "ger", "document", "relatóri", "relatori", "desenvolv", "constru", "mont", "aplicat", "aplicativo", "sistem", "site", "software")) {
+        if (pedidoDePrompt || normalizado.containsAny("escrev", "cri", "ger", "document", "relatóri", "relatori", "desenvolv", "constru", "mont", "aplicat", "aplicativo", "sistem", "site", "software")) {
             passos += PassoPlano(
-                "produzir", if (normalizado.containsAny("prompt", "template de prompt")) "prompt.library.write" else "workspace.write", "artefato produzido",
+                "produzir", if (pedidoDePrompt) "prompt.library.write" else "workspace.write", "artefato produzido",
                 parametros = listOf(texto),
-                dependeDe = passos.map { it.id }, papel = if (normalizado.containsAny("prompt", "template de prompt")) PapelPipeline.ESCRITA_DE_PROMPT else PapelPipeline.PRODUCAO_DE_ARTEFATO,
+                dependeDe = passos.map { it.id }, papel = if (pedidoDePrompt) PapelPipeline.ESCRITA_DE_PROMPT else PapelPipeline.PRODUCAO_DE_ARTEFATO,
                 riskClass = RiskClass.MEDIUM
             )
         }

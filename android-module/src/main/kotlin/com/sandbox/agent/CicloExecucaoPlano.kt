@@ -25,6 +25,7 @@ data class ResultadoPasso(
     val decisaoPolicy: PolicyDecision? = null,
     val decisaoRouter: RoutingDecision? = null,
     val execucao: AgentSandboxSession.CommandOutcome? = null,
+    val resultado: String? = null,
     val evidencias: List<EvidenciaComando> = emptyList(),
     val motivo: String? = null,
     val approvalId: String? = null
@@ -33,9 +34,12 @@ data class ResultadoPasso(
 data class ResultadoCiclo(
     val objetivo: String,
     val runId: String,
-    val passos: List<ResultadoPasso>
+    val passos: List<ResultadoPasso>,
+    /** Conteúdo pronto para entrega quando o plano recupera um artefato textual. */
+    val resposta: String? = null
 ) {
     val aprovado: Boolean get() = passos.isNotEmpty() && passos.all { it.status == StatusPasso.APROVADO }
+    val resposta: String? get() = passos.asSequence().mapNotNull { it.resultado }.lastOrNull()
 }
 
 /** Executa somente planos que já carregam autorizações por passo emitidas pelo Brain. */
@@ -149,6 +153,7 @@ class CicloExecucaoPlano(
                 passo.id,
                 if (dispatch.status == DispatchStatus.DISPATCHED) StatusPasso.APROVADO else StatusPasso.REPROVADO,
                 decisaoPolicy = dispatch.gateway?.decision ?: decision,
+                resultado = dispatch.gateway?.execution?.result,
                 decisaoRouter = decisaoRouter,
                 motivo = dispatch.reason ?: if (dispatch.status == DispatchStatus.DISPATCHED) null else "Dispatcher não executou a capability"
             )
