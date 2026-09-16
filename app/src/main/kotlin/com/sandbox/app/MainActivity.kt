@@ -399,7 +399,7 @@ private fun StatusDetails(viewModel: SandboxViewModel) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Teste geral", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
                     TextButton(onClick = {
-                        val text = report.sections.joinToString("\n") { s -> "${s.title}:\n" + s.items.joinToString("\n") { "  ${it.status} ${it.label} — ${it.detail}" } }
+                        val text = report.sections.joinToString("\n") { s -> "${s.title}:\n" + s.items.joinToString("\n") { "  ${it.status} ${it.name} — ${it.detail}" } }
                         clipboard.setText(AnnotatedString(text)); Toast.makeText(context, "Copiado", Toast.LENGTH_SHORT).show()
                     }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)) { Text("Copiar", style = MaterialTheme.typography.labelSmall) }
                 }
