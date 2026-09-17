@@ -13,8 +13,12 @@ data class ResearchResult(
     val title: String,
     val url: String,
     val relevantContent: String,
-    val retrievedAt: Instant
+    val retrievedAt: Instant,
+    val confidence: Double = 0.0,
+    val validationStatus: ValidationStatus = ValidationStatus.UNVALIDATED
 )
+
+enum class ValidationStatus { UNVALIDATED, VERIFIED, REJECTED }
 
 /** Contrato da capacidade de pesquisa — implementações reais ficam no módulo Android (I/O de rede). */
 fun interface WebResearchProvider {
