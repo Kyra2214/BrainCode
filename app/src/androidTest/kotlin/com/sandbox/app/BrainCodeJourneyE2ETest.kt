@@ -4,8 +4,10 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNode
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -41,12 +43,23 @@ class BrainCodeJourneyE2ETest {
 
     private fun waitForAssistantContaining(vararg terms: String, timeoutMs: Long = 120_000) {
         composeRule.waitUntil(timeoutMillis = timeoutMs) {
-            terms.all { term ->
-                runCatching {
-                    composeRule.onNodeWithText(term, substring = true, useUnmergedTree = true).assertIsDisplayed()
-                    true
-                }.getOrDefault(false)
-            }
+            runCatching {
+                composeRule.onNodeWithText("Prompt gerado", substring = true, useUnmergedTree = true).assertIsDisplayed()
+                terms.all { term ->
+                    composeRule.onAllNodesWithText(term, substring = true, useUnmergedTree = true)
+                        .fetchSemanticsNodes().size >= 2
+                }
+            }.getOrDefault(false)
+        }
+    }
+
+    private fun waitForExecutionEvidence(term: String, timeoutMs: Long = 120_000) {
+        composeRule.waitUntil(timeoutMillis = timeoutMs) {
+            runCatching {
+                composeRule.onNodeWithText("Terminal", substring = true, useUnmergedTree = true).assertIsDisplayed()
+                composeRule.onAllNodesWithText(term, substring = true, useUnmergedTree = true)
+                    .fetchSemanticsNodes().size >= 2
+            }.getOrDefault(false)
         }
     }
 
@@ -68,7 +81,7 @@ class BrainCodeJourneyE2ETest {
     fun executionJourneyReturnsExecutionEvidence() {
         waitUntilReady()
         send("/run echo BrainCode-E2E-EXECUTION-OK")
-        waitForAssistantContaining("BrainCode-E2E-EXECUTION-OK")
+        waitForExecutionEvidence("BrainCode-E2E-EXECUTION-OK")
     }
 
     @Test
