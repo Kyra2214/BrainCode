@@ -240,8 +240,13 @@ class PromptGenerationExecutor(
     }
 
     private fun extrairContextoPesquisa(request: ActionRequest): String? {
-        val bruto = request.parameters.entries
+        val extras = request.parameters.entries
             .filter { it.key.startsWith("parameter.") && it.key != "parameter.0" }
+            .sortedBy { it.key }
+            .joinToString("\n") { it.value }
+            .trim()
+        val bruto = if (extras.isNotBlank()) extras else request.parameters.entries
+            .filter { it.key != "parameter.0" }
             .sortedBy { it.key }
             .joinToString("\n") { it.value }
             .trim()
