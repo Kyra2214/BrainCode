@@ -28,6 +28,14 @@ class LocalPromptCreatorAgentTest {
         assertFalse(texto.contains("de fotografia fotorrealista de"))
     }
 
+    @Test fun `preserva ambiente concreto ceu estrelado ao fundo`() {
+        val pedido = "Crie um prompt para uma fotografia fotorrealista de um foguete espacial decolando, com céu estrelado ao fundo."
+        val texto = agent.criar(pedido).texto
+
+        assertTrue(texto.contains("céu estrelado ao fundo"))
+        assertFalse(texto.contains("ambientado em fundo"))
+    }
+
     @Test fun `sem componentes explicitos usa padroes deterministicos, nunca vazio`() {
         val a = agent.criar("Crie um prompt de uma xícara de café em cima de uma mesa")
         val b = agent.criar("Crie um prompt de uma xícara de café em cima de uma mesa")

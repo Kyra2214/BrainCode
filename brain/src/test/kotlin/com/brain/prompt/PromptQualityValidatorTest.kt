@@ -43,6 +43,15 @@ class PromptQualityValidatorTest {
         assertTrue(score.criterios.getValue("coerência") < 1.0)
     }
 
+    @Test fun `requisito composto de ceu estrelado e obrigatorio`() {
+        val pedido = "crie um prompt de um foguete com céu estrelado ao fundo"
+        val semCeu = PromptQualityValidator.validar(pedido, "Fotografia de um foguete, ambientado em fundo genérico. Composição: equilibrada.", PromptDomain.IMAGEM)
+        val comCeu = PromptQualityValidator.validar(pedido, "Fotografia de um foguete, com céu estrelado ao fundo. Composição: equilibrada.", PromptDomain.IMAGEM)
+
+        assertEquals(0.0, semCeu.criterios.getValue("presença de elementos"), 0.0001)
+        assertTrue(comCeu.criterios.getValue("presença de elementos") > 0.0)
+    }
+
     @Test fun `regra de produto - limiar minimo de entrega e 90 por cento`() {
         assertEquals(0.90, PromptQualityScore.LIMIAR_MINIMO, 0.0001)
     }

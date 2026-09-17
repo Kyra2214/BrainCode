@@ -133,8 +133,15 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
         .trim()
 
     private fun extrairAmbiente(texto: String): String? {
-        val match = Regex("(?i)(?:com |ao |em |no |na )([^,.;]*fundo[^,.;]*|[^,.;]*céu[^,.;]*|[^,.;]*cenário[^,.;]*)").find(texto)
-        return match?.groupValues?.get(1)?.trim()
+        val padroes = listOf(
+            Regex("(?i)\\b(céu\\s+[^,.;]*(?:ao fundo|no fundo))"),
+            Regex("(?i)\\b([^,.;]*fundo[^,.;]*)"),
+            Regex("(?i)\\b([^,.;]*céu[^,.;]*)"),
+            Regex("(?i)\\b([^,.;]*cenário[^,.;]*)")
+        )
+        return padroes.asSequence()
+            .mapNotNull { it.find(texto)?.groupValues?.getOrNull(1)?.trim() }
+            .firstOrNull { it.length >= 4 }
     }
 
     private fun primeiraOcorrencia(lower: String, vararg pares: Pair<String, String>): String? =

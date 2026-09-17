@@ -62,7 +62,10 @@ object PromptQualityValidator {
         if (termos.isEmpty()) return 0.0
         val lower = texto.lowercase(Locale.ROOT)
         val presentes = termos.count { termo -> lower.split(Regex("[^\\p{L}\\p{Nd}]+" )).any { it == termo || it.startsWith(termo) || termo.startsWith(it) } }
-        return (presentes.toDouble() / termos.size).coerceIn(0.0, 1.0)
+        val coberturaTokens = presentes.toDouble() / termos.size
+        val requisitosObrigatorios = requisitosCompostosObrigatorios(pedido)
+        if (requisitosObrigatorios.any { it !in lower }) return 0.0
+        return coberturaTokens.coerceIn(0.0, 1.0)
     }
 
     /** Termos observáveis do pedido; rótulos fixos como "Iluminação" não contam como cobertura. */
@@ -79,6 +82,14 @@ object PromptQualityValidator {
             .filter { it.length >= 4 && it !in stopwords }
             .distinct()
     }
+
+    /** Requisitos compostos não podem ser satisfeitos por palavras genéricas isoladas. */
+    private fun requisitosCompostosObrigatorios(pedido: String): List<String> = listOf(
+        Regex("(?i)\\bceu\\s+estrelado(?:\\s+ao\\s+fundo)?\\b"),
+        Regex("(?i)\\bcéu\\s+estrelado(?:\\s+ao\\s+fundo)?\\b")
+    ).mapNotNull { regex ->
+        regex.find(pedido)?.value?.lowercase(Locale.ROOT)?.replace(Regex("\\s+"), " ")
+    }.distinct()
 
     private fun clareza(texto: String): Double {
         val frases = texto.split(Regex("[.!?\\n]")).map { it.trim() }.filter { it.isNotBlank() }
