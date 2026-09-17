@@ -1,0 +1,90 @@
+name: Apply Prompt E2E Fixes v2
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/apply-prompt-e2e-fixes-v2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair-test-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - name: Patch source and add regression coverage
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path); s = p.read_text()
+              if old not in s: raise SystemExit(f'pattern missing: {path}')
+              p.write_text(s.replace(old, new, 1))
+
+          replace('brain/src/main/kotlin/com/brain/prompt/PromptDomain.kt',
+              '''                texto.containsAny(\n                    " prompt de uma ", " prompt de um ", " prompt para uma ", " prompt para um ",\n                    " prompt para criar ", " prompt para gerar ", " prompt para fazer ", " prompt de imagem "\n                ) -> IMAGEM''',
+              '''                texto.containsAny(\n                    " prompt de uma ", " prompt de um ", " prompt para uma ", " prompt para um ",\n                    " prompt para criar ", " prompt para gerar ", " prompt para fazer ", " prompt de imagem "\n                ) && !texto.containsAny(\n                    "resumo", "resumir", "reunião", "reuniao", "relatório", "relatorio",\n                    "documento", "texto", "email", "e-mail", "redação", "redacao", "ensaio", "artigo"\n                ) -> IMAGEM''')
+
+          replace('android-module/src/main/kotlin/com/sandbox/agent/BrainSandboxController.kt',
+              '        val basePlan = runBlockingPlanner { planner.planejar(classification.intent.objective) }',
+              '''        emit(runId, "reasoning", "IntentClassified", mapOf(\n            "intent" to classification.intent.name,\n            "plannerObjective" to objective.take(500),\n            "requiresDecomposition" to classification.requiresDecomposition.toString(),\n            "requiresLlm" to classification.requiresLlm.toString()\n        ))\n        val basePlan = runBlockingPlanner { planner.planejar(objective) }''')
+
+          replace('android-module/src/main/kotlin/com/sandbox/agent/BrainSandboxController.kt',
+              '''                                "status" to passo.status.name,\n                                "motivo" to (passo.motivo ?: "")''',
+              '''                                "status" to passo.status.name,\n                                "capacidade" to (passo.capacidade ?: ""),\n                                "evidencias" to passo.evidencias.size.toString(),\n                                "researchSources" to passo.researchSources.size.toString(),\n                                "motivo" to (passo.motivo ?: "")''')
+
+          replace('app/src/main/kotlin/com/sandbox/app/SandboxViewModel.kt',
+              '        val prompt = chatInput.trim(); if (prompt.isEmpty() || chatRunning) return',
+              '''        val prompt = chatInput.trim()\n        if (prompt.isEmpty()) return\n        if (chatRunning) {\n            chatMessages.add(ChatMessage(ChatRole.ERROR, "A tarefa anterior ainda está em execução. Aguarde a resposta antes de enviar outra solicitação."))\n            return\n        }''')
+
+          Path('app/src/test/kotlin/com/sandbox/app/PromptCreationE2EContractTest.kt').write_text('''package com.sandbox.app\n\nimport com.brain.prompt.PromptDomain\nimport org.junit.Assert.assertEquals\nimport org.junit.Test\n\nclass PromptCreationE2EContractTest {\n    @Test fun genericTextPromptRemainsTextDomain() {\n        assertEquals(PromptDomain.TEXTO, PromptDomain.classificar("Escreva um prompt para gerar um resumo executivo de reunião"))\n    }\n\n    @Test fun visualPromptRemainsImageDomain() {\n        assertEquals(PromptDomain.IMAGEM, PromptDomain.classificar("quero um prompt para criar uma imagem de um foguete decolando no deserto"))\n    }\n}\n''')
+
+          Path('app/src/androidTest/kotlin/com/sandbox/app/PromptLifecycleInstrumentedTest.kt').write_text('''package com.sandbox.app\n\nimport androidx.test.ext.junit.runners.AndroidJUnit4\nimport androidx.test.platform.app.InstrumentationRegistry\nimport org.junit.Assert.assertTrue\nimport org.junit.Test\nimport org.junit.runner.RunWith\n\n@RunWith(AndroidJUnit4::class)\nclass PromptLifecycleInstrumentedTest {\n    @Test fun secondChatTurnIsNotSilentlyDropped() {\n        val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as android.app.Application\n        val vm = SandboxViewModel(app)\n        vm.chatInput = "primeira solicitação"\n        vm.sendChatMessage()\n        vm.chatInput = "segunda solicitação"\n        vm.sendChatMessage()\n        assertTrue(vm.chatMessages.any { it.role == ChatRole.ERROR && it.content.contains("tarefa anterior ainda está em execução") })\n    }\n}\n''')
+          PY
+      - name: JVM tests, APK and lint
+        run: |
+          chmod +x ./gradlew
+          ./gradlew test :app:assembleDebug :app:lint --no-daemon --stacktrace
+      - name: Android instrumentation E2E
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: Pixel_2
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          disable-animations: true
+          script: ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace
+      - name: Commit verified source changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add brain/src/main/kotlin/com/brain/prompt/PromptDomain.kt android-module/src/main/kotlin/com/sandbox/agent/BrainSandboxController.kt app/src/main/kotlin/com/sandbox/app/SandboxViewModel.kt app/src/test/kotlin/com/sandbox/app/PromptCreationE2EContractTest.kt app/src/androidTest/kotlin/com/sandbox/app/PromptLifecycleInstrumentedTest.kt
+          git diff --cached --check
+          git diff --cached --quiet || git commit -m "fix: close prompt creation e2e lifecycle"
+          git push origin main
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BrainCode-prompt-e2e-v2-${{ github.sha }}
+          path: |
+            **/build/test-results/**
+            **/build/reports/tests/**
+            **/build/reports/androidTests/**
+            **/build/outputs/apk/**
+          if-no-files-found: ignore
+          retention-days: 14
