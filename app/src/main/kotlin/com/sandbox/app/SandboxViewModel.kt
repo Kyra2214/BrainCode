@@ -696,7 +696,6 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     private fun publishStep(passo: ResultadoPasso) {
         val message = "${passo.passoId}: ${passo.status.name}${passo.motivo?.let { " — $it" } ?: ""}"
         chatMessages.add(ChatMessage(ChatRole.STEP, message))
-        appendThreadEvent(ThreadEvent.System("Passo: $message"))
     }
     fun clearChat() { chatMessages.clear() }
 
