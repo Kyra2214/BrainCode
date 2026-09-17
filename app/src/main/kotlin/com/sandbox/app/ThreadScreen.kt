@@ -146,21 +146,32 @@ fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
                     if (nearEnd) listState.animateScrollToItem(events.lastIndex)
                 }
             }
-            if (searchOpen && query.isNotBlank() && events.isEmpty()) {
-                Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Nenhum resultado", style = MaterialTheme.typography.titleSmall)
-                        Text("Nenhuma mensagem corresponde a \"$query\".", style = MaterialTheme.typography.bodySmall)
+            Box(modifier = Modifier.fillMaxSize()) {
+                if (searchOpen && query.isNotBlank() && events.isEmpty()) {
+                    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Nenhum resultado", style = MaterialTheme.typography.titleSmall)
+                            Text("Nenhuma mensagem corresponde a \"$query\".", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                } else {
+                    SelectionContainer {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp).padding(bottom = 104.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            itemsIndexed(events, key = { index, event -> eventKey(event, index) }) { _, event -> ThreadEventCard(event, viewModel) }
+                        }
                     }
                 }
-            } else {
-                SelectionContainer {
-                    LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        itemsIndexed(events, key = { index, event -> eventKey(event, index) }) { _, event -> ThreadEventCard(event, viewModel) }
-                    }
+                Surface(
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.background.copy(alpha = 0.98f)
+                ) {
+                    ThreadComposer(viewModel)
                 }
             }
-            ThreadComposer(viewModel)
         }
     }
 }
