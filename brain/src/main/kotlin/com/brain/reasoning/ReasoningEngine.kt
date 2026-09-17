@@ -61,6 +61,7 @@ class ReasoningEngine {
 
     private fun discoverMissing(request: String, domain: PromptDomain): List<String> {
         val lower = request.lowercase()
+        if (isRefinement(lower)) return emptyList()
         if (domain != PromptDomain.CODIGO) return emptyList()
         if (lower.containsAny("app", "aplicativo", "interface", "tela", "layout")) return emptyList()
         return listOf("finalidade do código ou interface")
