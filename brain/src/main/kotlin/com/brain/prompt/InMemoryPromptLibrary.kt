@@ -119,7 +119,7 @@ class InMemoryPromptLibrary(
             val total = successes + failures
             if (total > 0) {
                 val custo = history.sumOf { valueAfter(it, "custo=") }
-                val tempo = history.sumOf { valueAfter(it, "tempoMs=").toLongOrNull() ?: 0L }
+                val tempo = history.sumOf { valueAfterLong(it, "tempoMs=") }
                 contadores[template.id] = Contador(successes, failures, custo, tempo)
             } else if (template.amostrasObservadas > 0) {
                 contadores[template.id] = contadorInicial(template)
@@ -128,6 +128,7 @@ class InMemoryPromptLibrary(
     }
 
     private fun valueAfter(text: String, key: String): Double = text.substringAfter(key, "").substringBefore(';').toDoubleOrNull() ?: 0.0
+    private fun valueAfterLong(text: String, key: String): Long = text.substringAfter(key, "").substringBefore(';').toLongOrNull() ?: 0L
     private fun relevancia(template: PromptTemplate, pedido: Set<String>): Int {
         val searchable = PromptSimilarity.tokenize("${template.contextoDeUso} ${template.finalidade} ${template.skillRelacionada.orEmpty()}")
         return pedido.count { token -> searchable.any { it == token || it.contains(token) || token.contains(it) } }
