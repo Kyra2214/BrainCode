@@ -28,6 +28,7 @@ import com.brain.workflow.WorkflowManifest
 import com.brain.workflow.WorkflowNode
 import com.brain.workflow.WorkflowStepResult
 import com.brain.prompt.PromptLibrary
+import com.brain.prompt.PromptOutcomeTracker
 import com.brain.events.BrainEvent
 import com.brain.events.EventStore
 import com.brain.events.InMemoryEventStore
@@ -52,6 +53,7 @@ class BrainSandboxController(
     rootfsDir: File,
     private val actor: String = "android-app",
     promptLibrary: PromptLibrary? = null,
+    private val promptOutcomeTracker: PromptOutcomeTracker? = null,
     capabilityProviders: List<CapabilityProvider> = emptyList(),
     capabilityExecutors: Map<String, ActionExecutor> = emptyMap(),
     private val apiKeyAvailable: () -> Boolean = { true },
@@ -200,7 +202,21 @@ class BrainSandboxController(
 
     private fun executeWithEvents(plan: PlanoExecucao, runId: String, action: () -> ResultadoCiclo): ResultadoCiclo {
         emit(runId, "plan", "PlanCreated", mapOf("steps" to plan.passos.size.toString()))
-        val result = runCatching { action() }.onFailure { emit(runId, "execution", "ExecutionFailed", mapOf("error" to (it.message ?: "unknown").take(500))) }.getOrThrow()
+        val startedAt = System.nanoTime()
+        val result = runCatching { action() }
+            .onFailure { emit(runId, "execution", "ExecutionFailed", mapOf("error" to (it.message ?: "unknown").take(500))) }
+            .getOrThrow()
+        val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
+        promptOutcomeTracker?.let { tracker ->
+            result.passos.forEach { passo ->
+                tracker.recordOutcome(
+                    actionId = "${passo.passoId}:${passo.passoId}",
+                    success = result.aprovado && passo.status == StatusPasso.APROVADO,
+                    cost = 0.0,
+                    elapsedMs = elapsedMs
+                )
+            }
+        }
         emit(runId, "execution", if (result.aprovado) "Delivered" else "ValidationFailed", mapOf("approved" to result.aprovado.toString()))
         return result
     }
