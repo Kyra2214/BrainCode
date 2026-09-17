@@ -167,7 +167,7 @@ fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
 private fun eventKey(event: ThreadEvent): String = when (event) {
     is ThreadEvent.User -> "user:${event.text.hashCode()}"
     is ThreadEvent.Agent -> "agent:${event.text.hashCode()}"
-    is ThreadEvent.Terminal -> "terminal:${event.execution?.id ?: event.result.hashCode()}"
+    is ThreadEvent.Terminal -> "terminal:${event.execution?.executionId ?: event.result.hashCode()}"
     is ThreadEvent.Approval -> "approval:${event.id}"
     is ThreadEvent.Report -> "report:${event.title}:${event.body.hashCode()}"
     is ThreadEvent.Diff -> "diff:${event.files.joinToString { it.path }.hashCode()}"
