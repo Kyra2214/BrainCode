@@ -29,6 +29,7 @@ import com.brain.workflow.WorkflowNode
 import com.brain.workflow.WorkflowStepResult
 import com.brain.prompt.PromptLibrary
 import com.brain.prompt.PromptOutcomeTracker
+import com.brain.prompt.PromptOutcomeTrackers
 import com.brain.events.BrainEvent
 import com.brain.events.EventStore
 import com.brain.events.InMemoryEventStore
@@ -53,7 +54,7 @@ class BrainSandboxController(
     rootfsDir: File,
     private val actor: String = "android-app",
     promptLibrary: PromptLibrary? = null,
-    private val promptOutcomeTracker: PromptOutcomeTracker? = null,
+    private val promptOutcomeTracker: PromptOutcomeTracker? = promptLibrary?.let { PromptOutcomeTrackers.forLibrary(it) },
     capabilityProviders: List<CapabilityProvider> = emptyList(),
     capabilityExecutors: Map<String, ActionExecutor> = emptyMap(),
     private val apiKeyAvailable: () -> Boolean = { true },
