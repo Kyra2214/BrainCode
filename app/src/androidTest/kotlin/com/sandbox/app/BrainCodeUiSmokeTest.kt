@@ -1,5 +1,6 @@
 package com.sandbox.app
 
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -19,6 +20,16 @@ class BrainCodeUiSmokeTest {
     fun mainChatIsVisible() {
         composeRule.onNodeWithText("BrainCode").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Configurações").assertIsDisplayed()
+    }
+
+    @Test
+    fun settingsNavigationShowsExtensionsWithoutLegacyToolchainsTab() {
+        composeRule.onNodeWithContentDescription("Configurações").performClick()
+        composeRule.onNodeWithText("Configurações do projeto").assertIsDisplayed()
+        composeRule.onNodeWithText("Extensões").performClick()
+        composeRule.onNodeWithText("Tools").assertIsDisplayed()
+        composeRule.onNodeWithText("Plugins").assertIsDisplayed()
+        composeRule.onNodeWithText("Toolchains").assertDoesNotExist()
     }
 
     @Test
