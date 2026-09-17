@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -115,19 +116,9 @@ fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
             TaskSidebar(viewModel, onClose = { sidebarOpen = false })
         } else {
             if (searchOpen) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { searchOpen = false; query = "" }, modifier = Modifier.weight(0.28f)) { Text("← Voltar") }
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        label = { Text("Buscar na thread") },
-                        modifier = Modifier.weight(0.72f),
-                        singleLine = true
-                    )
+                    OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("Buscar na thread") }, modifier = Modifier.weight(0.72f), singleLine = true)
                 }
             }
             StatusSection(viewModel)
@@ -150,12 +141,8 @@ fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
                 }
             } else {
                 SelectionContainer {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(events, key = { event -> eventKey(event) }) { event -> ThreadEventCard(event, viewModel) }
+                    LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        itemsIndexed(events, key = { index, event -> eventKey(event, index) }) { _, event -> ThreadEventCard(event, viewModel) }
                     }
                 }
             }
@@ -164,7 +151,8 @@ fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
     }
 }
 
-private fun eventKey(event: ThreadEvent): String = when (event) {
+/** The index prevents duplicate-content events from colliding in LazyColumn. */
+private fun eventKey(event: ThreadEvent, index: Int): String = "$index:${when (event) {
     is ThreadEvent.User -> "user:${event.text.hashCode()}"
     is ThreadEvent.Agent -> "agent:${event.text.hashCode()}"
     is ThreadEvent.Terminal -> "terminal:${event.execution?.executionId ?: event.result.hashCode()}"
@@ -172,7 +160,7 @@ private fun eventKey(event: ThreadEvent): String = when (event) {
     is ThreadEvent.Report -> "report:${event.title}:${event.body.hashCode()}"
     is ThreadEvent.Diff -> "diff:${event.files.joinToString { it.path }.hashCode()}"
     is ThreadEvent.System -> "system:${event.text}:${event.progress}"
-}
+}}"
 
 private fun threadEvents(viewModel: SandboxViewModel, query: String = ""): List<ThreadEvent> = buildList {
     addAll(viewModel.activeThreadEvents)
@@ -195,14 +183,7 @@ private fun eventText(event: ThreadEvent): String = when (event) {
 }
 
 @Composable
-private fun ThreadTopBar(
-    viewModel: SandboxViewModel,
-    searchOpen: Boolean,
-    onToggleSidebar: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onSearch: () -> Unit,
-    onClearChat: () -> Unit
-) {
+private fun ThreadTopBar(viewModel: SandboxViewModel, searchOpen: Boolean, onToggleSidebar: () -> Unit, onOpenSettings: () -> Unit, onSearch: () -> Unit, onClearChat: () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onToggleSidebar) { Icon(Icons.Default.Menu, contentDescription = "Tarefas") }
@@ -211,13 +192,7 @@ private fun ThreadTopBar(
                 Text("Converse. Execute. Comprove.", style = MaterialTheme.typography.bodySmall, maxLines = 1)
             }
             val phaseColor = if (viewModel.phase is SandboxPhase.Blocked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = phaseColor,
-                shape = MaterialTheme.shapes.small
-            ) {
-                Text(phaseLabel(viewModel.phase), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp))
-            }
+            Surface(color = MaterialTheme.colorScheme.surfaceVariant, contentColor = phaseColor, shape = MaterialTheme.shapes.small) { Text(phaseLabel(viewModel.phase), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)) }
             IconButton(onClick = onSearch) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, contentDescription = if (searchOpen) "Fechar busca" else "Buscar") }
             IconButton(onClick = onClearChat) { Icon(Icons.Default.Delete, contentDescription = "Limpar chat") }
             IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, contentDescription = "Configurações") }
@@ -230,10 +205,7 @@ private fun TaskSidebar(viewModel: SandboxViewModel, onClose: () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Tarefas", style = MaterialTheme.typography.titleMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Button(onClick = { viewModel.createSession() }) { Text("+ Nova") }
-                TextButton(onClick = onClose) { Text("Thread") }
-            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Button(onClick = { viewModel.createSession() }) { Text("+ Nova") }; TextButton(onClick = onClose) { Text("Thread") } }
         }
         viewModel.sessionSummaries.forEach { session ->
             Card(onClick = { viewModel.switchSession(session.id); onClose() }, modifier = Modifier.fillMaxWidth()) {
@@ -263,11 +235,7 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
     val context = LocalContext.current
     fun copy(text: String) { clipboard.setText(AnnotatedString(text)); Toast.makeText(context, "Copiado", Toast.LENGTH_SHORT).show() }
     when (event) {
-        is ThreadEvent.User -> Row(modifier = Modifier.fillMaxWidth().combinedClickable(onClick = { viewModel.quoteEvent(event) }, onLongClick = { viewModel.quoteEvent(event) }), horizontalArrangement = Arrangement.End) {
-            Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) {
-                Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
-            }
-        }
+        is ThreadEvent.User -> Row(modifier = Modifier.fillMaxWidth().combinedClickable(onClick = { viewModel.quoteEvent(event) }, onLongClick = { viewModel.quoteEvent(event) }), horizontalArrangement = Arrangement.End) { Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) { Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) } }
         is ThreadEvent.Agent -> Column(modifier = Modifier.fillMaxWidth().combinedClickable(onClick = { viewModel.quoteEvent(event) }, onLongClick = { viewModel.quoteEvent(event) }), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val blocks = extractCodeBlocks(event.text)
             if (blocks.isEmpty()) Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
@@ -278,71 +246,26 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
                     if (prose.isNotEmpty()) Text(prose, style = MaterialTheme.typography.bodyMedium)
                     val language = match.groupValues[1].trim().ifBlank { "arquivo" }
                     val code = match.groupValues[2].trimEnd()
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Text(language, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-                                TextButton(onClick = { copy(code) }) { Text("Copiar") }
-                            }
-                            SelectionContainer { Text(code, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) }
-                        }
-                    }
+                    Card(modifier = Modifier.fillMaxWidth()) { Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text(language, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f)); TextButton(onClick = { copy(code) }) { Text("Copiar") } }; SelectionContainer { Text(code, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) } } }
                     cursor = match.range.last + 1
                 }
                 val tail = event.text.substring(cursor).trim()
                 if (tail.isNotEmpty()) Text(tail, style = MaterialTheme.typography.bodyMedium)
             }
         }
-        is ThreadEvent.System -> Card {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(event.text, color = if (event.text.contains("bloqueado", true)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-                event.progress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }
-                if (viewModel.phase is SandboxPhase.Blocked) OutlinedButton(onClick = { viewModel.prepareSandbox() }) { Text("Tentar de novo") }
-            }
-        }
+        is ThreadEvent.System -> Card { Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text(event.text, color = if (event.text.contains("bloqueado", true)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant); event.progress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }; if (viewModel.phase is SandboxPhase.Blocked) OutlinedButton(onClick = { viewModel.prepareSandbox() }) { Text("Tentar de novo") } } }
         is ThreadEvent.Terminal -> Card {
-            val terminalText = buildString {
-                append("$ "); append(event.execution?.command?.joinToString(" ") ?: ""); append("\nexit="); append(event.execution?.exitCode ?: event.result.exitCode)
-                if (event.result.stdout.isNotEmpty()) { append("\n\n[stdout]\n"); append(event.result.stdout) }
-                if (event.result.stderr.isNotEmpty()) { append("\n\n[stderr]\n"); append(event.result.stderr) }
-            }
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Terminal · ${if (event.result.exitCode == 0) "sucesso" else "falha"}", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { copy(terminalText) }) { Text("Copiar") }
-                }
-                event.execution?.let { Text("${it.durationMs} ms · ${it.terminationReason.name}", style = MaterialTheme.typography.labelSmall) }
-                SelectionContainer { Text(terminalText, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) }
-            }
+            val terminalText = buildString { append("$ "); append(event.execution?.command?.joinToString(" ") ?: ""); append("\nexit="); append(event.execution?.exitCode ?: event.result.exitCode); if (event.result.stdout.isNotEmpty()) { append("\n\n[stdout]\n"); append(event.result.stdout) }; if (event.result.stderr.isNotEmpty()) { append("\n\n[stderr]\n"); append(event.result.stderr) } }
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("Terminal · ${if (event.result.exitCode == 0) "sucesso" else "falha"}", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f)); TextButton(onClick = { copy(terminalText) }) { Text("Copiar") } }; event.execution?.let { Text("${it.durationMs} ms · ${it.terminationReason.name}", style = MaterialTheme.typography.labelSmall) }; SelectionContainer { Text(terminalText, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) } }
         }
-        is ThreadEvent.Approval -> Card {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Aprovação necessária", color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.titleSmall)
-                Text("ID: ${event.id.take(24)}…", style = MaterialTheme.typography.bodySmall)
-                Button(onClick = { viewModel.approveAndResume() }) { Text("Aprovar e retomar") }
-            }
-        }
-        is ThreadEvent.Report -> Card {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(event.title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { copy(event.body) }) { Text("Copiar") }
-                }
-                Text(event.body, fontFamily = if (event.title == "Git status") FontFamily.Monospace else FontFamily.Default, style = MaterialTheme.typography.bodySmall)
-            }
-        }
+        is ThreadEvent.Approval -> Card { Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("Aprovação necessária", color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.titleSmall); Text("ID: ${event.id.take(24)}…", style = MaterialTheme.typography.bodySmall); Button(onClick = { viewModel.approveAndResume() }) { Text("Aprovar e retomar") } } }
+        is ThreadEvent.Report -> Card { Column(modifier = Modifier.padding(12.dp)) { Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text(event.title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f)); TextButton(onClick = { copy(event.body) }) { Text("Copiar") } }; Text(event.body, fontFamily = if (event.title == "Git status") FontFamily.Monospace else FontFamily.Default, style = MaterialTheme.typography.bodySmall) } }
         is ThreadEvent.Diff -> Card {
             var expanded by remember(event.files) { mutableStateOf(false) }
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Git diff · ${event.files.size} arquivo(s)", style = MaterialTheme.typography.titleSmall)
                 val files = if (expanded) event.files else event.files.take(3)
-                files.forEach { file ->
-                    Text(file.path, style = MaterialTheme.typography.labelMedium)
-                    val lines = if (expanded) file.lines else file.lines.take(12)
-                    lines.forEach { line ->
-                        Text("${line.prefix}${line.text}", color = if (line.prefix == '+') MaterialTheme.colorScheme.primary else if (line.prefix == '-') MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
+                files.forEach { file -> Text(file.path, style = MaterialTheme.typography.labelMedium); val lines = if (expanded) file.lines else file.lines.take(12); lines.forEach { line -> Text("${line.prefix}${line.text}", color = if (line.prefix == '+') MaterialTheme.colorScheme.primary else if (line.prefix == '-') MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) } }
                 TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Recolher" else "Mostrar diff completo") }
             }
         }
@@ -355,9 +278,7 @@ private fun ThreadComposer(viewModel: SandboxViewModel) {
         val input = viewModel.chatInput
         if (viewModel.phase == SandboxPhase.Ready && input.startsWith("/")) {
             val matches = viewModel.sugestoesDeComando.filter { it.startsWith(input, ignoreCase = true) && it != input }.take(30)
-            if (matches.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(matches, key = { it }) { command -> AssistChip(onClick = { viewModel.chatInput = command }, label = { Text(command) }) }
-            }
+            if (matches.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(matches, key = { it }) { command -> AssistChip(onClick = { viewModel.chatInput = command }, label = { Text(command) }) } }
         }
         val enabled = !viewModel.chatRunning && viewModel.phase == SandboxPhase.Ready
         val canSend = viewModel.chatInput.isNotBlank() && viewModel.phase == SandboxPhase.Ready
@@ -367,11 +288,8 @@ private fun ThreadComposer(viewModel: SandboxViewModel) {
                     if (viewModel.chatInput.isEmpty()) Text(if (viewModel.chatRunning) "Executando…" else "Descreva a tarefa ou use /comando", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     BasicTextField(value = viewModel.chatInput, onValueChange = { viewModel.chatInput = it }, enabled = enabled, modifier = Modifier.fillMaxWidth(), textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface), cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), maxLines = 6)
                 }
-                if (viewModel.chatRunning) {
-                    FilledIconButton(onClick = { viewModel.cancelCommand() }, shape = CircleShape, colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.error)) { Icon(Icons.Filled.Stop, contentDescription = "Parar") }
-                } else {
-                    FilledIconButton(onClick = { viewModel.submitThreadInput() }, enabled = canSend, shape = CircleShape) { Icon(Icons.Filled.ArrowUpward, contentDescription = "Enviar") }
-                }
+                if (viewModel.chatRunning) FilledIconButton(onClick = { viewModel.cancelCommand() }, shape = CircleShape, colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.error)) { Icon(Icons.Filled.Stop, contentDescription = "Parar") }
+                else FilledIconButton(onClick = { viewModel.submitThreadInput() }, enabled = canSend, shape = CircleShape) { Icon(Icons.Filled.ArrowUpward, contentDescription = "Enviar") }
             }
         }
     }
