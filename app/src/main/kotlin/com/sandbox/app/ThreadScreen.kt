@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -28,14 +29,15 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -47,6 +49,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,21 +78,40 @@ private data class CodeBlock(val language: String, val code: String)
 
 private fun extractCodeBlocks(text: String): List<CodeBlock> {
     val regex = Regex("```([^\\n]*)\\n([\\s\\S]*?)```")
-    return regex.findAll(text).map { match ->
-        CodeBlock(match.groupValues[1].trim(), match.groupValues[2].trimEnd())
-    }.toList()
+    return regex.findAll(text).map { CodeBlock(it.groupValues[1].trim(), it.groupValues[2].trimEnd()) }.toList()
 }
 
 @Composable
 fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
-    var sidebarOpen by remember { mutableStateOf(false) }
-    var searchOpen by remember { mutableStateOf(false) }
-    var query by remember { mutableStateOf("") }
+    var sidebarOpen by rememberSaveable { mutableStateOf(false) }
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var confirmClear by rememberSaveable { mutableStateOf(false) }
 
-    // O IME deve deslocar somente o composer. Se o imePadding ficar no
-    // container raiz, toda a thread (inclusive top bar) é empurrada para cima.
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text("Limpar conversa?") },
+            text = { Text("A conversa ativa será removida da sessão atual. Essa ação não pode ser desfeita.") },
+            confirmButton = {
+                Button(onClick = { confirmClear = false; viewModel.clearActiveSession() }) { Text("Limpar") }
+            },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancelar") } }
+        )
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
-        ThreadTopBar(viewModel, searchOpen = searchOpen, onToggleSidebar = { sidebarOpen = !sidebarOpen }, onOpenSettings = onOpenSettings, onSearch = { searchOpen = !searchOpen })
+        ThreadTopBar(
+            viewModel = viewModel,
+            searchOpen = searchOpen,
+            onToggleSidebar = { sidebarOpen = !sidebarOpen },
+            onOpenSettings = onOpenSettings,
+            onSearch = {
+                searchOpen = !searchOpen
+                if (!searchOpen) query = ""
+            },
+            onClearChat = { confirmClear = true }
+        )
         if (sidebarOpen) {
             TaskSidebar(viewModel, onClose = { sidebarOpen = false })
         } else {
@@ -99,15 +121,20 @@ fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedButton(onClick = { searchOpen = false }, modifier = Modifier.weight(0.28f)) { Text("← Voltar") }
+                    OutlinedButton(onClick = { searchOpen = false; query = "" }, modifier = Modifier.weight(0.28f)) { Text("← Voltar") }
                     OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("Buscar na thread") }, modifier = Modifier.weight(0.72f), singleLine = true)
                 }
             }
             StatusSection(viewModel)
             val events = threadEvents(viewModel, query)
-            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+            val listState = rememberLazyListState()
             androidx.compose.runtime.LaunchedEffect(events.size) {
-                if (events.isNotEmpty()) listState.animateScrollToItem(events.size - 1)
+                if (events.isNotEmpty()) {
+                    val visible = listState.layoutInfo.visibleItemsInfo
+                    val lastVisible = visible.maxOfOrNull { it.index } ?: -1
+                    val nearEnd = lastVisible >= events.lastIndex - 2
+                    if (nearEnd) listState.animateScrollToItem(events.lastIndex)
+                }
             }
             SelectionContainer {
                 LazyColumn(
@@ -125,22 +152,12 @@ fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
 
 private fun threadEvents(viewModel: SandboxViewModel, query: String = ""): List<ThreadEvent> = buildList {
     addAll(viewModel.activeThreadEvents)
-    if (viewModel.phase == SandboxPhase.Running && viewModel.liveTerminalOutput.isNotBlank()) {
-        add(ThreadEvent.Report("Terminal · ao vivo", viewModel.liveTerminalOutput))
-    }
-    viewModel.lastExecution?.let { execution ->
-        viewModel.lastResult?.let { add(ThreadEvent.Terminal(it, execution)) }
-    }
+    if (viewModel.phase == SandboxPhase.Running && viewModel.liveTerminalOutput.isNotBlank()) add(ThreadEvent.Report("Terminal · ao vivo", viewModel.liveTerminalOutput))
+    viewModel.lastExecution?.let { execution -> viewModel.lastResult?.let { add(ThreadEvent.Terminal(it, execution)) } }
     viewModel.pendingApprovalId?.let { add(ThreadEvent.Approval(it)) }
-    if (viewModel.activeThreadEvents.none { it is ThreadEvent.Report && it.title == "TestLab" }) {
-        viewModel.lastTestLabReport?.let { add(ThreadEvent.Report("TestLab", "${if (it.success) "PASS" else "FAIL"} — ${it.passed}/${it.steps.size} etapas")) }
-    }
-    if (viewModel.activeThreadEvents.none { it is ThreadEvent.Report && it.title == "Security gate" }) {
-        viewModel.lastSecurityAssessment?.let { add(ThreadEvent.Report("Security gate", "${if (it.readiness.ready) "APROVADO" else "BLOQUEADO"} — ${it.findings.size} achado(s)")) }
-    }
-    if (viewModel.activeThreadEvents.none { it is ThreadEvent.Report && it.title == "Git status" }) {
-        viewModel.lastGitStatus?.let { add(ThreadEvent.Report("Git status", it)) }
-    }
+    if (viewModel.activeThreadEvents.none { it is ThreadEvent.Report && it.title == "TestLab" }) viewModel.lastTestLabReport?.let { add(ThreadEvent.Report("TestLab", "${if (it.success) "PASS" else "FAIL"} — ${it.passed}/${it.steps.size} etapas")) }
+    if (viewModel.activeThreadEvents.none { it is ThreadEvent.Report && it.title == "Security gate" }) viewModel.lastSecurityAssessment?.let { add(ThreadEvent.Report("Security gate", "${if (it.readiness.ready) "APROVADO" else "BLOQUEADO"} — ${it.findings.size} achado(s)")) }
+    if (viewModel.activeThreadEvents.none { it is ThreadEvent.Report && it.title == "Git status" }) viewModel.lastGitStatus?.let { add(ThreadEvent.Report("Git status", it)) }
 }.filter { query.isBlank() || eventText(it).contains(query, ignoreCase = true) }
 
 private fun eventText(event: ThreadEvent): String = when (event) {
@@ -154,11 +171,15 @@ private fun eventText(event: ThreadEvent): String = when (event) {
 }
 
 @Composable
-private fun ThreadTopBar(viewModel: SandboxViewModel, searchOpen: Boolean, onToggleSidebar: () -> Unit, onOpenSettings: () -> Unit, onSearch: () -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
-    ) {
+private fun ThreadTopBar(
+    viewModel: SandboxViewModel,
+    searchOpen: Boolean,
+    onToggleSidebar: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onSearch: () -> Unit,
+    onClearChat: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onToggleSidebar) { Icon(Icons.Default.Menu, contentDescription = "Tarefas") }
             Column(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
@@ -166,14 +187,14 @@ private fun ThreadTopBar(viewModel: SandboxViewModel, searchOpen: Boolean, onTog
                 Text("Converse. Execute. Comprove.", style = MaterialTheme.typography.bodySmall, maxLines = 1)
             }
             AssistChip(
-                onClick = { viewModel.runDiagnostics() },
+                onClick = {},
                 label = { Text(phaseLabel(viewModel.phase)) },
                 colors = AssistChipDefaults.assistChipColors(
                     labelColor = if (viewModel.phase is SandboxPhase.Blocked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             )
             IconButton(onClick = onSearch) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, contentDescription = if (searchOpen) "Fechar busca" else "Buscar") }
-            IconButton(onClick = { viewModel.clearActiveSession() }) { Icon(Icons.Default.Delete, contentDescription = "Limpar chat") }
+            IconButton(onClick = onClearChat) { Icon(Icons.Default.Delete, contentDescription = "Limpar chat") }
             IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, contentDescription = "Configurações") }
         }
     }
@@ -217,25 +238,15 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
     val context = LocalContext.current
     fun copy(text: String) { clipboard.setText(AnnotatedString(text)); Toast.makeText(context, "Copiado", Toast.LENGTH_SHORT).show() }
     when (event) {
-        is ThreadEvent.User -> Row(
-            modifier = Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = { viewModel.quoteEvent(event) }),
-            horizontalArrangement = Arrangement.End
-        ) {
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = MaterialTheme.shapes.medium
-            ) {
+        is ThreadEvent.User -> Row(modifier = Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = { viewModel.quoteEvent(event) }), horizontalArrangement = Arrangement.End) {
+            Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) {
                 Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
             }
         }
-        is ThreadEvent.Agent -> Column(
-            modifier = Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = { viewModel.quoteEvent(event) }),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        is ThreadEvent.Agent -> Column(modifier = Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = { viewModel.quoteEvent(event) }), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val blocks = extractCodeBlocks(event.text)
-            if (blocks.isEmpty()) {
-                Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
-            } else {
+            if (blocks.isEmpty()) Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
+            else {
                 var cursor = 0
                 Regex("```([^\\n]*)\\n([\\s\\S]*?)```").findAll(event.text).forEach { match ->
                     val prose = event.text.substring(cursor, match.range.first).trim()
@@ -266,18 +277,9 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
         }
         is ThreadEvent.Terminal -> Card {
             val terminalText = buildString {
-                append("$ ")
-                append(event.execution?.command?.joinToString(" ") ?: "")
-                append("\nexit=")
-                append(event.execution?.exitCode ?: event.result.exitCode)
-                if (event.result.stdout.isNotEmpty()) {
-                    append("\n\n[stdout]\n")
-                    append(event.result.stdout)
-                }
-                if (event.result.stderr.isNotEmpty()) {
-                    append("\n\n[stderr]\n")
-                    append(event.result.stderr)
-                }
+                append("$ "); append(event.execution?.command?.joinToString(" ") ?: ""); append("\nexit="); append(event.execution?.exitCode ?: event.result.exitCode)
+                if (event.result.stdout.isNotEmpty()) { append("\n\n[stdout]\n"); append(event.result.stdout) }
+                if (event.result.stderr.isNotEmpty()) { append("\n\n[stderr]\n"); append(event.result.stderr) }
             }
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -290,7 +292,7 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
         }
         is ThreadEvent.Approval -> Card {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Aprovação necessária", color = androidx.compose.ui.graphics.Color(0xFFFFB300), style = MaterialTheme.typography.titleSmall)
+                Text("Aprovação necessária", color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.titleSmall)
                 Text("ID: ${event.id.take(24)}…", style = MaterialTheme.typography.bodySmall)
                 Button(onClick = { viewModel.approveAndResume() }) { Text("Aprovar e retomar") }
             }
@@ -313,7 +315,7 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
                     Text(file.path, style = MaterialTheme.typography.labelMedium)
                     val lines = if (expanded) file.lines else file.lines.take(12)
                     lines.forEach { line ->
-                        Text("${line.prefix}${line.text}", color = if (line.prefix == '+') androidx.compose.ui.graphics.Color(0xFF4CAF50) else if (line.prefix == '-') MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                        Text("${line.prefix}${line.text}", color = if (line.prefix == '+') MaterialTheme.colorScheme.primary else if (line.prefix == '-') MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Recolher" else "Mostrar diff completo") }
@@ -322,69 +324,30 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
     }
 }
 
-/** Composer no estilo do app do Claude: campo em pílula arredondada com botão de envio circular embutido, sem rótulo nem botão "Enviar" em linha separada. */
 @Composable
 private fun ThreadComposer(viewModel: SandboxViewModel) {
-    Column(
-        modifier = Modifier.fillMaxWidth().imePadding().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
+    Column(modifier = Modifier.fillMaxWidth().imePadding().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         val input = viewModel.chatInput
         if (viewModel.phase == SandboxPhase.Ready && input.startsWith("/")) {
             val matches = viewModel.sugestoesDeComando.filter { it.startsWith(input, ignoreCase = true) && it != input }.take(30)
-            if (matches.isNotEmpty()) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(matches) { command -> AssistChip(onClick = { viewModel.chatInput = command }, label = { Text(command) }) }
-                }
+            if (matches.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(matches) { command -> AssistChip(onClick = { viewModel.chatInput = command }, label = { Text(command) }) }
             }
         }
         val enabled = !viewModel.chatRunning && viewModel.phase == SandboxPhase.Ready
         val canSend = viewModel.chatInput.isNotBlank() && viewModel.phase == SandboxPhase.Ready
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 2.dp,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.padding(start = 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
+        Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
+            Row(modifier = Modifier.padding(start = 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Box(modifier = Modifier.weight(1f).heightIn(min = 40.dp).padding(vertical = 8.dp)) {
-                    if (viewModel.chatInput.isEmpty()) {
-                        Text(
-                            if (viewModel.chatRunning) "Executando…" else "Descreva a tarefa ou use /comando",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    BasicTextField(
-                        value = viewModel.chatInput,
-                        onValueChange = { viewModel.chatInput = it },
-                        enabled = enabled,
-                        modifier = Modifier.fillMaxWidth(),
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        maxLines = 6
-                    )
+                    if (viewModel.chatInput.isEmpty()) Text(if (viewModel.chatRunning) "Executando…" else "Descreva a tarefa ou use /comando", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    BasicTextField(value = viewModel.chatInput, onValueChange = { viewModel.chatInput = it }, enabled = enabled, modifier = Modifier.fillMaxWidth(), textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface), cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), maxLines = 6)
                 }
                 if (viewModel.chatRunning) {
-                    FilledIconButton(
-                        onClick = { viewModel.cancelCommand() },
-                        shape = CircleShape,
-                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) { Icon(Icons.Filled.Stop, contentDescription = "Parar") }
+                    FilledIconButton(onClick = { viewModel.cancelCommand() }, shape = CircleShape, colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.error)) { Icon(Icons.Filled.Stop, contentDescription = "Parar") }
                 } else {
-                    FilledIconButton(
-                        onClick = { viewModel.submitThreadInput() },
-                        enabled = canSend,
-                        shape = CircleShape
-                    ) { Icon(Icons.Filled.ArrowUpward, contentDescription = "Enviar") }
+                    FilledIconButton(onClick = { viewModel.submitThreadInput() }, enabled = canSend, shape = CircleShape) { Icon(Icons.Filled.ArrowUpward, contentDescription = "Enviar") }
                 }
             }
         }
     }
 }
-
-// Lista de sugestões agora vem de viewModel.sugestoesDeComando (operacionais + catálogo /comandos, ver SandboxViewModel.kt).
