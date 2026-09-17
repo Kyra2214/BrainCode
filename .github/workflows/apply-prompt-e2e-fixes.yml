@@ -1,0 +1,222 @@
+name: Apply Prompt E2E Fixes
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/apply-prompt-e2e-fixes.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair-test-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Apply five prompt E2E fixes and regression tests
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"pattern not found in {path}: {old[:120]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          # 1) Prompt-domain classification: generic text prompts must not become image prompts.
+          replace_once(
+              "brain/src/main/kotlin/com/brain/prompt/PromptDomain.kt",
+              '''                texto.containsAny(\n                    " prompt de uma ", " prompt de um ", " prompt para uma ", " prompt para um ",\n                    " prompt para criar ", " prompt para gerar ", " prompt para fazer ", " prompt de imagem "\n                ) -> IMAGEM''',
+              '''                texto.containsAny(\n                    " prompt de uma ", " prompt de um ", " prompt para uma ", " prompt para um ",\n                    " prompt para criar ", " prompt para gerar ", " prompt para fazer ", " prompt de imagem "\n                ) && !texto.containsAny(\n                    "resumo", "resumir", "reunião", "reuniao", "relatório", "relatorio",\n                    "documento", "texto", "email", "e-mail", "redação", "redacao", "ensaio", "artigo"\n                ) -> IMAGEM'''
+          )
+
+          # 2) Preserve the original user objective at the planner boundary. The classifier is
+          # allowed to classify, but its Intent.objective must never replace the source objective.
+          replace_once(
+              "android-module/src/main/kotlin/com/sandbox/agent/BrainSandboxController.kt",
+              '        val basePlan = runBlockingPlanner { planner.planejar(classification.intent.objective) }',
+              '''        emit(runId, "reasoning", "IntentClassified", mapOf(\n            "intent" to classification.intent.name,\n            "plannerObjective" to objective.take(500),\n            "requiresDecomposition" to classification.requiresDecomposition.toString(),\n            "requiresLlm" to classification.requiresLlm.toString()\n        ))\n        val basePlan = runBlockingPlanner { planner.planejar(objective) }'''
+          )
+
+          # 3) Expose structured operational evidence at the step boundary without exposing hidden CoT.
+          replace_once(
+              "android-module/src/main/kotlin/com/sandbox/agent/BrainSandboxController.kt",
+              '''                                "status" to passo.status.name,\n                                "motivo" to (passo.motivo ?: "")''',
+              '''                                "status" to passo.status.name,\n                                "capacidade" to (passo.capacidade ?: ""),\n                                "evidencias" to passo.evidencias.size.toString(),\n                                "researchSources" to passo.researchSources.size.toString(),\n                                "motivo" to (passo.motivo ?: "")'''
+          )
+
+          # 4) A second send during an active turn is no longer silently discarded.
+          replace_once(
+              "app/src/main/kotlin/com/sandbox/app/SandboxViewModel.kt",
+              '        val prompt = chatInput.trim(); if (prompt.isEmpty() || chatRunning) return',
+              '''        val prompt = chatInput.trim()\n        if (prompt.isEmpty()) return\n        if (chatRunning) {\n            chatMessages.add(ChatMessage(ChatRole.ERROR, "A tarefa anterior ainda está em execução. Aguarde a resposta antes de enviar outra solicitação."))\n            return\n        }'''
+          )
+
+          # 5) Add a deterministic JVM E2E contract that covers creation, refinement and persistence.
+          Path("app/src/test/kotlin/com/sandbox/app/PromptCreationE2EContractTest.kt").write_text(r'''package com.sandbox.app
+
+import com.brain.capability.CapabilityAvailability
+import com.brain.capability.CapabilityCategory
+import com.brain.capability.CapabilityDefinition
+import com.brain.capability.CapabilityProvenance
+import com.brain.execution.RiskClass
+import com.brain.gateway.ActionRequest
+import com.brain.policy.ApprovalRequired
+import com.brain.policy.Decision
+import com.brain.policy.PolicyContext
+import com.brain.policy.PolicyDecision
+import com.brain.prompt.PromptDomain
+import com.brain.prompt.PromptImprover
+import com.brain.prompt.PromptLibrary
+import com.brain.prompt.PromptTemplate
+import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class PromptCreationE2EContractTest {
+    private class Library : PromptLibrary {
+        val saved = ConcurrentHashMap<String, PromptTemplate>()
+        override suspend fun buscarPorContexto(contextoDeUso: String): List<PromptTemplate> = saved.values.toList()
+        override suspend fun salvarNovaVersao(template: PromptTemplate): String { saved[template.id] = template; return template.id }
+        override suspend fun registrarResultado(templateId: String, sucesso: Boolean, custo: Double, tempoMs: Long) = Unit
+        override suspend fun aposentar(templateId: String): Boolean = saved.remove(templateId) != null
+    }
+
+    private val capability = CapabilityDefinition(
+        id = "prompt.library.generate", name = "prompt.library.generate", description = "test",
+        category = CapabilityCategory.SANDBOX, ownerId = "test", origin = "test",
+        providedCapabilities = setOf("prompt.library.write"), availability = CapabilityAvailability.AVAILABLE,
+        provenance = listOf(CapabilityProvenance("test", "PromptCreationE2EContractTest"))
+    )
+    private val decision = PolicyDecision(
+        decisionId = "d", runId = "r", taskId = "t", actor = "test",
+        capability = "prompt.library.generate", riskClass = RiskClass.MEDIUM,
+        decision = Decision.ALLOW, approvalRequired = ApprovalRequired.NONE,
+        sandboxRequired = false, networkAllowed = true, filesystemRoots = emptyList(), budget = emptyMap(),
+        expiresAt = Instant.now().plusSeconds(60).toString(), reason = "test"
+    )
+
+    private fun request(text: String) = ActionRequest(
+        actionId = "prompt-e2e", actor = "test", capability = "prompt.library.generate",
+        parameters = mapOf("parameter.0" to text),
+        context = PolicyContext(runId = "r", taskId = "t", actor = "test")
+    )
+
+    @Test
+    fun imagePromptNeverFallsIntoCodeTemplateAndIsPersisted() {
+        val library = Library()
+        val executor = PromptGenerationExecutor(library, PromptImprover { _, _ -> error("no api") })
+        val request = request("quero um prompt para criar uma imagem de um foguete decolando em um deserto no entardecer com vários meteoros caindo")
+        val execution = executor.execute(request, capability, decision)
+
+        assertTrue(execution.success)
+        assertTrue(execution.result.orEmpty().contains("Fotografia") || execution.result.orEmpty().contains("foguete"))
+        assertTrue(!execution.result.orEmpty().contains("TAREFA DE CÓDIGO"))
+        assertTrue(library.saved.isNotEmpty())
+    }
+
+    @Test
+    fun genericTextPromptRemainsTextDomain() {
+        val domain = PromptDomain.classificar("Escreva um prompt para gerar um resumo executivo de reunião")
+        assertEquals(PromptDomain.TEXTO, domain)
+    }
+
+    @Test
+    fun explicitRefinementChangesEnvironmentAndPersistsFinalVersion() {
+        val library = Library()
+        val executor = PromptGenerationExecutor(library, PromptImprover { _, _ -> error("no api") })
+        val previous = "Fotografia fotorrealista de um foguete espacial decolando, ambientado em céu estrelado ao fundo."
+        val objective = "Objetivo atual: agora quero o fundo no deserto e vários meteoros caindo\nReferências resolvidas:\n- artefato anterior: $previous"
+        val execution = executor.execute(request(objective), capability, decision)
+
+        assertTrue(execution.success)
+        assertTrue(execution.result.orEmpty().contains("deserto"))
+        assertTrue(execution.result.orEmpty().contains("meteoros"))
+        assertTrue(library.saved.values.any { it.textoTemplate.contains("deserto") && it.textoTemplate.contains("meteoros") })
+    }
+}
+''')
+
+          # Android instrumentation regression: the second turn must be visible to the user,
+          # not silently dropped while the first turn is running.
+          Path("app/src/androidTest/kotlin/com/sandbox/app/PromptLifecycleInstrumentedTest.kt").write_text(r'''package com.sandbox.app
+
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+
+@RunWith(AndroidJUnit4::class)
+class PromptLifecycleInstrumentedTest {
+    @Test
+    fun secondChatTurnIsNotSilentlyDropped() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val vm = SandboxViewModel(context.applicationContext as android.app.Application)
+        vm.chatInput = "primeira solicitação"
+        vm.sendChatMessage()
+        vm.chatInput = "segunda solicitação"
+        vm.sendChatMessage()
+
+        assertTrue(vm.chatMessages.any {
+            it.role == ChatRole.ERROR && it.content.contains("tarefa anterior ainda está em execução")
+        })
+    }
+}
+''')
+
+      - name: Run JVM tests and build/lint
+        run: |
+          chmod +x ./gradlew
+          ./gradlew test :app:assembleDebug :app:lint --no-daemon --stacktrace
+
+      - name: Run Android instrumentation E2E
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: Pixel_2
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          disable-animations: true
+          script: ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace
+
+      - name: Commit verified source changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add brain/src/main/kotlin/com/brain/prompt/PromptDomain.kt android-module/src/main/kotlin/com/sandbox/agent/BrainSandboxController.kt app/src/main/kotlin/com/sandbox/app/SandboxViewModel.kt app/src/test/kotlin/com/sandbox/app/PromptCreationE2EContractTest.kt app/src/androidTest/kotlin/com/sandbox/app/PromptLifecycleInstrumentedTest.kt
+          git diff --cached --check
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: close prompt creation e2e lifecycle"
+          git push origin main
+
+      - name: Upload E2E reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BrainCode-prompt-e2e-${{ github.sha }}
+          path: |
+            **/build/test-results/**
+            **/build/reports/tests/**
+            **/build/reports/androidTests/**
+            **/build/outputs/apk/**
+          if-no-files-found: ignore
+          retention-days: 14
