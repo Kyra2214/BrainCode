@@ -42,7 +42,7 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
         if ("especificidade" in pontosFracos || "presença de elementos" in pontosFracos) {
             val faltantes = detectarComponentesImagem("$promptAtual $pedidoOriginal $contextoPesquisa")
                 .filterValues { it == null }.keys
-            if (dominio == PromptDomain.IMAGEM && faltantes.isNotEmpty()) {
+            if (faltantes.isNotEmpty()) {
                 melhorado += "\n\n" + faltantes.joinToString("\n") { campo -> "${rotulo(campo)}: ${padraoImagem(campo)}" }
             }
         }
