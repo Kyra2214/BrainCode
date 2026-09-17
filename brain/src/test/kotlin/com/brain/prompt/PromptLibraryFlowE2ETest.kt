@@ -5,7 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** E2E do ciclo operacional da biblioteca: miss -> gravação -> reuse -> feedback -> restart. */
+/** E2E do ciclo operacional da biblioteca: miss -> gravação -> reuse -> feedback real -> restart. */
 class PromptLibraryFlowE2ETest {
     @Test
     fun `fluxo completo preserva prompt gerado aprendizado e reuso apos restart`() {
@@ -24,11 +24,9 @@ class PromptLibraryFlowE2ETest {
             amostrasObservadas = 0
         )
 
-        // 1) Pedido sem compatibilidade suficiente: biblioteca não inventa uma resposta.
         val library = InMemoryPromptLibrary(listOf(seed), storage)
         assertTrue(library.buscarPorContextoSnapshot("aplicativo de controle financeiro").isEmpty())
 
-        // 2) Especialista gera prompt; o executor salvaria antes de devolver ao usuário.
         val generated = PromptTemplate(
             id = "generated-finance",
             versao = 1,
@@ -44,12 +42,10 @@ class PromptLibraryFlowE2ETest {
         )
         runBlockingCompat { library.salvarNovaVersao(generated) }
 
-        // 3) Segunda solicitação encontra o conhecimento recém-salvo.
         val reused = library.buscarPorContextoSnapshot("criar app Android de controle financeiro com SQLite")
             .firstOrNull { it.id == "generated-finance" }
         assertTrue("prompt gerado não foi reutilizável", reused != null)
 
-        // 4) Resultado real alimenta o aprendizado.
         repeat(4) { runBlockingCompat { library.registrarResultado("generated-finance", true, 0.01, 1000L) } }
         runBlockingCompat { library.registrarResultado("generated-finance", false, 0.01, 2000L) }
 
@@ -59,7 +55,6 @@ class PromptLibraryFlowE2ETest {
         assertEquals(0.01, learned.custoMedio, 0.0001)
         assertEquals(1200L, learned.tempoMedioMs)
 
-        // 5) Reinício do processo: aprendizado continua disponível.
         val reloaded = InMemoryPromptLibrary(emptyList(), storage)
         val afterRestart = reloaded.snapshotTemplates().first { it.id == "generated-finance" }
         assertEquals(5, afterRestart.amostrasObservadas)
@@ -67,6 +62,40 @@ class PromptLibraryFlowE2ETest {
         assertEquals(0.01, afterRestart.custoMedio, 0.0001)
         assertEquals(1200L, afterRestart.tempoMedioMs)
         assertTrue(reloaded.buscarPorContextoSnapshot("app controle financeiro SQLite").any { it.id == "generated-finance" })
+
+        storage.delete()
+        File(storage.parentFile, "${storage.name}.stats").delete()
+    }
+
+    @Test
+    fun `uso pendente nao conta como sucesso e feedback real persiste`() {
+        val storage = File.createTempFile("brain-prompt-feedback", ".db").apply { delete() }
+        val template = PromptTemplate("feedback", 1, "gerar prompt", "app financeiro android", "prompt-generation", null, "Crie {OBJETIVO}", 0.5, 0.0, 0L)
+        val library = InMemoryPromptLibrary(listOf(template), storage)
+        val tracker = PromptOutcomeTracker(library)
+
+        tracker.markUsed("step:step", template.id)
+        assertEquals(0, library.snapshotTemplates().first().amostrasObservadas)
+        assertTrue(tracker.recordOutcome("step:step", success = false, cost = 0.02, elapsedMs = 900L))
+
+        val afterFailure = library.snapshotTemplates().first()
+        assertEquals(1, afterFailure.amostrasObservadas)
+        assertEquals(0.0, afterFailure.taxaSucesso, 0.0001)
+        assertEquals(0.02, afterFailure.custoMedio, 0.0001)
+        assertEquals(900L, afterFailure.tempoMedioMs)
+
+        tracker.markUsed("step2:step2", template.id)
+        assertTrue(tracker.recordOutcome("step2:step2", success = true, cost = 0.01, elapsedMs = 700L))
+        val afterSuccess = library.snapshotTemplates().first()
+        assertEquals(2, afterSuccess.amostrasObservadas)
+        assertEquals(0.5, afterSuccess.taxaSucesso, 0.0001)
+        assertEquals(0.015, afterSuccess.custoMedio, 0.0001)
+        assertEquals(800L, afterSuccess.tempoMedioMs)
+
+        val reloaded = InMemoryPromptLibrary(emptyList(), storage)
+        val persisted = reloaded.snapshotTemplates().first { it.id == template.id }
+        assertEquals(2, persisted.amostrasObservadas)
+        assertEquals(0.5, persisted.taxaSucesso, 0.0001)
 
         storage.delete()
         File(storage.parentFile, "${storage.name}.stats").delete()
