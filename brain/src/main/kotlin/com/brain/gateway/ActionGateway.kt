@@ -7,6 +7,7 @@ import com.brain.policy.PolicyBroker
 import com.brain.policy.PolicyContext
 import com.brain.policy.PolicyDecision
 import java.time.Instant
+import com.brain.research.ResearchResult
 import com.brain.observability.ExecutionTrace
 import com.brain.observability.TraceStage
 
@@ -35,6 +36,8 @@ data class ActionExecution(
     val error: String? = null,
     val evidence: List<String> = emptyList(),
     val provenance: List<String> = emptyList(),
+    /** Fontes estruturadas usadas pela ação; ficam separadas do conteúdo exibível. */
+    val researchSources: List<ResearchResult> = emptyList(),
     /** Custo real incorrido por esta ação (0.0 = sem custo, ex.: geração local). Nunca inventado — só
      *  preenchido por executores que sabem o custo real (ex.: escalonamento para IA paga). */
     val custo: Double = 0.0

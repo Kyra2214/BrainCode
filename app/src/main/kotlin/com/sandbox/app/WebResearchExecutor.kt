@@ -50,7 +50,8 @@ class WebResearchExecutor(
             success = true,
             result = contexto,
             evidence = resultados.map { evidenciaDe(it) },
-            provenance = provenance(capability)
+            provenance = provenance(capability),
+            researchSources = resultados
         )
     }
 

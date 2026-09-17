@@ -54,6 +54,8 @@ class WebResearchExecutorTest {
         assertTrue(execution.success)
         assertTrue(execution.result.orEmpty().contains("exemplo.com"))
         assertTrue(execution.evidence.any { it.contains("url=https://exemplo.com/x") })
+        assertTrue(execution.researchSources.single().title == "Guia X")
+        assertTrue(execution.researchSources.single().url == "https://exemplo.com/x")
     }
 
     @Test fun `zero resultados nao vira erro duro`() {

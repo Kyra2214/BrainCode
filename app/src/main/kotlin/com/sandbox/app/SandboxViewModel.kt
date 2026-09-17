@@ -43,6 +43,7 @@ import com.sandbox.runtime.NamespaceSupport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.brain.research.ResearchResult
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -59,7 +60,13 @@ sealed interface SandboxPhase {
 data class QuickCommand(val label: String, val command: String)
 
 enum class ChatRole { USER, ASSISTANT, ERROR, STEP }
-data class ChatMessage(val role: ChatRole, val content: String, val promptActionId: String? = null)
+data class ChatMessage(
+    val role: ChatRole,
+    val content: String,
+    val promptActionId: String? = null,
+    val contentType: GeneratedContentType = GeneratedContentType.TEXT,
+    val researchSources: List<ResearchSourceUi> = emptyList()
+)
 
 enum class SessionStatus { IDLE, RUNNING, AWAITING_APPROVAL, DONE, FAILED, BLOCKED }
 
@@ -607,7 +614,9 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                             viewModelScope.launch(Dispatchers.Main.immediate) { publishStep(passo) }
                         }
                         val promptActionId = cycle.passos.firstOrNull { it.capacidade == "prompt.library.write" }?.actionId
-                        ChatMessage(ChatRole.ASSISTANT, cycle.resposta ?: "Plano concluído: ${cycle.aprovado}", promptActionId = promptActionId)
+                        val content = cycle.resposta ?: "Plano concluído: ${cycle.aprovado}"
+                        val capability = cycle.passos.lastOrNull { it.resultado != null }?.capacidade
+                        ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability), researchSources = cycle.researchSources.map { it.toUiSource() })
                     } else {
                         ChatMessage(ChatRole.ASSISTANT, brainApiGateway.complete(prompt).text)
                     }
@@ -615,7 +624,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     .getOrElse { ChatMessage(ChatRole.ERROR, "Brain não conseguiu responder: ${it.message ?: it.javaClass.simpleName}") }
             }
             chatMessages.add(response); chatRunning = false
-            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content, response.promptActionId) else ThreadEvent.System(response.content))
+            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content, response.promptActionId, response.contentType, response.researchSources) else ThreadEvent.System(response.content))
         }
     }
     /** Entrada única do composer Codex-style: texto livre ou comando operacional. */
@@ -669,7 +678,9 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                             viewModelScope.launch(Dispatchers.Main.immediate) { publishStep(passo) }
                         }
                         val promptActionId = cycle.passos.firstOrNull { it.capacidade == "prompt.library.write" }?.actionId
-                        ChatMessage(ChatRole.ASSISTANT, cycle.resposta ?: "Plano concluído: ${cycle.aprovado}", promptActionId = promptActionId)
+                        val content = cycle.resposta ?: "Plano concluído: ${cycle.aprovado}"
+                        val capability = cycle.passos.lastOrNull { it.resultado != null }?.capacidade
+                        ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability), researchSources = cycle.researchSources.map { it.toUiSource() })
                     } else {
                         ChatMessage(ChatRole.ASSISTANT, brainApiGateway.complete(prompt).text)
                     }
@@ -677,9 +688,11 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     .getOrElse { ChatMessage(ChatRole.ERROR, "Brain não conseguiu responder ao comando ${entrada.comando}: ${it.message ?: it.javaClass.simpleName}") }
             }
             chatMessages.add(response); chatRunning = false
-            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content, response.promptActionId) else ThreadEvent.System(response.content))
+            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content, response.promptActionId, response.contentType, response.researchSources) else ThreadEvent.System(response.content))
         }
     }
+    private fun com.brain.research.ResearchResult.toUiSource() = ResearchSourceUi(title, source, url, relevantContent.take(240))
+
     private fun publishStep(passo: ResultadoPasso) {
         val message = "${passo.passoId}: ${passo.status.name}${passo.motivo?.let { " — $it" } ?: ""}"
         chatMessages.add(ChatMessage(ChatRole.STEP, message))

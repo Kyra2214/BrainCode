@@ -1,6 +1,8 @@
 package com.sandbox.app
 
 import android.widget.Toast
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -57,6 +59,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -67,7 +71,12 @@ data class DiffFile(val path: String, val lines: List<DiffLine>)
 
 sealed interface ThreadEvent {
     data class User(val text: String) : ThreadEvent
-    data class Agent(val text: String, val promptActionId: String? = null) : ThreadEvent
+    data class Agent(
+        val text: String,
+        val promptActionId: String? = null,
+        val contentType: GeneratedContentType = detectGeneratedContentType(text),
+        val researchSources: List<ResearchSourceUi> = emptyList()
+    ) : ThreadEvent
     data class Terminal(val result: SandboxExecutionResult, val execution: com.sandbox.runtime.ExecutionLog?) : ThreadEvent
     data class Approval(val id: String) : ThreadEvent
     data class Report(val title: String, val body: String) : ThreadEvent
@@ -158,7 +167,7 @@ fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
 /** The index prevents duplicate-content events from colliding in LazyColumn. */
 private fun eventKey(event: ThreadEvent, index: Int): String = "$index:${when (event) {
     is ThreadEvent.User -> "user:${event.text.hashCode()}"
-    is ThreadEvent.Agent -> "agent:${event.text.hashCode()}"
+    is ThreadEvent.Agent -> "agent:${event.text.hashCode()}:${event.researchSources.size}"
     is ThreadEvent.Terminal -> "terminal:${event.execution?.executionId ?: event.result.hashCode()}"
     is ThreadEvent.Approval -> "approval:${event.id}"
     is ThreadEvent.Report -> "report:${event.title}:${event.body.hashCode()}"
@@ -241,21 +250,8 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
     when (event) {
         is ThreadEvent.User -> Row(modifier = Modifier.fillMaxWidth().combinedClickable(onClick = { viewModel.quoteEvent(event) }, onLongClick = { viewModel.quoteEvent(event) }), horizontalArrangement = Arrangement.End) { Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) { Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) } }
         is ThreadEvent.Agent -> Column(modifier = Modifier.fillMaxWidth().combinedClickable(onClick = { viewModel.quoteEvent(event) }, onLongClick = { viewModel.quoteEvent(event) }), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            val blocks = extractCodeBlocks(event.text)
-            if (blocks.isEmpty()) Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
-            else {
-                var cursor = 0
-                Regex("```([^\\n]*)\\n([\\s\\S]*?)```").findAll(event.text).forEach { match ->
-                    val prose = event.text.substring(cursor, match.range.first).trim()
-                    if (prose.isNotEmpty()) Text(prose, style = MaterialTheme.typography.bodyMedium)
-                    val language = match.groupValues[1].trim().ifBlank { "arquivo" }
-                    val code = match.groupValues[2].trimEnd()
-                    Card(modifier = Modifier.fillMaxWidth()) { Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text(language, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f)); TextButton(onClick = { copy(code) }) { Text("Copiar") } }; SelectionContainer { Text(code, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) } } }
-                    cursor = match.range.last + 1
-                }
-                val tail = event.text.substring(cursor).trim()
-                if (tail.isNotEmpty()) Text(tail, style = MaterialTheme.typography.bodyMedium)
-            }
+            GeneratedContentCard(event = event, onCopy = ::copy)
+            if (event.researchSources.isNotEmpty()) ResearchSourcesCard(event.researchSources)
             event.promptActionId?.let { actionId ->
                 var feedbackDado by remember(actionId) { mutableStateOf<Boolean?>(null) }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -280,6 +276,47 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
                 TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Recolher" else "Mostrar diff completo") }
             }
         }
+    }
+}
+
+@Composable
+private fun GeneratedContentCard(event: ThreadEvent.Agent, onCopy: (String) -> Unit) {
+    val content = copyPayloadFor(event.text, event.contentType)
+    val structured = event.contentType != GeneratedContentType.TEXT
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (event.contentType == GeneratedContentType.PROMPT) "Prompt gerado" else "Resultado", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                TextButton(onClick = { onCopy(content) }) { Text(if (structured) "Copiar tudo" else "Copiar prompt") }
+            }
+            if (structured) SelectionContainer { Text(content, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) }
+            else Text(content, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+@Composable
+private fun ResearchSourcesCard(sources: List<ResearchSourceUi>) {
+    var expanded by rememberSaveable(sources.map { it.url }) { mutableStateOf(false) }
+    val label = if (sources.size == 1) "1 fonte" else "${sources.size} fontes"
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxWidth().semantics { contentDescription = if (expanded) "Recolher fontes da pesquisa" else "Expandir fontes da pesquisa" }) {
+                Text("Pesquisa web · $label ${if (expanded) "▾" else "▸"}")
+            }
+            if (expanded) sources.forEach { ResearchSourceRow(it) }
+        }
+    }
+}
+
+@Composable
+private fun ResearchSourceRow(source: ResearchSourceUi) {
+    val context = LocalContext.current
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(source.title, style = MaterialTheme.typography.titleSmall)
+        Text(source.source, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(source.summary, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        TextButton(onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(source.url))) } }) { Text("Abrir fonte ↗") }
     }
 }
 

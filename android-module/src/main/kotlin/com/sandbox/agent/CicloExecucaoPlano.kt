@@ -15,6 +15,7 @@ import com.brain.router.ApiCatalog
 import com.brain.router.DynamicFreeApiCatalog
 import com.brain.router.RoutingDecision
 import com.brain.router.RoutingProfile
+import com.brain.research.ResearchResult
 
 
 enum class StatusPasso { APROVADO, REPROVADO, NEGADO_PELA_POLICY, AGUARDANDO_APROVACAO, BLOQUEADO_POR_DEPENDENCIA }
@@ -33,8 +34,9 @@ data class ResultadoPasso(
     /** Custo real reportado pelo executor (ex.: tier da IA usada num escalonamento). 0.0 = sem custo. */
     val custo: Double = 0.0,
     /** Capacidade declarativa do passo (ex.: "prompt.library.write") — permite ao caller (UI)
-     *  reconhecer o tipo do resultado sem duplicar a lógica do Planner. */
-    val capacidade: String? = null
+     * reconhecer o tipo do resultado sem duplicar a lógica do Planner. */
+    val capacidade: String? = null,
+    val researchSources: List<ResearchResult> = emptyList()
 )
 
 data class ResultadoCiclo(
@@ -44,6 +46,7 @@ data class ResultadoCiclo(
 ) {
     val aprovado: Boolean get() = passos.isNotEmpty() && passos.all { it.status == StatusPasso.APROVADO }
     val resposta: String? get() = passos.asSequence().mapNotNull { it.resultado }.lastOrNull()
+    val researchSources: List<ResearchResult> get() = passos.flatMap { it.researchSources }.distinctBy { it.url }
 }
 
 /** Executa somente planos que já carregam autorizações por passo emitidas pelo Brain. */
@@ -175,7 +178,8 @@ class CicloExecucaoPlano(
                 motivo = dispatch.reason ?: if (dispatch.status == DispatchStatus.DISPATCHED) null else "Dispatcher não executou a capability",
                 actionId = "${passo.id}:${passo.id}",
                 custo = dispatch.gateway?.execution?.custo ?: 0.0,
-                capacidade = passo.capacidade
+                capacidade = passo.capacidade,
+                researchSources = dispatch.gateway?.execution?.researchSources ?: emptyList()
             )
         }
         sandbox.abrirSessao(authorization).use { sessao ->
