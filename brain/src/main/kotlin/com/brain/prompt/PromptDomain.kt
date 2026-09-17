@@ -8,24 +8,31 @@ enum class PromptDomain {
     CODIGO;
 
     companion object {
-        /** Classificação determinística por palavras-chave — sem API, sem ambiguidade custosa. */
+        /** Classificação determinística por intenção semântica e evidência textual — sem API. */
         fun classificar(pedido: String): PromptDomain {
             val texto = pedido.lowercase()
+            val querImagem = texto.containsAny(
+                "imagem", "imagens", "foto", "fotografia", "fotografias", "fotorrealista", "foto-realista",
+                "ilustração", "ilustracao", "arte digital", "pintura", "retrato", "desenho", "render",
+                "wallpaper", "cartaz", "pôster", "poster", "capa", "criar uma imagem", "criar imagem",
+                "gerar uma imagem", "gerar imagem", "crie uma imagem", "crie imagem", "fazer uma imagem",
+                "fazer imagem"
+            )
+            val querVideo = texto.containsAny("vídeo", "video", "clipe", "animação", "animacao", "cena em movimento", "storyboard")
+            val querCodigo = texto.containsAny(
+                "código", "codigo", "função", "funcao", "classe", "script", "programa", "algoritmo",
+                "endpoint", "api rest", "implementar", "refatorar", "bug", "compilar", "app", "aplicativo",
+                "interface", "tela", "layout", "android", "ios", "chatbox", "frontend", "backend"
+            )
             return when {
-                texto.containsAny("vídeo", "video", "clipe", "animação", "animacao", "cena em movimento", "storyboard") -> VIDEO
+                querVideo && !querImagem -> VIDEO
+                querImagem && !querCodigo -> IMAGEM
+                querCodigo && !querImagem -> CODIGO
+                querImagem -> IMAGEM
                 texto.containsAny(
-                    "código", "codigo", "função", "funcao", "classe", "script", "programa", "algoritmo",
-                    "endpoint", "api rest", "implementar", "refatorar", "bug", "compilar", "app", "aplicativo",
-                    "interface", "tela", "layout", "android", "ios", "chatbox", "frontend", "backend"
-                ) -> CODIGO
-                texto.containsAny(
-                    "imagem", "foto", "fotografia", "fotorrealista", "foto-realista", "ilustra", "arte digital",
-                    "pintura", "retrato", "desenho", "render", "wallpaper", "cartaz", "pôster", "poster", "capa"
-                ) || (
-                    "prompt" in texto &&
-                        texto.containsAny(" prompt de uma ", " prompt de um ", " prompt para uma ", " prompt para um ") &&
-                        !texto.containsAny("código", "codigo", "program", "script", "texto", "resumo", "app", "aplicativo", "interface", "tela", "layout")
-                    ) -> IMAGEM
+                    " prompt de uma ", " prompt de um ", " prompt para uma ", " prompt para um ",
+                    " prompt para criar ", " prompt para gerar ", " prompt para fazer ", " prompt de imagem "
+                ) -> IMAGEM
                 else -> TEXTO
             }
         }

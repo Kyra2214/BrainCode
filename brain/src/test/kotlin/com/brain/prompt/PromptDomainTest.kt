@@ -17,4 +17,18 @@ class PromptDomainTest {
             PromptDomain.classificar("crie um prompt para uma fotografia fotorrealista de um foguete")
         )
     }
+
+    @Test fun `prompt para criar uma imagem e imagem mesmo sem palavra fotografia`() {
+        assertEquals(
+            PromptDomain.IMAGEM,
+            PromptDomain.classificar("quero um prompt para criar uma imagem de um foguete decolando em um deserto no entardecer")
+        )
+    }
+
+    @Test fun `prompt para gerar imagem com sujeito visual e imagem`() {
+        assertEquals(
+            PromptDomain.IMAGEM,
+            PromptDomain.classificar("gere um prompt para gerar uma imagem de um foguete com muitos detalhes")
+        )
+    }
 }
