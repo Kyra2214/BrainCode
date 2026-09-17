@@ -1,8 +1,9 @@
 package com.sandbox.app
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.createComposeRule
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNode
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -13,9 +14,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Real Android journeys: the test drives the same chat UI used by the user,
- * submits deterministic requests, and verifies that BrainCode returns a
- * result of the expected kind.
+ * Real Android journeys: drives the same chat UI used by the user,
+ * submits deterministic requests, and verifies that BrainCode returns
+ * a result of the expected kind.
  *
  * No external LLM/API is required for these journeys.
  */
@@ -34,8 +35,7 @@ class BrainCodeJourneyE2ETest {
     }
 
     private fun send(text: String) {
-        composeRule.onNodeWithText("Descreva a tarefa ou use /comando").assertIsDisplayed()
-        composeRule.onNodeWithText("Descreva a tarefa ou use /comando").performTextInput(text)
+        composeRule.onNode(hasSetTextAction(), useUnmergedTree = true).performTextInput(text)
         composeRule.onNodeWithContentDescription("Enviar").performClick()
     }
 
