@@ -16,6 +16,7 @@ import com.brain.prompt.PromptQualityValidator
 import com.brain.prompt.PromptSimilarity
 import com.brain.prompt.PromptTemplate
 import com.brain.prompt.taxaSucessoEfetiva
+import com.brain.reasoning.ReasoningEngine
 import com.brain.router.PapelPipeline
 import com.brain.capability.CostClass
 import kotlinx.coroutines.runBlocking
@@ -79,7 +80,8 @@ class PromptGenerationExecutor(
     private val promptLibrary: PromptLibrary,
     private val improver: PromptImprover,
     private val outcomeTracker: PromptOutcomeTracker = PromptOutcomeTrackers.forLibrary(promptLibrary),
-    private val creator: PromptCreatorAgent = LocalPromptCreatorAgent()
+    private val creator: PromptCreatorAgent = LocalPromptCreatorAgent(),
+    private val reasoningEngine: ReasoningEngine = ReasoningEngine()
 ) : ActionExecutor {
 
     override fun execute(request: ActionRequest, capability: CapabilityDefinition, decision: PolicyDecision): ActionExecution {
@@ -89,8 +91,10 @@ class PromptGenerationExecutor(
 
         val contextoPesquisa = extrairContextoPesquisa(request)
         val pedidoDeMelhoria = extrairPedidoDeMelhoria(objetivoBruto)
+        val reasoning = reasoningEngine.analyze(objetivoBruto)
 
         val evidenciasBase = mutableListOf<String>()
+        evidenciasBase += "reasoning:intent=${reasoning.intent.name.lowercase(Locale.ROOT)}"
         if (contextoPesquisa != null) evidenciasBase += "web-research:contexto-considerado"
 
         // 1) Pedido explícito de melhoria de um prompt já existente — vai direto para o ciclo de melhoria.
