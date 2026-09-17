@@ -79,7 +79,7 @@ class ConversationContextEngine {
         listOf("```", "prompt", "especificação", "implementação", "arquivo").any { it in text.lowercase() }
 
     companion object {
-        private val REFERENCE_PATTERN = Regex("\\b(isso|isso aí|ele|ela|aquele|aquela|continua|melhore|melhora|aquilo)\\b|vamos\\s+fazer|agora\\s+implement")
+        private val REFERENCE_PATTERN = Regex("\\b(isso|isso aí|ele|ela|aquele|aquela|continua|melhore|melhora|aquilo|adicione|adiciona|mude|muda|troque|troca|substitua|substitui)\\b|vamos\\s+fazer|agora\\s+(?:implement|quero)|\\bfundo\\b|\\bmeteoro")
         private val IDEA_MARKERS = listOf("tenho uma ideia", "projeto", "aplicativo", "aplicação", "produto")
         private val REQUIREMENT_MARKERS = listOf("precisa", "deve", "requisito", "quero também", "não quero", "poderá", "offline")
         private val DECISION_MARKERS = listOf("vamos usar", "decidimos", "escolhemos", "mudamos", "usar ")

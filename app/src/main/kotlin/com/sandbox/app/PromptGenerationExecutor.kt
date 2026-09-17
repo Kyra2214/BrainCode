@@ -282,6 +282,6 @@ class PromptGenerationExecutor(
 
     private companion object {
         const val TAXA_SUCESSO_MINIMA_PARA_REUSO = 0.5
-        val PALAVRAS_MELHORIA = listOf("melhor", "otimiz", "mais profissional", "versão melhor", "refaç", "reformul")
+        val PALAVRAS_MELHORIA = listOf("melhor", "otimiz", "mais profissional", "versão melhor", "refaç", "reformul", "fundo", "deserto", "meteoro", "adicione", "adiciona", "mude", "muda", "troque", "troca", "substitua", "substitui")
     }
 }

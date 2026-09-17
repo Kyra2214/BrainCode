@@ -35,7 +35,7 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
         contextoPesquisa: String?
     ): PromptCriado {
         val dominio = PromptDomain.classificar(pedidoOriginal)
-        var melhorado = promptAtual.trim()
+        var melhorado = aplicarAlteracoesConcretas(promptAtual.trim(), pedidoOriginal)
         if (contextoPesquisa != null && contextoPesquisa.isNotBlank()) {
             melhorado += "\n\nContexto adicional considerado: ${resumir(contextoPesquisa, 240)}"
         }
@@ -50,6 +50,23 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
             melhorado = melhorado.replace(Regex("\\s{2,}"), " ").trim()
         }
         return PromptCriado(melhorado.trim(), dominio, "local:melhoria-heuristica")
+    }
+
+    /** Refina pedidos concretos sem chamar IA: substitui o ambiente e acrescenta elementos pedidos. */
+    private fun aplicarAlteracoesConcretas(promptAtual: String, instrucao: String): String {
+        val lower = instrucao.lowercase(Locale.ROOT)
+        var resultado = promptAtual
+        Regex("(?i)\\bfundo\\s+(?:no|na|em|de|do|da)\\s+([^,.;]+?)(?:\\s+e\\s+|$)").find(instrucao)?.let { match ->
+            val novoFundo = match.groupValues[1].trim()
+            resultado = resultado.replace(Regex("(?i)ambientado em [^.]+"), "ambientado em $novoFundo")
+        }
+        if ("deserto" in lower && !resultado.lowercase(Locale.ROOT).contains("deserto")) {
+            resultado = resultado.replace(Regex("(?i)ambientado em [^.]+"), "ambientado em deserto")
+        }
+        if ("meteoro" in lower && !resultado.lowercase(Locale.ROOT).contains("meteoro")) {
+            resultado += " Vários meteoros caindo cruzam o céu ao fundo."
+        }
+        return resultado
     }
 
     // ---------------- IMAGEM ----------------

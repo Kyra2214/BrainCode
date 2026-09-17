@@ -59,4 +59,16 @@ class LocalPromptCreatorAgentTest {
         assertTrue(melhorado.texto.length > original.length)
         assertTrue(melhorado.texto.startsWith(original))
     }
+
+    @Test fun `refinamento concreto troca fundo e adiciona meteoros sem API`() {
+        val original = "Fotografia fotorrealista de um foguete espacial decolando, ambientado em céu estrelado ao fundo. Composição: equilibrada."
+        val melhorado = agent.melhorarLocalmente(
+            promptAtual = original,
+            pedidoOriginal = "Agora quero o fundo no deserto e vários meteoros caindo",
+            pontosFracos = emptySet()
+        )
+
+        assertTrue(melhorado.texto.contains("ambientado em deserto"))
+        assertTrue(melhorado.texto.contains("Vários meteoros caindo"))
+    }
 }
