@@ -5,31 +5,106 @@ import com.brain.gateway.ActionExecution
 import com.brain.gateway.ActionExecutor
 import com.brain.gateway.ActionRequest
 import com.brain.policy.PolicyDecision
+import com.brain.prompt.LocalPromptCreatorAgent
+import com.brain.prompt.PromptCreatorAgent
+import com.brain.prompt.PromptCriado
 import com.brain.prompt.PromptLibrary
 import com.brain.prompt.PromptOutcomeTracker
 import com.brain.prompt.PromptOutcomeTrackers
+import com.brain.prompt.PromptQualityScore
+import com.brain.prompt.PromptQualityValidator
 import com.brain.prompt.PromptSimilarity
 import com.brain.prompt.PromptTemplate
 import com.brain.router.PapelPipeline
+import com.brain.capability.CostClass
 import kotlinx.coroutines.runBlocking
 import java.util.Locale
 
-/** Fluxo: biblioteca -> compatibilidade -> adaptação; somente depois API -> persistência -> resultado real. */
+/** Encaminha um pedido de melhoria de prompt para uma IA — só chamado quando a qualidade local é insuficiente. */
+fun interface PromptImprover {
+    /** @return texto melhorado, ou lança se nenhuma IA estiver disponível/responder. */
+    fun melhorar(promptAtual: String, pedidoOriginal: String): String
+
+    /**
+     * Tier de custo real da última chamada a [melhorar]. Default FREE para implementações
+     * (fakes de teste, por exemplo) que não sabem/não têm custo real a reportar.
+     */
+    fun custoDaUltimaMelhoria(): CostClass = CostClass.FREE
+}
+
+/** Implementação padrão: delega ao BrainApiGateway (mesmo caminho de IA já usado pelo resto do app). */
+class GatewayPromptImprover(private val gateway: BrainApiGateway) : PromptImprover {
+    @Volatile private var ultimoCusto: CostClass = CostClass.FREE
+
+    override fun melhorar(promptAtual: String, pedidoOriginal: String): String {
+        val specialistPrompt = """
+            Você é o especialista de engenharia de prompts do BrainCode.
+            Um prompt já foi criado localmente para o pedido abaixo, mas a validação de
+            qualidade encontrou pontos fracos. Melhore o prompt preservando a intenção
+            original — não mude o assunto, apenas aumente clareza, especificidade e
+            coerência. Responda somente com o prompt final melhorado.
+
+            Pedido original:
+            $pedidoOriginal
+
+            Prompt atual (a melhorar):
+            $promptAtual
+        """.trimIndent()
+        val resultado = gateway.complete(specialistPrompt, PapelPipeline.ESCRITA_DE_PROMPT)
+        ultimoCusto = resultado.costClass
+        return resultado.text.trim()
+    }
+
+    override fun custoDaUltimaMelhoria(): CostClass = ultimoCusto
+}
+
+/** Conversão determinística de tier qualitativo para um número comparável/agregável na biblioteca. */
+private fun CostClass.paraCustoNumerico(): Double = when (this) {
+    CostClass.FREE -> 0.0
+    CostClass.LOW -> 0.05
+    CostClass.MEDIUM -> 0.15
+    CostClass.HIGH -> 0.40
+    CostClass.UNKNOWN -> 0.10
+}
+
+/**
+ * Fluxo: biblioteca (referência) -> Prompt Creator local (sempre funciona) -> Validator
+ * -> se insuficiente, IA como escalonamento OPCIONAL (nunca obrigatória) -> validação final.
+ *
+ * A ausência de API nunca impede a entrega de um prompt: nesse caso o melhor resultado
+ * local é entregue, com uma nota informando que a melhoria por IA não estava disponível.
+ */
 class PromptGenerationExecutor(
-    private val gateway: BrainApiGateway,
     private val promptLibrary: PromptLibrary,
-    private val outcomeTracker: PromptOutcomeTracker = PromptOutcomeTrackers.forLibrary(promptLibrary)
+    private val improver: PromptImprover,
+    private val outcomeTracker: PromptOutcomeTracker = PromptOutcomeTrackers.forLibrary(promptLibrary),
+    private val creator: PromptCreatorAgent = LocalPromptCreatorAgent()
 ) : ActionExecutor {
+
     override fun execute(request: ActionRequest, capability: CapabilityDefinition, decision: PolicyDecision): ActionExecution {
         val startedAt = System.nanoTime()
-        val objective = request.parameters["parameter.0"]?.trim().orEmpty()
-        if (objective.isBlank()) return ActionExecution(false, error = "objetivo do prompt ausente", provenance = provenance(capability))
+        val objetivoBruto = request.parameters["parameter.0"]?.trim().orEmpty()
+        if (objetivoBruto.isBlank()) return ActionExecution(false, error = "objetivo do prompt ausente", provenance = provenance(capability))
 
+        val contextoPesquisa = extrairContextoPesquisa(request)
+        val pedidoDeMelhoria = extrairPedidoDeMelhoria(objetivoBruto)
+
+        val evidenciasBase = mutableListOf<String>()
+        if (contextoPesquisa != null) evidenciasBase += "web-research:contexto-considerado"
+
+        // 1) Pedido explícito de melhoria de um prompt já existente — vai direto para o ciclo de melhoria.
+        if (pedidoDeMelhoria != null) {
+            return processarMelhoriaExplicita(pedidoDeMelhoria, contextoPesquisa, capability, evidenciasBase, startedAt, request.actionId)
+        }
+
+        val objetivo = objetivoBruto
+
+        // 2) Biblioteca como referência/contexto — nunca como bloqueio.
         val candidato = runBlocking {
-            promptLibrary.buscarPorContexto(objective)
+            promptLibrary.buscarPorContexto(objetivo)
                 .asSequence()
-                .map { it to PromptSimilarity.compatibility(objective, it) }
-                .filter { (_, score) -> score >= MIN_COMPATIBILITY }
+                .map { it to PromptSimilarity.compatibility(objetivo, it) }
+                .filter { (it, score) -> score >= PromptSimilarity.LIMIAR_COMPATIBILIDADE_REUSO && it.taxaSucessoEfetiva() >= TAXA_SUCESSO_MINIMA_PARA_REUSO }
                 .maxWithOrNull(
                     compareBy<Pair<PromptTemplate, Double>> { it.second }
                         .thenBy { it.first.taxaSucessoEfetiva() }
@@ -38,111 +113,158 @@ class PromptGenerationExecutor(
                 ?.first
         }
 
-        if (candidato != null) {
-            val score = PromptSimilarity.compatibility(objective, candidato)
-            val adapted = adaptPrompt(candidato, objective)
-            val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
-            outcomeTracker.markUsed(request.actionId, candidato.id)
-            return ActionExecution(
-                success = true,
-                result = "Encontrei um prompt compatível na biblioteca (compatibilidade ${(score * 100).toInt()}%) e adaptei ao seu pedido:\n\n$adapted",
-                evidence = listOf(
-                    "prompt-library:${candidato.id}",
-                    "prompt-library:observed-samples:${candidato.amostrasObservadas}",
-                    "prompt-library:result:pending-real-outcome",
-                    "retrieval:biblioteca-local",
-                    "compatibility:${"%.2f".format(Locale.US, score)}",
-                    "compatibility-source:metadata",
-                    "prompt-library:selection-latency-ms:$elapsedMs"
-                ),
-                provenance = provenance(capability)
-            )
-        }
-
-        return try {
-            val specialistPrompt = buildSpecialistRequest(objective)
-            val response = gateway.complete(specialistPrompt, PapelPipeline.ESCRITA_DE_PROMPT)
-            val generated = response.text.trim()
-            if (generated.isBlank()) return ActionExecution(false, error = "A API especialista não devolveu um prompt válido.", provenance = provenance(capability))
-
-            val savedId = saveGeneratedPrompt(objective, generated)
-            val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
-            outcomeTracker.markUsed(request.actionId, savedId)
-            ActionExecution(
-                success = true,
-                result = "Não encontrei prompt compatível na biblioteca. Criei um novo com a API especialista, salvei na biblioteca e deixei pronto para aprendizado por resultado:\n\n$generated",
-                evidence = listOf(
-                    "retrieval:biblioteca-local:nao-encontrado-ou-abaixo-de-50",
-                    "provider:${response.providerId}",
-                    "model:${response.modelId}",
-                    "prompt-library:saved-before-response",
-                    "prompt-library:id:$savedId",
-                    "prompt-library:result:pending-real-outcome",
-                    "prompt-library:generation-latency-ms:$elapsedMs"
-                ),
-                provenance = provenance(capability)
-            )
-        } catch (error: IllegalStateException) {
-            ActionExecution(false, error = "A biblioteca não possui prompt compatível (mínimo 50%) e não há API especialista com chave válida registrada. Configure uma API em Configurações → Provedores para criar o prompt.", provenance = provenance(capability))
-        } catch (error: Exception) {
-            ActionExecution(false, error = "Falha ao gerar prompt: ${error.message ?: error.javaClass.simpleName}", provenance = provenance(capability))
-        }
+        val criado = creator.criar(objetivo, candidato, contextoPesquisa)
+        return finalizar(objetivo, criado, candidato, evidenciasBase, capability, startedAt, request.actionId)
     }
 
-    private fun buildSpecialistRequest(objective: String): String = """
-        Você é o especialista de engenharia de prompts do BrainCode.
-        Crie um único prompt final, preciso e reutilizável para a tarefa abaixo.
-        O pedido pode ser de imagem, código, arquitetura, banco de dados, testes,
-        documentação, pesquisa, automação ou outro domínio.
-        Preserve a intenção do usuário. Inclua apenas contexto, restrições,
-        critérios de saída e detalhes técnicos que sejam pertinentes ao domínio.
-        Não invente requisitos ausentes. Responda somente com o prompt final.
-
-        Pedido do usuário:
-        $objective
-    """.trimIndent()
-
-    private fun adaptPrompt(template: PromptTemplate, objective: String): String {
-        var adapted = template.textoTemplate
-        Regex("\\{\\{?([A-Za-zÀ-ÿ0-9_]+)\\}?\\}").findAll(template.textoTemplate)
-            .map { it.groupValues[1] }
-            .distinct()
-            .forEach { name ->
-                val value = when (name.uppercase(Locale.ROOT)) {
-                    "PEDIDO", "OBJETIVO", "TAREFA", "DESCRICAO", "DESCRIÇÃO" -> objective
-                    else -> "[${name}: definir conforme o contexto da tarefa]"
-                }
-                adapted = adapted.replace(Regex("\\{\\{?$name\\}?\\}", RegexOption.IGNORE_CASE), value)
-            }
-        if (PromptSimilarity.tokenize(adapted).intersect(PromptSimilarity.tokenize(objective)).isEmpty()) adapted += "\n\nContexto específico do pedido: $objective"
-        return adapted.trim()
+    /** "melhore esse prompt" / "otimize" / "deixe mais profissional" — escala direto, sem passar pela biblioteca. */
+    private fun processarMelhoriaExplicita(
+        pedido: PedidoDeMelhoria,
+        contextoPesquisa: String?,
+        capability: CapabilityDefinition,
+        evidenciasBase: List<String>,
+        startedAt: Long,
+        actionId: String
+    ): ActionExecution {
+        val scoreInicial = PromptQualityValidator.validar(pedido.instrucao, pedido.promptAnterior, com.brain.prompt.PromptDomain.classificar(pedido.instrucao))
+        val (textoFinal, origem, scoreFinal, aiUsada) = escalonar(
+            pedido.instrucao,
+            PromptCriado(pedido.promptAnterior, com.brain.prompt.PromptDomain.classificar(pedido.instrucao), "usuario:prompt-anterior"),
+            scoreInicial,
+            contextoPesquisa
+        )
+        val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
+        val prefixo = if (aiUsada) "Melhorei o prompt com apoio de IA especialista" else "Melhorei o prompt com o Prompt Creator local"
+        outcomeTracker.markUsed(actionId, saveGeneratedPrompt(pedido.instrucao, textoFinal))
+        return ActionExecution(
+            success = true,
+            result = "$prefixo (qualidade ${(scoreFinal.total * 100).toInt()}%):\n\n$textoFinal",
+            evidence = evidenciasBase + listOfNotNull(
+                "prompt-creator:origem:$origem",
+                "prompt-quality:total:${"%.2f".format(scoreFinal.total)}",
+                "prompt-generation-latency-ms:$elapsedMs",
+                if (aiUsada) "prompt-generation:custo-tier:${improver.custoDaUltimaMelhoria()}" else null
+            ),
+            provenance = provenance(capability),
+            custo = if (aiUsada) improver.custoDaUltimaMelhoria().paraCustoNumerico() else 0.0
+        )
     }
 
-    private fun saveGeneratedPrompt(objective: String, generated: String): String {
-        val existing = runBlocking {
-            promptLibrary.buscarPorContexto(objective)
-                .firstOrNull { PromptSimilarity.contentSimilarity(it.textoTemplate, generated) >= DUPLICATE_THRESHOLD }
+    private fun finalizar(
+        objetivo: String,
+        criado: PromptCriado,
+        candidatoBiblioteca: PromptTemplate?,
+        evidenciasBase: List<String>,
+        capability: CapabilityDefinition,
+        startedAt: Long,
+        actionId: String
+    ): ActionExecution {
+        val scoreInicial = PromptQualityValidator.validar(objetivo, criado.texto, criado.dominio)
+        val (textoFinal, origem, scoreFinal, aiUsada) = escalonar(objetivo, criado, scoreInicial, null)
+        val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
+        val savedId = saveGeneratedPrompt(objetivo, textoFinal)
+        outcomeTracker.markUsed(actionId, savedId)
+
+        val prefixo = when {
+            candidatoBiblioteca != null -> "Encontrei um prompt de referência na biblioteca e adaptei ao seu pedido"
+            aiUsada -> "Não encontrei prompt compatível na biblioteca. Criei um prompt localmente e refinei com IA especialista"
+            else -> "Não encontrei prompt compatível na biblioteca. Criei um prompt novo localmente"
         }
-        val id = existing?.id ?: "generated-${stableId(objective)}"
-        runBlocking {
-            promptLibrary.salvarNovaVersao(
-                PromptTemplate(
-                    id = id,
-                    versao = (existing?.versao ?: 0) + 1,
-                    finalidade = "geração e melhoria de prompt",
-                    contextoDeUso = objective,
-                    skillRelacionada = "prompt-generation",
-                    agenteRelacionado = "prompt-specialist",
-                    textoTemplate = generated,
-                    taxaSucesso = existing?.taxaSucesso ?: 0.5,
-                    custoMedio = existing?.custoMedio ?: 0.0,
-                    tempoMedioMs = existing?.tempoMedioMs ?: 0L,
-                    historicoMelhorias = (existing?.historicoMelhorias.orEmpty() + "gerado por API e salvo antes da resposta ao usuário").distinct(),
-                    amostrasObservadas = existing?.amostrasObservadas ?: 0
-                )
+        val notaIa = if (!aiUsada && scoreFinal.abaixoDoPadrao) "\n\n(Melhoria por IA não está disponível no momento — entreguei o melhor resultado local possível.)" else ""
+
+        return ActionExecution(
+            success = true,
+            result = "$prefixo (qualidade ${(scoreFinal.total * 100).toInt()}%):\n\n$textoFinal$notaIa",
+            evidence = evidenciasBase + listOfNotNull(
+                candidatoBiblioteca?.let { "prompt-library:${it.id}" },
+                "prompt-creator:origem:$origem",
+                "prompt-quality:total:${"%.2f".format(scoreFinal.total)}",
+                "prompt-library:saved-before-response",
+                "prompt-library:id:$savedId",
+                "prompt-generation-latency-ms:$elapsedMs",
+                if (aiUsada) "prompt-generation:custo-tier:${improver.custoDaUltimaMelhoria()}" else null
+            ),
+            provenance = provenance(capability),
+            custo = if (aiUsada) improver.custoDaUltimaMelhoria().paraCustoNumerico() else 0.0
+        )
+    }
+
+    /** Validator -> se insuficiente, tenta IA; se IA falhar/indisponível, melhoria heurística local. Nunca lança. */
+    private fun escalonar(
+        pedido: String,
+        criado: PromptCriado,
+        scoreInicial: PromptQualityScore,
+        contextoPesquisa: String?
+    ): EscalonamentoResultado {
+        if (!scoreInicial.abaixoDoPadrao) return EscalonamentoResultado(criado.texto, criado.origem, scoreInicial, false)
+
+        val viaIa = runCatching { improver.melhorar(criado.texto, pedido) }.getOrNull()?.takeIf { it.isNotBlank() }
+        if (viaIa != null) {
+            val scoreIa = PromptQualityValidator.validar(pedido, viaIa, criado.dominio)
+            if (scoreIa.total >= scoreInicial.total) return EscalonamentoResultado(viaIa, "${criado.origem}+ia-especialista", scoreIa, true)
+        }
+
+        val melhoriaLocal = creator.melhorarLocalmente(criado.texto, pedido, scoreInicial.pontosFracos, contextoPesquisa)
+        val scoreLocal = PromptQualityValidator.validar(pedido, melhoriaLocal.texto, criado.dominio)
+        return if (scoreLocal.total >= scoreInicial.total) EscalonamentoResultado(melhoriaLocal.texto, melhoriaLocal.origem, scoreLocal, false)
+        else EscalonamentoResultado(criado.texto, criado.origem, scoreInicial, false)
+    }
+
+    private data class EscalonamentoResultado(val texto: String, val origem: String, val score: PromptQualityScore, val aiUsada: Boolean)
+
+    private data class PedidoDeMelhoria(val instrucao: String, val promptAnterior: String)
+
+    /**
+     * O ConversationContextEngine (SandboxViewModel) já detecta "melhore/otimize/deixe mais
+     * profissional/faça uma versão melhor" e resolve a referência ("ele"/"esse prompt") para o
+     * artefato anterior da conversa, montando o objetivo no formato:
+     * "Objetivo atual: <instrução>\n...\nReferências resolvidas:\n- artefato anterior: <texto>".
+     * Aqui só extraímos as duas partes — nenhuma segunda heurística de histórico é criada.
+     */
+    private fun extrairPedidoDeMelhoria(objetivo: String): PedidoDeMelhoria? {
+        val marcadorArtefato = "artefato anterior: "
+        val idxArtefato = objetivo.indexOf(marcadorArtefato)
+        if (idxArtefato < 0) return null
+        if (PALAVRAS_MELHORIA.none { it in objetivo.lowercase(Locale.ROOT) }) return null
+        val instrucao = if (objetivo.startsWith("Objetivo atual: ")) {
+            objetivo.removePrefix("Objetivo atual: ").substringBefore("\n").trim()
+        } else objetivo.substringBefore("\n").trim()
+        val anterior = objetivo.substring(idxArtefato + marcadorArtefato.length).trim()
+        if (instrucao.isBlank() || anterior.isBlank()) return null
+        return PedidoDeMelhoria(instrucao, anterior)
+    }
+
+    private fun extrairContextoPesquisa(request: ActionRequest): String? {
+        val bruto = request.parameters.entries
+            .filter { it.key.startsWith("parameter.") && it.key != "parameter.0" }
+            .sortedBy { it.key }
+            .joinToString("\n") { it.value }
+            .trim()
+        if (bruto.isBlank()) return null
+        if (bruto.startsWith("WebResearch indisponível", ignoreCase = true)) return null
+        return bruto
+    }
+
+    /** Propõe um id estável a partir do objetivo, mas quem decide se isso é duplicata de um
+     *  template já existente (e portanto deve herdar id/estatísticas antigas) é só a biblioteca —
+     *  ver [PromptLibrary.salvarNovaVersao]. Nenhuma checagem de duplicata é feita aqui. */
+    private fun saveGeneratedPrompt(objective: String, generated: String): String = runBlocking {
+        promptLibrary.salvarNovaVersao(
+            PromptTemplate(
+                id = "generated-${stableId(objective)}",
+                versao = 1,
+                finalidade = "geração e melhoria de prompt",
+                contextoDeUso = objective,
+                skillRelacionada = "prompt-generation",
+                agenteRelacionado = "prompt-creator-agent",
+                textoTemplate = generated,
+                taxaSucesso = 0.5,
+                custoMedio = 0.0,
+                tempoMedioMs = 0L,
+                historicoMelhorias = listOf("gerado/melhorado pelo Prompt Creator local e salvo antes da resposta"),
+                amostrasObservadas = 0
             )
-        }
-        return id
+        )
     }
 
     private fun stableId(objective: String): String = Integer.toUnsignedString(objective.lowercase(Locale.ROOT).hashCode(), 36)
@@ -150,7 +272,7 @@ class PromptGenerationExecutor(
     private fun provenance(capability: CapabilityDefinition) = listOf("app:PromptGenerationExecutor", "capability:${capability.id}")
 
     private companion object {
-        const val MIN_COMPATIBILITY = 0.50
-        const val DUPLICATE_THRESHOLD = 0.90
+        const val TAXA_SUCESSO_MINIMA_PARA_REUSO = 0.5
+        val PALAVRAS_MELHORIA = listOf("melhor", "otimiz", "mais profissional", "versão melhor", "refaç", "reformul")
     }
 }

@@ -17,6 +17,7 @@ import com.brain.router.DynamicFreeApiCatalog
 import com.brain.router.PapelPipeline
 import com.brain.router.ProviderModel
 import com.brain.router.RoutingDecision
+import com.brain.capability.CostClass
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -37,7 +38,9 @@ class BrainApiGateway(
         val source: KnowledgeSource? = null,
         val knowledgeId: String? = null,
         val fromMemory: Boolean = false,
-        val knowledgeValidated: Boolean = false
+        val knowledgeValidated: Boolean = false,
+        /** Tier de custo real do provider/modelo que respondeu (FREE quando veio da memória). */
+        val costClass: CostClass = CostClass.FREE
     )
 
     fun complete(prompt: String, papel: PapelPipeline = PapelPipeline.ESCRITA_DE_PROMPT): GatewayResult {
@@ -111,7 +114,17 @@ class BrainApiGateway(
                         KnowledgeCriticDecision.UNCERTAIN -> false
                     }
                     if (!validated) attempts += "$key: Critic ${verdict.decision.name.lowercase()} (${verdict.reason})"
-                    return GatewayResult(text, model.providerId, model.modeloId, attempts, source, knowledge.id, false, validated)
+                    return GatewayResult(
+                        text = text,
+                        providerId = model.providerId,
+                        modelId = model.modeloId,
+                        attempts = attempts,
+                        source = source,
+                        knowledgeId = knowledge.id,
+                        fromMemory = false,
+                        knowledgeValidated = validated,
+                        costClass = model.cost
+                    )
                 }
                 attempts += "$key: resposta sem conteúdo"
             } else attempts += "$key: HTTP ${response?.statusCode ?: 0}"

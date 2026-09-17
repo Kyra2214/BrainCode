@@ -76,26 +76,40 @@ class PromptLibraryFlowE2ETest {
 
         tracker.markUsed("step:step", template.id)
         assertEquals(0, library.snapshotTemplates().first().amostrasObservadas)
-        assertTrue(tracker.recordOutcome("step:step", success = false, cost = 0.02, elapsedMs = 900L))
+        assertTrue(tracker.recordTechnicalOutcome("step:step", success = false, cost = 0.02, elapsedMs = 900L))
 
         val afterFailure = library.snapshotTemplates().first()
         assertEquals(1, afterFailure.amostrasObservadas)
         assertEquals(0.0, afterFailure.taxaSucesso, 0.0001)
         assertEquals(0.02, afterFailure.custoMedio, 0.0001)
         assertEquals(900L, afterFailure.tempoMedioMs)
+        // falha técnica: nada foi entregue, então não há feedback do usuário para aguardar.
+        assertEquals(0, tracker.awaitingFeedbackCount())
+        assertTrue("feedback sem entrega bem-sucedida não deve persistir nada", !tracker.recordUserFeedback("step:step", positivo = true))
 
         tracker.markUsed("step2:step2", template.id)
-        assertTrue(tracker.recordOutcome("step2:step2", success = true, cost = 0.01, elapsedMs = 700L))
+        assertTrue(tracker.recordTechnicalOutcome("step2:step2", success = true, cost = 0.01, elapsedMs = 700L))
         val afterSuccess = library.snapshotTemplates().first()
         assertEquals(2, afterSuccess.amostrasObservadas)
         assertEquals(0.5, afterSuccess.taxaSucesso, 0.0001)
         assertEquals(0.015, afterSuccess.custoMedio, 0.0001)
         assertEquals(800L, afterSuccess.tempoMedioMs)
 
+        // entrega bem-sucedida agora aguarda a reação real de quem recebeu o prompt.
+        assertEquals(1, tracker.awaitingFeedbackCount())
+        assertTrue("feedback negativo do usuário deveria persistir como um novo resultado", tracker.recordUserFeedback("step2:step2", positivo = false))
+        assertEquals(0, tracker.awaitingFeedbackCount())
+        // feedback já consumido — repetir não faz nada.
+        assertTrue(!tracker.recordUserFeedback("step2:step2", positivo = true))
+
+        val afterFeedback = library.snapshotTemplates().first()
+        assertEquals(3, afterFeedback.amostrasObservadas)
+        assertEquals(1.0 / 3.0, afterFeedback.taxaSucesso, 0.0001)
+
         val reloaded = InMemoryPromptLibrary(emptyList(), storage)
         val persisted = reloaded.snapshotTemplates().first { it.id == template.id }
-        assertEquals(2, persisted.amostrasObservadas)
-        assertEquals(0.5, persisted.taxaSucesso, 0.0001)
+        assertEquals(3, persisted.amostrasObservadas)
+        assertEquals(1.0 / 3.0, persisted.taxaSucesso, 0.0001)
 
         storage.delete()
         File(storage.parentFile, "${storage.name}.stats").delete()

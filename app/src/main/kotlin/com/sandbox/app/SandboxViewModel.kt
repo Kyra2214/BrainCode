@@ -59,7 +59,7 @@ sealed interface SandboxPhase {
 data class QuickCommand(val label: String, val command: String)
 
 enum class ChatRole { USER, ASSISTANT, ERROR, STEP }
-data class ChatMessage(val role: ChatRole, val content: String)
+data class ChatMessage(val role: ChatRole, val content: String, val promptActionId: String? = null)
 
 enum class SessionStatus { IDLE, RUNNING, AWAITING_APPROVAL, DONE, FAILED, BLOCKED }
 
@@ -541,8 +541,13 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     activeProjectName = { workspaceProjectName }
                 )
                 val promptGenerationExecutor = PromptGenerationExecutor(
-                    gateway = brainApiGateway,
-                    promptLibrary = promptLibrary
+                    promptLibrary = promptLibrary,
+                    improver = GatewayPromptImprover(brainApiGateway)
+                )
+                val webResearchExecutor = WebResearchExecutor(
+                    provider = com.brain.research.CompositeWebResearchProvider(
+                        listOf(DuckDuckGoWebResearchProvider(), WikipediaWebResearchProvider())
+                    )
                 )
                 brainController = BrainSandboxController(
                     prepared,
@@ -554,7 +559,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     ),
                     capabilityExecutors = mapOf(
                         "workspace.generate" to codeGenerationExecutor,
-                        "prompt.library.generate" to promptGenerationExecutor
+                        "prompt.library.generate" to promptGenerationExecutor,
+                        "sandbox.info" to webResearchExecutor
                     ),
                     events = FileEventStore(File(dir, "brain/chat-events.jsonl"))
                 )
@@ -600,7 +606,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         val cycle = controller.executeObjective(resolved.toBrainObjective(), "chat-${System.currentTimeMillis()}") { passo ->
                             viewModelScope.launch(Dispatchers.Main.immediate) { publishStep(passo) }
                         }
-                        ChatMessage(ChatRole.ASSISTANT, cycle.resposta ?: "Plano concluído: ${cycle.aprovado}")
+                        val promptActionId = cycle.passos.firstOrNull { it.capacidade == "prompt.library.write" }?.actionId
+                        ChatMessage(ChatRole.ASSISTANT, cycle.resposta ?: "Plano concluído: ${cycle.aprovado}", promptActionId = promptActionId)
                     } else {
                         ChatMessage(ChatRole.ASSISTANT, brainApiGateway.complete(prompt).text)
                     }
@@ -608,7 +615,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     .getOrElse { ChatMessage(ChatRole.ERROR, "Brain não conseguiu responder: ${it.message ?: it.javaClass.simpleName}") }
             }
             chatMessages.add(response); chatRunning = false
-            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content) else ThreadEvent.System(response.content))
+            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content, response.promptActionId) else ThreadEvent.System(response.content))
         }
     }
     /** Entrada única do composer Codex-style: texto livre ou comando operacional. */
@@ -661,7 +668,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         val cycle = controller.executeObjective(resolved.toBrainObjective(), "cmd-${entrada.slug}-${System.currentTimeMillis()}") { passo ->
                             viewModelScope.launch(Dispatchers.Main.immediate) { publishStep(passo) }
                         }
-                        ChatMessage(ChatRole.ASSISTANT, cycle.resposta ?: "Plano concluído: ${cycle.aprovado}")
+                        val promptActionId = cycle.passos.firstOrNull { it.capacidade == "prompt.library.write" }?.actionId
+                        ChatMessage(ChatRole.ASSISTANT, cycle.resposta ?: "Plano concluído: ${cycle.aprovado}", promptActionId = promptActionId)
                     } else {
                         ChatMessage(ChatRole.ASSISTANT, brainApiGateway.complete(prompt).text)
                     }
@@ -669,7 +677,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     .getOrElse { ChatMessage(ChatRole.ERROR, "Brain não conseguiu responder ao comando ${entrada.comando}: ${it.message ?: it.javaClass.simpleName}") }
             }
             chatMessages.add(response); chatRunning = false
-            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content) else ThreadEvent.System(response.content))
+            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content, response.promptActionId) else ThreadEvent.System(response.content))
         }
     }
     private fun publishStep(passo: ResultadoPasso) {
@@ -768,6 +776,11 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             pendingApprovalId?.let { appendThreadEvent(ThreadEvent.Approval(it)) } ?: appendThreadEvent(ThreadEvent.System("Approval demo não gerou uma aprovação pendente."))
         }
     }
+    /** Fecha o loop de feedback do Prompt Creator: usuário avalia o prompt entregue no chat. */
+    fun recordPromptFeedback(actionId: String, positivo: Boolean) {
+        brainController?.registrarFeedbackDePrompt(actionId, positivo)
+    }
+
     fun approveAndResume() { val c = brainController ?: return; val plan = pendingApprovalPlan ?: return; val runId = pendingApprovalRunId ?: return; val id = pendingApprovalId ?: return; if (phase != SandboxPhase.Ready) return; viewModelScope.launch { phase = SandboxPhase.Running; lastBrainCycle = withContext(Dispatchers.IO) { c.resumePlan(plan, runId, id) }; pendingApprovalId = null; pendingApprovalPlan = null; pendingApprovalRunId = null; phase = SandboxPhase.Ready } }
     fun refreshWorkspace() { val p = platform ?: return; workspaceProjects = p.workspace.listProjects(); sqliteServiceStatus = p.services.status(BuiltInServices.sqlite("/home/sandbox/workspace")) }
     fun createWorkspaceProject() {

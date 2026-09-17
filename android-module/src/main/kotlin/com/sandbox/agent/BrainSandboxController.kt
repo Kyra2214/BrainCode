@@ -201,6 +201,16 @@ class BrainSandboxController(
     fun localEvents(runId: String? = null) = events.replay(runId)
     fun localEventsHealthy(): Boolean = events.verifyIntegrity()
 
+    /**
+     * Fecha o ciclo de aprendizado do Prompt Creator com o sinal real de quem recebeu o prompt —
+     * distinto do sucesso técnico (que só mede se a geração não quebrou). `actionId` é o mesmo
+     * identificador exposto em `ResultadoPasso.actionId` do passo "produzir" daquele ciclo.
+     * @return false se não havia um prompt entregue aguardando feedback para esse actionId
+     * (já avaliado, actionId inválido, ou o passo técnico nunca teve sucesso).
+     */
+    fun registrarFeedbackDePrompt(actionId: String, positivo: Boolean): Boolean =
+        promptOutcomeTracker?.recordUserFeedback(actionId, positivo) ?: false
+
     private fun executeWithEvents(plan: PlanoExecucao, runId: String, action: () -> ResultadoCiclo): ResultadoCiclo {
         emit(runId, "plan", "PlanCreated", mapOf("steps" to plan.passos.size.toString()))
         val startedAt = System.nanoTime()
@@ -211,10 +221,10 @@ class BrainSandboxController(
         promptOutcomeTracker?.let { tracker ->
             result.passos.forEach { passo ->
                 passo.actionId?.let { actionId ->
-                    tracker.recordOutcome(
+                    tracker.recordTechnicalOutcome(
                         actionId = actionId,
-                        success = result.aprovado && passo.status == StatusPasso.APROVADO,
-                        cost = 0.0,
+                        success = passo.status == StatusPasso.APROVADO,
+                        cost = passo.custo,
                         elapsedMs = elapsedMs
                     )
                 }

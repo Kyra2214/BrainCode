@@ -28,15 +28,16 @@ class InMemoryPromptLibrary(
     override fun buscarPorContextoSnapshot(contextoDeUso: String): List<PromptTemplate> {
         val pedido = PromptSimilarity.tokenize(contextoDeUso)
         if (pedido.isEmpty()) return emptyList()
-        return templates.values.map { it to relevancia(it, pedido) }
+        return templates.values.asSequence().filterNot { it.aposentado }.map { it to relevancia(it, pedido) }
             .filter { it.second > 0 }
             .sortedWith(compareByDescending<Pair<PromptTemplate, Int>> { it.second }.thenByDescending { it.first.amostrasObservadas }.thenByDescending { it.first.taxaSucessoEfetiva() })
             .map { it.first }
+            .toList()
     }
 
     fun snapshotTemplates(): List<PromptTemplate> = templates.values.toList()
 
-    override suspend fun salvarNovaVersao(template: PromptTemplate) {
+    override suspend fun salvarNovaVersao(template: PromptTemplate): String {
         val similar = templates.values.filter { it.id != template.id }
             .map { it to PromptSimilarity.contentSimilarity("${it.finalidade} ${it.contextoDeUso} ${it.textoTemplate}", "${template.finalidade} ${template.contextoDeUso} ${template.textoTemplate}") }
             .filter { it.second >= DUPLICATE_THRESHOLD }.maxByOrNull { it.second }?.first
@@ -59,6 +60,7 @@ class InMemoryPromptLibrary(
         }
         templates[finalTemplate.id] = finalTemplate
         persist()
+        return finalTemplate.id
     }
 
     override suspend fun registrarResultado(templateId: String, sucesso: Boolean, custo: Double, tempoMs: Long) {
@@ -87,13 +89,22 @@ class InMemoryPromptLibrary(
     private fun atualizarTemplateComContador(template: PromptTemplate, contador: Contador) {
         val total = contador.sucesso + contador.falha
         if (total <= 0) return
+        val novaTaxa = contador.sucesso.toDouble() / total
+        val podaAutomatica = total >= LIMIAR_PODA_AMOSTRAS && novaTaxa < LIMIAR_PODA_TAXA_SUCESSO
         templates[template.id] = template.copy(
-            taxaSucesso = contador.sucesso.toDouble() / total,
+            taxaSucesso = novaTaxa,
             custoMedio = contador.custoTotal / total,
             tempoMedioMs = contador.tempoTotalMs / total,
             amostrasObservadas = total,
-            historicoMelhorias = (template.historicoMelhorias + "resultado=${if (contador.sucesso > 0) "sucesso" else "falha"}").takeLast(MAX_HISTORY)
+            historicoMelhorias = (template.historicoMelhorias + "resultado=${if (contador.sucesso > 0) "sucesso" else "falha"}").takeLast(MAX_HISTORY),
+            aposentado = template.aposentado || podaAutomatica
         )
+    }
+
+    override suspend fun aposentar(templateId: String): Boolean {
+        val atual = templates[templateId] ?: return false
+        if (!atual.aposentado) { templates[templateId] = atual.copy(aposentado = true); persist() }
+        return true
     }
 
     private fun loadCounters() = runCatching {
@@ -136,10 +147,10 @@ class InMemoryPromptLibrary(
     private fun loadPersisted(): Map<String, PromptTemplate> = runCatching {
         if (!file.exists()) return@runCatching emptyMap()
         file.readLines().mapNotNull { line ->
-            val fields = line.split('\t'); if (fields.size !in 11..12) return@mapNotNull null
+            val fields = line.split('\t'); if (fields.size !in 11..13) return@mapNotNull null
             runCatching {
                 val d = fields.map(::decode)
-                PromptTemplate(d[0], d[1].toInt(), d[2], d[3], d[4].takeIf(String::isNotEmpty), d[5].takeIf(String::isNotEmpty), d[6], d[7].toDouble(), d[8].toDouble(), d[9].toLong(), d[10].split("\u001f").filter(String::isNotEmpty), d.getOrNull(11)?.toIntOrNull() ?: 0)
+                PromptTemplate(d[0], d[1].toInt(), d[2], d[3], d[4].takeIf(String::isNotEmpty), d[5].takeIf(String::isNotEmpty), d[6], d[7].toDouble(), d[8].toDouble(), d[9].toLong(), d[10].split("\u001f").filter(String::isNotEmpty), d.getOrNull(11)?.toIntOrNull() ?: 0, d.getOrNull(12)?.toBoolean() ?: false)
             }.getOrNull()
         }.associateBy { it.id }
     }.getOrDefault(emptyMap())
@@ -147,7 +158,7 @@ class InMemoryPromptLibrary(
     private fun persist() = runCatching {
         file.parentFile?.mkdirs()
         val tmp = File(file.parentFile ?: File("."), "${file.name}.tmp")
-        tmp.writeText(templates.values.joinToString("\n") { t -> listOf(t.id, t.versao.toString(), t.finalidade, t.contextoDeUso, t.skillRelacionada.orEmpty(), t.agenteRelacionado.orEmpty(), t.textoTemplate, t.taxaSucesso.toString(), t.custoMedio.toString(), t.tempoMedioMs.toString(), t.historicoMelhorias.joinToString("\u001f"), t.amostrasObservadas.toString()).joinToString("\t", transform = ::encode) })
+        tmp.writeText(templates.values.joinToString("\n") { t -> listOf(t.id, t.versao.toString(), t.finalidade, t.contextoDeUso, t.skillRelacionada.orEmpty(), t.agenteRelacionado.orEmpty(), t.textoTemplate, t.taxaSucesso.toString(), t.custoMedio.toString(), t.tempoMedioMs.toString(), t.historicoMelhorias.joinToString("\u001f"), t.amostrasObservadas.toString(), t.aposentado.toString()).joinToString("\t", transform = ::encode) })
         if (!tmp.renameTo(file)) { file.delete(); tmp.renameTo(file) }
     }
 
@@ -167,6 +178,10 @@ class InMemoryPromptLibrary(
         private const val DUPLICATE_THRESHOLD = 0.90
         private const val NEUTRAL_PRIOR = 0.50
         private const val MAX_HISTORY = 100
+        /** Poda automática: amostras mínimas antes de considerar o histórico confiável o
+         *  suficiente pra aposentar, e taxa de sucesso abaixo da qual isso acontece. */
+        private const val LIMIAR_PODA_AMOSTRAS = 5
+        private const val LIMIAR_PODA_TAXA_SUCESSO = 0.2
 
         private fun defaultStorageFile(): File {
             val androidFilesDir = runCatching {

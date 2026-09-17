@@ -35,6 +35,25 @@ class KeywordPlannerTest {
         assertEquals("brain.analyze", plano.passos.single().capacidade)
     }
 
+    @Test fun `pedidos de pesquisa mais amplos disparam o passo pesquisar`() = suspendTest {
+        val comparar = KeywordPlanner().planejar("compare as abordagens disponíveis atualmente para X")
+        assertTrue(comparar.passos.any { it.capacidade == "network.research" })
+
+        val documentacao = KeywordPlanner().planejar("qual é a documentação atual da API X?")
+        assertTrue(documentacao.passos.any { it.capacidade == "network.research" })
+
+        val encontrar = KeywordPlanner().planejar("encontre a documentação oficial para implementar X")
+        assertTrue(encontrar.passos.any { it.capacidade == "network.research" })
+    }
+
+    @Test fun `pedidos comuns de prompt e codigo nao disparam pesquisa desnecessariamente`() = suspendTest {
+        val prompt = KeywordPlanner().planejar("crie um prompt de um foguete espacial decolando")
+        assertTrue(prompt.passos.none { it.capacidade == "network.research" })
+
+        val codigo = KeywordPlanner().planejar("implementar e testar código")
+        assertTrue(codigo.passos.none { it.capacidade == "network.research" })
+    }
+
     private fun suspendTest(block: suspend () -> Unit) {
         var failure: Throwable? = null
         block.startCoroutine(object : Continuation<Unit> {

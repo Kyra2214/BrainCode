@@ -66,7 +66,7 @@ data class DiffFile(val path: String, val lines: List<DiffLine>)
 
 sealed interface ThreadEvent {
     data class User(val text: String) : ThreadEvent
-    data class Agent(val text: String) : ThreadEvent
+    data class Agent(val text: String, val promptActionId: String? = null) : ThreadEvent
     data class Terminal(val result: SandboxExecutionResult, val execution: com.sandbox.runtime.ExecutionLog?) : ThreadEvent
     data class Approval(val id: String) : ThreadEvent
     data class Report(val title: String, val body: String) : ThreadEvent
@@ -121,7 +121,10 @@ fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
                     OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("Buscar na thread") }, modifier = Modifier.weight(0.72f), singleLine = true)
                 }
             }
-            StatusSection(viewModel)
+            // "Sandbox pronto" + Resetar não fica mais fixo no topo do chat — mora em
+            // Configurações > Diagnóstico. Mantemos aqui só os estados que bloqueiam o uso
+            // (preparar/baixar/erro), para não esconder uma ação necessária do usuário.
+            if (viewModel.phase != SandboxPhase.Ready) StatusSection(viewModel)
             val events = threadEvents(viewModel, query)
             val listState = rememberLazyListState()
             androidx.compose.runtime.LaunchedEffect(events.size) {
@@ -251,6 +254,13 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
                 }
                 val tail = event.text.substring(cursor).trim()
                 if (tail.isNotEmpty()) Text(tail, style = MaterialTheme.typography.bodyMedium)
+            }
+            event.promptActionId?.let { actionId ->
+                var feedbackDado by remember(actionId) { mutableStateOf<Boolean?>(null) }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { feedbackDado = true; viewModel.recordPromptFeedback(actionId, true) }, enabled = feedbackDado == null) { Text(if (feedbackDado == true) "👍 Obrigado" else "👍") }
+                    TextButton(onClick = { feedbackDado = false; viewModel.recordPromptFeedback(actionId, false) }, enabled = feedbackDado == null) { Text(if (feedbackDado == false) "👎 Obrigado" else "👎") }
+                }
             }
         }
         is ThreadEvent.System -> Card { Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text(event.text, color = if (event.text.contains("bloqueado", true)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant); event.progress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }; if (viewModel.phase is SandboxPhase.Blocked) OutlinedButton(onClick = { viewModel.prepareSandbox() }) { Text("Tentar de novo") } } }

@@ -60,6 +60,8 @@ fun SettingsScreen(viewModel: SandboxViewModel, onBack: () -> Unit) {
 private fun DiagnosticsSettings(viewModel: SandboxViewModel) {
     val ready = viewModel.phase == SandboxPhase.Ready
     LazyColumn(modifier = Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Text("Status do sandbox", style = MaterialTheme.typography.titleMedium) }
+        item { StatusSection(viewModel) }
         item { Text("Diagnóstico e testes", style = MaterialTheme.typography.titleMedium) }
         item { Text("Os resultados aparecem como mensagens no chat.", style = MaterialTheme.typography.bodySmall) }
         item {

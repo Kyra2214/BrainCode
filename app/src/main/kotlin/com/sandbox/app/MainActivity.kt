@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.core.view.WindowCompat
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -38,6 +39,11 @@ open class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Necessário para que Modifier.imePadding() (usado no composer do ThreadScreen)
+        // consiga acompanhar a altura real do teclado — sem isso o WindowInsetsCompat de
+        // IME não chega correto à árvore do Compose e o campo de texto fica escondido
+        // atrás do teclado em vez de subir junto com ele.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {

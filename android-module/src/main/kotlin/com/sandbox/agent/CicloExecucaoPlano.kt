@@ -29,7 +29,12 @@ data class ResultadoPasso(
     val evidencias: List<EvidenciaComando> = emptyList(),
     val motivo: String? = null,
     val approvalId: String? = null,
-    val actionId: String? = null
+    val actionId: String? = null,
+    /** Custo real reportado pelo executor (ex.: tier da IA usada num escalonamento). 0.0 = sem custo. */
+    val custo: Double = 0.0,
+    /** Capacidade declarativa do passo (ex.: "prompt.library.write") — permite ao caller (UI)
+     *  reconhecer o tipo do resultado sem duplicar a lógica do Planner. */
+    val capacidade: String? = null
 )
 
 data class ResultadoCiclo(
@@ -59,6 +64,7 @@ class CicloExecucaoPlano(
     fun executar(autorizado: AuthorizedPlan, runId: String, actor: String, onPasso: (ResultadoPasso) -> Unit = {}): ResultadoCiclo {
         val plano = autorizado.plan
         val resultados = mutableListOf<ResultadoPasso>()
+        val resultadosPorId = mutableMapOf<String, ResultadoPasso>()
         val concluidos = mutableSetOf<String>()
         var abortado = false
         for (passo in plano.ordemDeExecucao) {
@@ -73,8 +79,13 @@ class CicloExecucaoPlano(
                 onPasso(resultados.last())
                 continue
             }
-            val resultado = processarPasso(passo, autorizado.authorizations.getValue(passo.id), autorizado.decisions[passo.id])
+            // Context Builder mínimo: resultado textual das dependências já concluídas vira
+            // parâmetro extra do passo (ex.: contexto do WebResearch chega ao Prompt Creator).
+            val contextoDependencias = passo.dependeDe.mapNotNull { resultadosPorId[it]?.resultado }
+            val passoComContexto = if (contextoDependencias.isEmpty()) passo else passo.copy(parametros = passo.parametros + contextoDependencias)
+            val resultado = processarPasso(passoComContexto, autorizado.authorizations.getValue(passo.id), autorizado.decisions[passo.id])
             resultados += resultado
+            resultadosPorId[passo.id] = resultado
             onPasso(resultado)
             if (resultado.status == StatusPasso.APROVADO) concluidos += passo.id else abortado = true
         }
@@ -155,15 +166,17 @@ class CicloExecucaoPlano(
                 resultado = dispatch.gateway?.execution?.result,
                 decisaoRouter = decisaoRouter,
                 motivo = dispatch.reason ?: if (dispatch.status == DispatchStatus.DISPATCHED) null else "Dispatcher não executou a capability",
-                actionId = "${passo.id}:${passo.id}"
+                actionId = "${passo.id}:${passo.id}",
+                custo = dispatch.gateway?.execution?.custo ?: 0.0,
+                capacidade = passo.capacidade
             )
         }
         sandbox.abrirSessao(authorization).use { sessao ->
             val execucao = sessao.rodarCapacidade(passo.parametros)
-            if (execucao is AgentSandboxSession.CommandOutcome.Refused) return ResultadoPasso(passo.id, StatusPasso.REPROVADO, decisaoPolicy = decision, decisaoRouter = decisaoRouter, execucao = execucao, motivo = execucao.reason)
+            if (execucao is AgentSandboxSession.CommandOutcome.Refused) return ResultadoPasso(passo.id, StatusPasso.REPROVADO, decisaoPolicy = decision, decisaoRouter = decisaoRouter, execucao = execucao, motivo = execucao.reason, capacidade = passo.capacidade)
             val evidencias = validador.validar(sessao.workspaceHostPath)
             val reprovado = evidencias.any { it.resultado == ResultadoValidacao.FALHOU }
-            return ResultadoPasso(passo.id, if (reprovado) StatusPasso.REPROVADO else StatusPasso.APROVADO, decisaoPolicy = decision, decisaoRouter = decisaoRouter, execucao = execucao, evidencias = evidencias, motivo = if (reprovado) "validação encontrou evidência FALHOU" else null)
+            return ResultadoPasso(passo.id, if (reprovado) StatusPasso.REPROVADO else StatusPasso.APROVADO, decisaoPolicy = decision, decisaoRouter = decisaoRouter, execucao = execucao, evidencias = evidencias, motivo = if (reprovado) "validação encontrou evidência FALHOU" else null, capacidade = passo.capacidade)
         }
     }
 

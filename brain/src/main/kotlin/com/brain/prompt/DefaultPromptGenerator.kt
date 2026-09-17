@@ -6,7 +6,6 @@ import com.brain.core.Roadmap
 import com.brain.core.Submodulo
 import com.brain.core.Tarefa
 
-private const val COMPATIBILIDADE_MINIMA = 0.5
 private const val TAXA_SUCESSO_MINIMA_PARA_REUSO = 0.5
 
 class DefaultPromptGenerator : PromptGenerator {
@@ -19,8 +18,8 @@ class DefaultPromptGenerator : PromptGenerator {
     }
 
     override suspend fun gerarPromptDeCorrecao(tarefa: Tarefa, motivoReprovacao: String, library: PromptLibrary): PromptGerado {
-        val template = library.buscarPorContexto(tarefa.descricao).map { it to compatibilidade(tarefa.descricao, it) }
-            .filter { (it, score) -> it.taxaSucessoEfetiva() >= TAXA_SUCESSO_MINIMA_PARA_REUSO && score >= COMPATIBILIDADE_MINIMA }
+        val template = library.buscarPorContexto(tarefa.descricao).map { it to PromptSimilarity.compatibility(tarefa.descricao, it) }
+            .filter { (it, score) -> it.taxaSucessoEfetiva() >= TAXA_SUCESSO_MINIMA_PARA_REUSO && score >= PromptSimilarity.LIMIAR_COMPATIBILIDADE_REUSO }
             .maxByOrNull { it.second }?.first
         val texto = if (template != null) renderizarCorrecaoComTemplate(tarefa, motivoReprovacao, template) else buildString {
             appendLine(HEADER_DESENVOLVEDOR); appendLine(); appendLine("CORREÇÃO NECESSÁRIA")
@@ -34,23 +33,12 @@ class DefaultPromptGenerator : PromptGenerator {
 
     private suspend fun gerarParaTarefa(tarefa: Tarefa, fase: Fase, modulo: Modulo, submodulo: Submodulo, roadmap: Roadmap, library: PromptLibrary): PromptGerado {
         val contextoBusca = "${fase.nome} ${modulo.nome} ${submodulo.nome} ${tarefa.descricao} ${roadmap.projectIntent.projectType} ${roadmap.projectIntent.platform ?: ""}"
-        val template = library.buscarPorContexto(contextoBusca).map { it to compatibilidade(contextoBusca, it) }
-            .filter { (it, score) -> it.taxaSucessoEfetiva() >= TAXA_SUCESSO_MINIMA_PARA_REUSO && score >= COMPATIBILIDADE_MINIMA }
+        val template = library.buscarPorContexto(contextoBusca).map { it to PromptSimilarity.compatibility(contextoBusca, it) }
+            .filter { (it, score) -> it.taxaSucessoEfetiva() >= TAXA_SUCESSO_MINIMA_PARA_REUSO && score >= PromptSimilarity.LIMIAR_COMPATIBILIDADE_REUSO }
             .maxByOrNull { it.second }?.first
         val texto = if (template != null) renderizarComTemplate(tarefa, fase, modulo, submodulo, roadmap, template) else gerarDoZero(tarefa, fase, modulo, submodulo, roadmap)
         val origem = if (template != null) "ROUTER_TASK:${tarefa.id}:TEMPLATE:${template.id}" else "ROUTER_TASK:${tarefa.id}:GERADO"
         return PromptGerado(tarefaId = tarefa.id, texto = texto, origem = origem)
-    }
-
-    private fun compatibilidade(pedido: String, template: PromptTemplate): Double {
-        val pedidoTokens = tokenizar(pedido)
-        if (pedidoTokens.isEmpty()) return 0.0
-        val todos = tokenizar("${template.contextoDeUso} ${template.finalidade} ${template.skillRelacionada.orEmpty()}")
-        if (todos.isEmpty()) return 0.0
-        val acertos = pedidoTokens.count { token -> todos.any { candidato -> candidato == token || candidato.contains(token) || token.contains(candidato) } }
-        val cobertura = acertos.toDouble() / pedidoTokens.size
-        val densidade = acertos.toDouble() / todos.distinct().size.coerceAtLeast(1)
-        return (cobertura * 0.7 + densidade * 0.3).coerceIn(0.0, 1.0)
     }
 
     private fun renderizarComTemplate(tarefa: Tarefa, fase: Fase, modulo: Modulo, submodulo: Submodulo, roadmap: Roadmap, template: PromptTemplate): String = buildString {
@@ -91,7 +79,6 @@ class DefaultPromptGenerator : PromptGenerator {
     }
 
     private fun PromptTemplate.taxaSucessoEfetiva(): Double = if (amostrasObservadas > 0) taxaSucesso else 0.5
-    private fun tokenizar(texto: String): Set<String> = texto.lowercase().split(Regex("[^\\p{L}\\p{N}]+" )).filter { it.length > 2 }.toSet()
 
     companion object {
         const val HEADER_DESENVOLVEDOR = """MODO DE EXECUÇÃO SILENCIOSA

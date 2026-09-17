@@ -34,7 +34,10 @@ data class ActionExecution(
     val result: String? = null,
     val error: String? = null,
     val evidence: List<String> = emptyList(),
-    val provenance: List<String> = emptyList()
+    val provenance: List<String> = emptyList(),
+    /** Custo real incorrido por esta ação (0.0 = sem custo, ex.: geração local). Nunca inventado — só
+     *  preenchido por executores que sabem o custo real (ex.: escalonamento para IA paga). */
+    val custo: Double = 0.0
 )
 
 enum class ActionLifecycle { CREATED, PLANNED, AUTHORIZED, DISPATCHED, RUNNING, SUCCEEDED, FAILED, BLOCKED, RETRYING, CANCELLED }

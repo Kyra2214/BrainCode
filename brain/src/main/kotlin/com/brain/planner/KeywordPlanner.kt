@@ -16,7 +16,11 @@ class KeywordFunctionSplitter : FunctionSplitter {
         val normalizado = texto.lowercase()
         val passos = mutableListOf<PassoPlano>()
         val pedidoDePrompt = normalizado.containsAny("prompt", "template de prompt")
-        if (normalizado.containsAny("pesquis", "analis", "investig")) {
+        if (normalizado.containsAny(
+                "pesquis", "analis", "investig", "compar", "encontr", "document",
+                "mais atual", "mais recentes", "mudanças recentes", "técnicas atuais"
+            )
+        ) {
             passos += PassoPlano(
                 "pesquisar", "network.research", "evidência de pesquisa disponível",
                 papel = PapelPipeline.PLANEJAMENTO, riskClass = RiskClass.MEDIUM

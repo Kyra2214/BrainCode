@@ -10,6 +10,11 @@ import java.util.Locale
  * sem alterar o fluxo da biblioteca, planner ou executor.
  */
 object PromptSimilarity {
+    /** Limiar único de "compatível o suficiente pra reaproveitar" — compartilhado entre o
+     *  fluxo de chat (PromptGenerationExecutor) e o fluxo autônomo de roadmap
+     *  (DefaultPromptGenerator), pra nunca divergirem sobre o que conta como reuso seguro. */
+    const val LIMIAR_COMPATIBILIDADE_REUSO = 0.85
+
     fun compatibility(request: String, template: PromptTemplate): Double {
         val requested = tokenize(request)
         if (requested.isEmpty()) return 0.0
