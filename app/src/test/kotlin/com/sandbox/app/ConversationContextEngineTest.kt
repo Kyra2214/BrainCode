@@ -40,4 +40,18 @@ class ConversationContextEngineTest {
         assertTrue(resolved.objective.contains("não usar"))
         assertTrue(!resolved.context.decisions.any { it.contains("SQLite") })
     }
+
+    @Test
+    fun `pedido novo nao herda artefato anterior sem referencia de ajuste`() {
+        val history = listOf(
+            ChatMessage(ChatRole.USER, "crie um prompt para uma interface de chatbox"),
+            ChatMessage(ChatRole.ASSISTANT, "Fotografia de uma interface de chatbox, ambientado em um estúdio.")
+        )
+        val novoPedido = "crie um prompt para um foguete espacial decolando no deserto"
+
+        val resolved = engine.resolve(history, novoPedido)
+
+        assertTrue(resolved.objective == novoPedido)
+        assertTrue(resolved.context.references.isEmpty())
+    }
 }
