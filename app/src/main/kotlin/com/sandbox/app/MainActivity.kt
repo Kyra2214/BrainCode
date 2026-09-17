@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,27 +13,24 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 open class MainActivity : ComponentActivity() {
@@ -52,7 +50,7 @@ open class MainActivity : ComponentActivity() {
 
 @Composable
 fun SandboxMobileApp(viewModel: SandboxViewModel) {
-    var settingsOpen by remember { mutableStateOf(false) }
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
     if (settingsOpen) {
         SettingsScreen(viewModel, onBack = { settingsOpen = false })
     } else {
@@ -62,12 +60,8 @@ fun SandboxMobileApp(viewModel: SandboxViewModel) {
 
 @Composable
 fun StatusSection(viewModel: SandboxViewModel) {
-    var expandedManual by remember { mutableStateOf(false) }
+    var expandedManual by rememberSaveable { mutableStateOf(false) }
     val expanded = expandedManual
-    // Há detalhe relevante pra expandir só durante download/extração (bytes, aviso de
-    // não fechar o app). Diagnóstico e Teste geral saíram desta tela: os resultados vão
-    // pro chat, e os botões que os disparam moraram para a aba "Diagnóstico" das
-    // Configurações — por isso não há mais motivo pra auto-expandir aqui.
     val hasExpandableDetail = viewModel.phase is SandboxPhase.Downloading || viewModel.phase is SandboxPhase.Preparing
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -81,7 +75,7 @@ fun StatusSection(viewModel: SandboxViewModel) {
                     modifier = Modifier.weight(1f)
                 )
                 if (hasExpandableDetail) {
-                    TextButton(onClick = { expandedManual = !expandedManual }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)) {
+                    TextButton(onClick = { expandedManual = !expandedManual }) {
                         Text(if (expanded) "menos ▲" else "mais ▼", style = MaterialTheme.typography.labelSmall)
                     }
                 }
@@ -122,12 +116,10 @@ private fun statusHeadline(viewModel: SandboxViewModel): String {
 
 @Composable
 private fun StatusPrimaryActions(viewModel: SandboxViewModel) {
-    when (val phase = viewModel.phase) {
+    when (viewModel.phase) {
         is SandboxPhase.NotReady -> Button(onClick = { viewModel.prepareSandbox() }) { Text("Preparar sandbox") }
         is SandboxPhase.Downloading, is SandboxPhase.Preparing -> LinearProgressIndicator(modifier = Modifier.width(140.dp))
-        is SandboxPhase.Ready -> {
-            OutlinedButton(onClick = { viewModel.resetSandbox() }) { Text("Resetar") }
-        }
+        is SandboxPhase.Ready -> OutlinedButton(onClick = { viewModel.resetSandbox() }) { Text("Resetar") }
         is SandboxPhase.Running -> {
             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
             OutlinedButton(onClick = { viewModel.cancelCommand() }) { Text("Cancelar") }
@@ -145,7 +137,7 @@ private fun StatusDetails(viewModel: SandboxViewModel) {
                 if (phase.totalBytes > 0L) Text("${phase.bytesCompleted / (1024 * 1024)} MiB / ${phase.totalBytes / (1024 * 1024)} MiB", style = MaterialTheme.typography.bodySmall)
                 Text("Não feche o aplicativo durante esta etapa.", style = MaterialTheme.typography.bodySmall)
             }
-            else -> {}
+            else -> Unit
         }
     }
 }
