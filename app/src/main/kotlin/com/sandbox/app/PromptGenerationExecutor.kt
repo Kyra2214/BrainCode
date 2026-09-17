@@ -6,25 +6,26 @@ import com.brain.gateway.ActionExecutor
 import com.brain.gateway.ActionRequest
 import com.brain.policy.PolicyDecision
 import com.brain.prompt.PromptLibrary
+import com.brain.prompt.PromptSimilarity
 import com.brain.prompt.PromptTemplate
 import com.brain.router.PapelPipeline
 import kotlinx.coroutines.runBlocking
 import java.util.Locale
 
-/** Fluxo: biblioteca -> compatibilidade -> adaptação; somente depois API -> persistência -> resposta. */
+/** Fluxo: biblioteca -> compatibilidade -> adaptação; somente depois API -> persistência -> resultado. */
 class PromptGenerationExecutor(
     private val gateway: BrainApiGateway,
     private val promptLibrary: PromptLibrary
 ) : ActionExecutor {
     override fun execute(request: ActionRequest, capability: CapabilityDefinition, decision: PolicyDecision): ActionExecution {
+        val startedAt = System.nanoTime()
         val objective = request.parameters["parameter.0"]?.trim().orEmpty()
         if (objective.isBlank()) return ActionExecution(false, error = "objetivo do prompt ausente", provenance = provenance(capability))
 
-        // Avalia TODOS os candidatos recuperados; não depende do primeiro resultado lexical.
         val candidato = runBlocking {
             promptLibrary.buscarPorContexto(objective)
                 .asSequence()
-                .map { it to compatibility(objective, it) }
+                .map { it to PromptSimilarity.compatibility(objective, it) }
                 .filter { (_, score) -> score >= MIN_COMPATIBILITY }
                 .maxWithOrNull(compareBy<Pair<PromptTemplate, Double>> { it.second }
                     .thenBy { it.first.amostrasObservadas }
@@ -33,14 +34,17 @@ class PromptGenerationExecutor(
         }
 
         if (candidato != null) {
-            val score = compatibility(objective, candidato)
+            val score = PromptSimilarity.compatibility(objective, candidato)
             val adapted = adaptPrompt(candidato, objective)
+            val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
+            registerOutcome(candidato.id, true, 0.0, elapsedMs)
             return ActionExecution(
                 success = true,
                 result = "Encontrei um prompt compatível na biblioteca (compatibilidade ${(score * 100).toInt()}%) e adaptei ao seu pedido:\n\n$adapted",
                 evidence = listOf(
                     "prompt-library:${candidato.id}",
-                    "prompt-library:observed-samples:${candidato.amostrasObservadas}",
+                    "prompt-library:observed-samples:${candidato.amostrasObservadas + 1}",
+                    "prompt-library:result:success",
                     "retrieval:biblioteca-local",
                     "compatibility:${"%.2f".format(Locale.US, score)}",
                     "compatibility-source:metadata"
@@ -55,8 +59,9 @@ class PromptGenerationExecutor(
             val generated = response.text.trim()
             if (generated.isBlank()) return ActionExecution(false, error = "A API especialista não devolveu um prompt válido.", provenance = provenance(capability))
 
-            // Regra: nenhuma saída da IA volta ao usuário antes de entrar na biblioteca.
             val savedId = saveGeneratedPrompt(objective, generated)
+            val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
+            registerOutcome(savedId, true, 0.0, elapsedMs)
             ActionExecution(
                 success = true,
                 result = "Não encontrei prompt compatível na biblioteca. Criei um novo com a API especialista, salvei na biblioteca e deixei pronto para aprendizado por resultado:\n\n$generated",
@@ -66,6 +71,7 @@ class PromptGenerationExecutor(
                     "model:${response.modelId}",
                     "prompt-library:saved-before-response",
                     "prompt-library:id:$savedId",
+                    "prompt-library:result:success",
                     "prompt-library:initial-success-neutral"
                 ),
                 provenance = provenance(capability)
@@ -75,6 +81,10 @@ class PromptGenerationExecutor(
         } catch (error: Exception) {
             ActionExecution(false, error = "Falha ao gerar prompt: ${error.message ?: error.javaClass.simpleName}", provenance = provenance(capability))
         }
+    }
+
+    private fun registerOutcome(templateId: String, success: Boolean, cost: Double, elapsedMs: Long) {
+        runCatching { runBlocking { promptLibrary.registrarResultado(templateId, success, cost, elapsedMs) } }
     }
 
     private fun buildSpecialistRequest(objective: String): String = """
@@ -90,17 +100,6 @@ class PromptGenerationExecutor(
         $objective
     """.trimIndent()
 
-    private fun compatibility(objective: String, template: PromptTemplate): Double {
-        val requested = tokenize(objective)
-        if (requested.isEmpty()) return 0.0
-        val metadata = tokenize("${template.finalidade} ${template.contextoDeUso} ${template.skillRelacionada.orEmpty()}")
-        if (metadata.isEmpty()) return 0.0
-        val overlap = requested.count { token -> metadata.any { meta -> meta == token || meta.contains(token) || token.contains(meta) } }
-        val requestCoverage = overlap.toDouble() / requested.size
-        val metadataCoverage = overlap.toDouble() / metadata.size.coerceAtLeast(1)
-        return (requestCoverage * 0.75 + metadataCoverage * 0.25).coerceIn(0.0, 1.0)
-    }
-
     private fun adaptPrompt(template: PromptTemplate, objective: String): String {
         var adapted = template.textoTemplate
         Regex("\\{\\{?([A-Za-zÀ-ÿ0-9_]+)\\}?\\}").findAll(template.textoTemplate)
@@ -113,14 +112,14 @@ class PromptGenerationExecutor(
                 }
                 adapted = adapted.replace(Regex("\\{\\{?$name\\}?\\}"), value, ignoreCase = true)
             }
-        if (tokenize(adapted).intersect(tokenize(objective)).isEmpty()) adapted += "\n\nContexto específico do pedido: $objective"
+        if (PromptSimilarity.tokenize(adapted).intersect(PromptSimilarity.tokenize(objective)).isEmpty()) adapted += "\n\nContexto específico do pedido: $objective"
         return adapted.trim()
     }
 
     private fun saveGeneratedPrompt(objective: String, generated: String): String {
         val existing = runBlocking {
             promptLibrary.buscarPorContexto(objective)
-                .firstOrNull { similarity(it.textoTemplate, generated) >= DUPLICATE_THRESHOLD }
+                .firstOrNull { PromptSimilarity.contentSimilarity(it.textoTemplate, generated) >= DUPLICATE_THRESHOLD }
         }
         val id = existing?.id ?: "generated-${stableId(objective)}"
         runBlocking {
@@ -144,14 +143,7 @@ class PromptGenerationExecutor(
         return id
     }
 
-    private fun similarity(left: String, right: String): Double {
-        val a = tokenize(left); val b = tokenize(right)
-        if (a.isEmpty() || b.isEmpty()) return 0.0
-        return a.intersect(b).size.toDouble() / a.union(b).size
-    }
-
     private fun stableId(objective: String): String = Integer.toUnsignedString(objective.lowercase(Locale.ROOT).hashCode(), 36)
-    private fun tokenize(text: String): Set<String> = text.lowercase(Locale.ROOT).split(Regex("[^\\p{L}\\p{N}]+" )).filter { it.length > 2 }.toSet()
     private fun PromptTemplate.taxaSucessoEfetiva(): Double = if (amostrasObservadas > 0) taxaSucesso else 0.5
     private fun provenance(capability: CapabilityDefinition) = listOf("app:PromptGenerationExecutor", "capability:${capability.id}")
 
