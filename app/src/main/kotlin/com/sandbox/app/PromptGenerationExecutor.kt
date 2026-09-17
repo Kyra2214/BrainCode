@@ -30,9 +30,11 @@ class PromptGenerationExecutor(
                 .asSequence()
                 .map { it to PromptSimilarity.compatibility(objective, it) }
                 .filter { (_, score) -> score >= MIN_COMPATIBILITY }
-                .maxWithOrNull(compareBy<Pair<PromptTemplate, Double>> { it.second }
-                    .thenBy { it.first.amostrasObservadas }
-                    .thenBy { it.first.taxaSucessoEfetiva() })
+                .maxWithOrNull(
+                    compareBy<Pair<PromptTemplate, Double>> { it.second }
+                        .thenBy { it.first.taxaSucessoEfetiva() }
+                        .thenBy { it.first.amostrasObservadas }
+                )
                 ?.first
         }
 
