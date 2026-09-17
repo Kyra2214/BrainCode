@@ -19,8 +19,11 @@ data class ResearchResult(
 /** Contrato da capacidade de pesquisa — implementações reais ficam no módulo Android (I/O de rede). */
 fun interface WebResearchProvider {
     /** @return sucesso com 0+ resultados, ou falha explicando por que a pesquisa não pôde ser feita. */
-    fun pesquisar(query: String, maxResultados: Int = 3): Result<List<ResearchResult>>
+    fun pesquisar(query: String, maxResultados: Int): Result<List<ResearchResult>>
 }
+
+/** Atalho público que preserva o limite padrão sem violar o contrato SAM da interface. */
+fun WebResearchProvider.pesquisar(query: String): Result<List<ResearchResult>> = pesquisar(query, 3)
 
 /**
  * Sanitiza a consulta antes de qualquer chamada externa — remove segredos,
