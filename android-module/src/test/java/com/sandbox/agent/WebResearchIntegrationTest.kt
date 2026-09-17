@@ -8,7 +8,6 @@ import com.sandbox.runtime.SandboxProcessLauncher
 import java.io.File
 import java.nio.file.Files
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -16,7 +15,8 @@ import org.junit.Test
  * Prova, com evidência de execução real (não só leitura de código), que:
  * 1) "pesquisar" é descoberto e despachado pelo mesmo mecanismo de capabilities/Dispatcher;
  * 2) o resultado da pesquisa chega como parâmetro extra ao passo dependente ("produzir");
- * 3) um pedido sem gatilho de pesquisa NÃO aciona a capability de pesquisa.
+ * 3) um pedido de prompt visual concreto aciona a capability de pesquisa mesmo
+ *    sem o verbo explícito "pesquisar".
  */
 class WebResearchIntegrationTest {
 
@@ -62,7 +62,7 @@ class WebResearchIntegrationTest {
     }
 
     @Test
-    fun `pedido de prompt sem gatilho de pesquisa nao aciona network research`() {
+    fun `pedido de prompt visual concreto aciona network research`() {
         val root = Files.createTempDirectory("web-research-").toFile()
         try {
             var researchChamada = false
@@ -73,7 +73,7 @@ class WebResearchIntegrationTest {
             val cycle = ctl.executeObjective("Crie um prompt para um foguete espacial decolando.", "run-sem-pesquisa")
 
             assertTrue(cycle.aprovado)
-            assertFalse("WebResearch não deveria ser acionado sem gatilho de pesquisa no pedido", researchChamada)
+            assertTrue("WebResearch deveria ser acionado para prompt visual concreto", researchChamada)
         } finally {
             root.deleteRecursively()
         }
