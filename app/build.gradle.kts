@@ -25,8 +25,7 @@ android {
     val signingKeyAlias = System.getenv("BRAINCODE_KEY_ALIAS")
     val signingKeyPassword = System.getenv("BRAINCODE_KEY_PASSWORD")
 
-    if (!signingStoreFile.isNullOrBlank() && !signingStorePassword.isNullOrBlank() &&
-        !signingKeyAlias.isNullOrBlank() && !signingKeyPassword.isNullOrBlank()) {
+    if (!signingStoreFile.isNullOrBlank() && !signingStorePassword.isNullOrBlank() && !signingKeyAlias.isNullOrBlank() && !signingKeyPassword.isNullOrBlank()) {
         signingConfigs.create("devCi") {
             storeFile = file(signingStoreFile)
             storePassword = signingStorePassword
@@ -90,5 +89,6 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:runner:1.6.1")
     androidTestImplementation("androidx.test:rules:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 }
