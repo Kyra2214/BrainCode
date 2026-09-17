@@ -14,6 +14,11 @@ data class TaskState(
 ) {
     init { require(objective.isNotBlank()) { "TaskState exige objetivo" } }
 
+    val requirements: List<Requirement> get() = reasoning?.requirements.orEmpty()
+    val assumptions: List<String> get() = reasoning?.assumptions.orEmpty()
+    val missingRequirements: List<String> get() = reasoning?.missing.orEmpty()
+    val readyForExecution: Boolean get() = reasoning != null && missingRequirements.isEmpty()
+
     fun withReasoning(value: ReasoningState): TaskState = copy(reasoning = value)
     fun withOperational(value: OperationalState): TaskState = copy(operational = value)
     fun withCritique(value: CritiqueResult, revisionCount: Int = revisions): TaskState = copy(critique = value, revisions = revisionCount)

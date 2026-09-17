@@ -17,6 +17,7 @@ import com.brain.prompt.PromptSimilarity
 import com.brain.prompt.PromptTemplate
 import com.brain.prompt.taxaSucessoEfetiva
 import com.brain.reasoning.ReasoningEngine
+import com.brain.reasoning.RevisionEngine
 import com.brain.router.PapelPipeline
 import com.brain.capability.CostClass
 import kotlinx.coroutines.runBlocking
@@ -81,7 +82,8 @@ class PromptGenerationExecutor(
     private val improver: PromptImprover,
     private val outcomeTracker: PromptOutcomeTracker = PromptOutcomeTrackers.forLibrary(promptLibrary),
     private val creator: PromptCreatorAgent = LocalPromptCreatorAgent(),
-    private val reasoningEngine: ReasoningEngine = ReasoningEngine()
+    private val reasoningEngine: ReasoningEngine = ReasoningEngine(),
+    private val revisionEngine: RevisionEngine = RevisionEngine(creator = creator)
 ) : ActionExecutor {
 
     override fun execute(request: ActionRequest, capability: CapabilityDefinition, decision: PolicyDecision): ActionExecution {
@@ -213,9 +215,10 @@ class PromptGenerationExecutor(
             if (scoreIa.total >= scoreInicial.total) return EscalonamentoResultado(viaIa, "${criado.origem}+ia-especialista", scoreIa, true)
         }
 
-        val melhoriaLocal = creator.melhorarLocalmente(criado.texto, pedido, scoreInicial.pontosFracos, contextoPesquisa)
-        val scoreLocal = PromptQualityValidator.validar(pedido, melhoriaLocal.texto, criado.dominio)
-        return if (scoreLocal.total >= scoreInicial.total) EscalonamentoResultado(melhoriaLocal.texto, melhoriaLocal.origem, scoreLocal, false)
+        val reasoning = reasoningEngine.analyze(pedido)
+        val revisao = revisionEngine.revise(reasoning, criado.texto)
+        val scoreLocal = revisao.critique.score
+        return if (scoreLocal.total >= scoreInicial.total) EscalonamentoResultado(revisao.prompt, "local:revision-engine:${revisao.revisions}", scoreLocal, false)
         else EscalonamentoResultado(criado.texto, criado.origem, scoreInicial, false)
     }
 

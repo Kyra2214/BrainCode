@@ -174,7 +174,7 @@ class BrainSandboxController(
         val planner = com.brain.planner.KeywordPlanner()
         val basePlan = runBlockingPlanner { planner.planejar(classification.intent.objective) }
         if (basePlan.passos.any { it.capacidade == "brain.analyze" } && !apiKeyAvailable()) {
-            throw IllegalStateException("Nenhuma chave de API válida está configurada no catálogo. Configure uma chave em Configurações antes de usar o diagnóstico por fallback.")
+            emit(runId, "reasoning", "LocalFallbackSelected", mapOf("reason" to "api-unavailable"))
         }
         val promptHit = promptRetrieval?.retrieve(RetrievalQuery(objective))?.hit
         val treeAssumptions = if (treeOfThoughts.shouldExplore(objective)) {

@@ -1,7 +1,8 @@
 package com.brain.reasoning
 
-import com.brain.prompt.LocalPromptCreatorAgent
 import com.brain.prompt.PromptCriado
+import com.brain.prompt.PromptCreatorAgent
+import com.brain.prompt.LocalPromptCreatorAgent
 
 /** Resultado de revisão com histórico curto para auditoria e prevenção de loops. */
 data class RevisionResult(
@@ -13,7 +14,7 @@ data class RevisionResult(
 
 /** Revisa somente enquanto a crítica encontrar falha e nunca ultrapassa o limite definido. */
 class RevisionEngine(
-    private val creator: LocalPromptCreatorAgent = LocalPromptCreatorAgent(),
+    private val creator: PromptCreatorAgent = LocalPromptCreatorAgent(),
     private val critic: SelfCritic = SelfCritic(),
     private val maxRevisions: Int = 3
 ) {
