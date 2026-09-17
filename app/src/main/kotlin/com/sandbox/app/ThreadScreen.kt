@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilledIconButton
@@ -122,7 +121,13 @@ fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedButton(onClick = { searchOpen = false; query = "" }, modifier = Modifier.weight(0.28f)) { Text("← Voltar") }
-                    OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("Buscar na thread") }, modifier = Modifier.weight(0.72f), singleLine = true)
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        label = { Text("Buscar na thread") },
+                        modifier = Modifier.weight(0.72f),
+                        singleLine = true
+                    )
                 }
             }
             StatusSection(viewModel)
@@ -136,18 +141,37 @@ fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
                     if (nearEnd) listState.animateScrollToItem(events.lastIndex)
                 }
             }
-            SelectionContainer {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(events) { event -> ThreadEventCard(event, viewModel) }
+            if (searchOpen && query.isNotBlank() && events.isEmpty()) {
+                Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Nenhum resultado", style = MaterialTheme.typography.titleSmall)
+                        Text("Nenhuma mensagem corresponde a \"$query\".", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            } else {
+                SelectionContainer {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(events, key = { event -> eventKey(event) }) { event -> ThreadEventCard(event, viewModel) }
+                    }
                 }
             }
             ThreadComposer(viewModel)
         }
     }
+}
+
+private fun eventKey(event: ThreadEvent): String = when (event) {
+    is ThreadEvent.User -> "user:${event.text.hashCode()}"
+    is ThreadEvent.Agent -> "agent:${event.text.hashCode()}"
+    is ThreadEvent.Terminal -> "terminal:${event.execution?.id ?: event.result.hashCode()}"
+    is ThreadEvent.Approval -> "approval:${event.id}"
+    is ThreadEvent.Report -> "report:${event.title}:${event.body.hashCode()}"
+    is ThreadEvent.Diff -> "diff:${event.files.joinToString { it.path }.hashCode()}"
+    is ThreadEvent.System -> "system:${event.text}:${event.progress}"
 }
 
 private fun threadEvents(viewModel: SandboxViewModel, query: String = ""): List<ThreadEvent> = buildList {
@@ -186,13 +210,14 @@ private fun ThreadTopBar(
                 Text("BrainCode", style = MaterialTheme.typography.titleLarge, maxLines = 1)
                 Text("Converse. Execute. Comprove.", style = MaterialTheme.typography.bodySmall, maxLines = 1)
             }
-            AssistChip(
-                onClick = {},
-                label = { Text(phaseLabel(viewModel.phase)) },
-                colors = AssistChipDefaults.assistChipColors(
-                    labelColor = if (viewModel.phase is SandboxPhase.Blocked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            )
+            val phaseColor = if (viewModel.phase is SandboxPhase.Blocked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = phaseColor,
+                shape = MaterialTheme.shapes.small
+            ) {
+                Text(phaseLabel(viewModel.phase), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp))
+            }
             IconButton(onClick = onSearch) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, contentDescription = if (searchOpen) "Fechar busca" else "Buscar") }
             IconButton(onClick = onClearChat) { Icon(Icons.Default.Delete, contentDescription = "Limpar chat") }
             IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, contentDescription = "Configurações") }
@@ -238,12 +263,12 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
     val context = LocalContext.current
     fun copy(text: String) { clipboard.setText(AnnotatedString(text)); Toast.makeText(context, "Copiado", Toast.LENGTH_SHORT).show() }
     when (event) {
-        is ThreadEvent.User -> Row(modifier = Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = { viewModel.quoteEvent(event) }), horizontalArrangement = Arrangement.End) {
+        is ThreadEvent.User -> Row(modifier = Modifier.fillMaxWidth().combinedClickable(onClick = { viewModel.quoteEvent(event) }, onLongClick = { viewModel.quoteEvent(event) }), horizontalArrangement = Arrangement.End) {
             Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) {
                 Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
             }
         }
-        is ThreadEvent.Agent -> Column(modifier = Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = { viewModel.quoteEvent(event) }), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        is ThreadEvent.Agent -> Column(modifier = Modifier.fillMaxWidth().combinedClickable(onClick = { viewModel.quoteEvent(event) }, onLongClick = { viewModel.quoteEvent(event) }), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val blocks = extractCodeBlocks(event.text)
             if (blocks.isEmpty()) Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
             else {
@@ -331,7 +356,7 @@ private fun ThreadComposer(viewModel: SandboxViewModel) {
         if (viewModel.phase == SandboxPhase.Ready && input.startsWith("/")) {
             val matches = viewModel.sugestoesDeComando.filter { it.startsWith(input, ignoreCase = true) && it != input }.take(30)
             if (matches.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(matches) { command -> AssistChip(onClick = { viewModel.chatInput = command }, label = { Text(command) }) }
+                items(matches, key = { it }) { command -> AssistChip(onClick = { viewModel.chatInput = command }, label = { Text(command) }) }
             }
         }
         val enabled = !viewModel.chatRunning && viewModel.phase == SandboxPhase.Ready
