@@ -18,8 +18,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -35,7 +37,7 @@ private fun formatBytes(bytes: Long): String = when {
 
 @Composable
 fun SettingsScreen(viewModel: SandboxViewModel, onBack: () -> Unit) {
-    var section by remember { mutableIntStateOf(0) }
+    var section by rememberSaveable { mutableIntStateOf(0) }
     Column(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("Configurações do projeto", style = MaterialTheme.typography.titleLarge)
@@ -62,12 +64,6 @@ fun SettingsScreen(viewModel: SandboxViewModel, onBack: () -> Unit) {
     }
 }
 
-/**
- * Diagnóstico, Teste geral e Verificação do Brain moraram na tela principal
- * (StatusPrimaryActions) e agora vivem aqui — são ferramentas de manutenção, não
- * parte do fluxo de chat. Os resultados completos aparecem como mensagens no chat
- * (ThreadEvent.Report); aqui só ficam os botões que disparam cada checagem.
- */
 @Composable
 private fun DiagnosticsSettings(viewModel: SandboxViewModel) {
     val ready = viewModel.phase == SandboxPhase.Ready
@@ -95,7 +91,7 @@ private fun DiagnosticsSettings(viewModel: SandboxViewModel) {
 
 @Composable
 private fun ExtensionsSettings(viewModel: SandboxViewModel) {
-    var kind by remember { mutableIntStateOf(0) }
+    var kind by rememberSaveable { mutableIntStateOf(0) }
     Column(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = kind == 0, onClick = { kind = 0 }, label = { Text("Tools") })
@@ -111,9 +107,9 @@ private fun WorkspaceSettings(viewModel: SandboxViewModel) {
         item { Text("Workspace", style = MaterialTheme.typography.titleMedium) }
         item { Text("Projeto ativo: ${viewModel.workspaceProjectName}") }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { viewModel.refreshWorkspace() }, enabled = viewModel.phase == SandboxPhase.Ready) { Text("Atualizar projetos") }
-                OutlinedButton(onClick = { viewModel.refreshBrainCatalogs() }, enabled = viewModel.phase == SandboxPhase.Ready) { Text("Atualizar Brain") }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { viewModel.refreshWorkspace() }, enabled = viewModel.phase == SandboxPhase.Ready, modifier = Modifier.fillMaxWidth()) { Text("Atualizar projetos") }
+                OutlinedButton(onClick = { viewModel.refreshBrainCatalogs() }, enabled = viewModel.phase == SandboxPhase.Ready, modifier = Modifier.fillMaxWidth()) { Text("Atualizar Brain") }
             }
         }
         items(viewModel.workspaceProjects) { project ->
@@ -133,25 +129,39 @@ private fun ToolchainSettings(viewModel: SandboxViewModel) {
         }
         items(BuiltInToolchains.all) { profile ->
             val status = viewModel.toolchainStatuses[profile.id]
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text(profile.displayName)
-                    Text(
-                        buildString {
-                            append(status?.versionOutput.orEmpty())
-                            if (status != null && status.installedBytes > 0L) {
-                                if (isNotEmpty()) append(" · ")
-                                append(formatBytes(status.installedBytes))
-                            }
-                        },
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    status?.error?.takeIf { it.isNotBlank() }?.let { error ->
-                        Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            CardLikeToolchain(
+                name = profile.displayName,
+                details = buildString {
+                    append(status?.versionOutput.orEmpty())
+                    if (status != null && status.installedBytes > 0L) {
+                        if (isNotEmpty()) append(" · ")
+                        append(formatBytes(status.installedBytes))
                     }
-                }
-                Button(onClick = { viewModel.installToolchain(profile.id) }, enabled = viewModel.phase == SandboxPhase.Ready) { Text(status?.state?.name ?: "Instalar") }
-            }
+                },
+                error = status?.error,
+                actionLabel = status?.state?.name ?: "Instalar",
+                enabled = viewModel.phase == SandboxPhase.Ready,
+                onAction = { viewModel.installToolchain(profile.id) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CardLikeToolchain(
+    name: String,
+    details: String,
+    error: String?,
+    actionLabel: String,
+    enabled: Boolean,
+    onAction: () -> Unit
+) {
+    androidx.compose.material3.Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(name, style = MaterialTheme.typography.titleSmall)
+            if (details.isNotBlank()) Text(details, style = MaterialTheme.typography.bodySmall)
+            error?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+            Button(onClick = onAction, enabled = enabled, modifier = Modifier.fillMaxWidth()) { Text(actionLabel) }
         }
     }
 }
