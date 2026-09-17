@@ -161,7 +161,7 @@ class PromptGenerationExecutor(
         actionId: String
     ): ActionExecution {
         val scoreInicial = PromptQualityValidator.validar(objetivo, criado.texto, criado.dominio)
-        val (textoFinal, origem, scoreFinal, aiUsada) = escalonar(objetivo, criado, scoreInicial, null)
+        val (textoFinal, origem, scoreFinal, aiUsada) = escalonar(objetivo, criado, scoreInicial, contextoPesquisa)
         val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
         val savedId = saveGeneratedPrompt(objetivo, textoFinal)
         outcomeTracker.markUsed(actionId, savedId)

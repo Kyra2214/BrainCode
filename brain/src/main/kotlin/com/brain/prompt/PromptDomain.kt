@@ -16,7 +16,7 @@ enum class PromptDomain {
                 texto.containsAny(
                     "imagem", "foto", "fotografia", "fotorrealista", "foto-realista", "ilustra", "arte digital",
                     "pintura", "retrato", "desenho", "render", "wallpaper", "cartaz", "pôster", "poster", "capa"
-                ) -> IMAGEM
+                ) || ("prompt" in texto && !texto.containsAny("código", "codigo", "program", "script", "texto", "resumo")) -> IMAGEM
                 texto.containsAny(
                     "código", "codigo", "função", "funcao", "classe", "script", "programa", "algoritmo",
                     "endpoint", "api rest", "implementar", "refatorar", "bug", "compilar"
