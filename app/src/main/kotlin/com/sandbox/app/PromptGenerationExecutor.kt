@@ -115,7 +115,7 @@ class PromptGenerationExecutor(
         }
 
         val criado = creator.criar(objetivo, candidato, contextoPesquisa)
-        return finalizar(objetivo, criado, candidato, evidenciasBase, capability, startedAt, request.actionId)
+        return finalizar(objetivo, criado, candidato, contextoPesquisa, evidenciasBase, capability, startedAt, request.actionId)
     }
 
     /** "melhore esse prompt" / "otimize" / "deixe mais profissional" — escala direto, sem passar pela biblioteca. */
@@ -155,6 +155,7 @@ class PromptGenerationExecutor(
         objetivo: String,
         criado: PromptCriado,
         candidatoBiblioteca: PromptTemplate?,
+        contextoPesquisa: String?,
         evidenciasBase: List<String>,
         capability: CapabilityDefinition,
         startedAt: Long,
