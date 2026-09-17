@@ -12,7 +12,6 @@ import java.io.File
 import java.nio.file.Files
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -92,7 +91,7 @@ class PromptCreatorWebResearchIntegrationTest {
         }
     }
 
-    @Test fun `sem gatilho de pesquisa o prompt sai so com criacao local, sem mencionar fontes`() {
+    @Test fun `prompt visual concreto inclui o contexto da pesquisa na resposta`() {
         val root = Files.createTempDirectory("prompt-web-research-").toFile()
         try {
             val library = FakePromptLibrary()
@@ -102,7 +101,7 @@ class PromptCreatorWebResearchIntegrationTest {
             )
 
             assertTrue(cycle.aprovado)
-            assertFalse("sem gatilho de pesquisa, não deveria citar fonte nenhuma", cycle.resposta.orEmpty().contains("exemplo/"))
+            assertTrue("prompt visual concreto deveria incluir a pesquisa", cycle.resposta.orEmpty().contains("fotografia-tecnica.exemplo"))
         } finally {
             root.deleteRecursively()
         }
