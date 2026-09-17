@@ -162,7 +162,10 @@ class PromptGenerationExecutor(
         actionId: String
     ): ActionExecution {
         val scoreInicial = PromptQualityValidator.validar(objetivo, criado.texto, criado.dominio)
-        val (textoFinal, origem, scoreFinal, aiUsada) = escalonar(objetivo, criado, scoreInicial, contextoPesquisa)
+        val (textoEscalonado, origem, scoreFinal, aiUsada) = escalonar(objetivo, criado, scoreInicial, contextoPesquisa)
+        val textoFinal = if (!contextoPesquisa.isNullOrBlank() && !textoEscalonado.contains(contextoPesquisa)) {
+            "$textoEscalonado\n\nContexto pesquisado considerado:\n$contextoPesquisa"
+        } else textoEscalonado
         val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
         val savedId = saveGeneratedPrompt(objetivo, textoFinal)
         outcomeTracker.markUsed(actionId, savedId)
