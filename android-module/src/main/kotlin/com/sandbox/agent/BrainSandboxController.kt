@@ -185,6 +185,10 @@ class BrainSandboxController(
         val plan = basePlan.copy(
             assumptions = basePlan.assumptions + treeAssumptions + if (promptHit != null) setOf("prompt-template:${promptHit.id}") else emptySet()
         )
+        taskState = taskState?.withPlan(
+            summary = plan.passos.joinToString(",") { "${it.id}:${it.capacidade}" },
+            assumptions = plan.assumptions.toList()
+        )
         var cycle: ResultadoCiclo? = null
         durableJobs.run(
             jobId = "job-$runId",
@@ -223,6 +227,7 @@ class BrainSandboxController(
             observations = finalCycle.passos.map { Observation(it.passoId, it.status == StatusPasso.APROVADO, it.motivo ?: it.status.name) }
         )
         taskState = taskState?.withOperational(operational)
+            ?.withCycle("${finalCycle.passos.count { it.status == StatusPasso.APROVADO }}/${finalCycle.passos.size} passos aprovados")
         finalCycle.researchSources.forEach { source ->
             layeredMemory.rememberEvidence(
                 source,

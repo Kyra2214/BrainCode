@@ -22,7 +22,10 @@ data class ReasoningState(
     val domain: PromptDomain,
     val requirements: List<Requirement>,
     val assumptions: List<String>,
-    val missing: List<String>
+    val missing: List<String>,
+    val slots: List<RequirementSlot> = emptyList(),
+    val constraints: List<RequirementConstraint> = emptyList(),
+    val dependencies: List<RequirementDependency> = emptyList()
 ) {
     val canProceedLocally: Boolean get() = missing.isEmpty()
 }
@@ -46,7 +49,17 @@ class ReasoningEngine {
         val discovered = requirementDiscovery.discover(objective, domain)
         val decisions = assumptionManager.decide(objective, domain, discovered.explicit)
         val missing = if (isRefinement(lower)) emptyList() else discovered.missing + decisions.blocked
-        return ReasoningState(objective, intent, domain, discovered.explicit, decisions.assumptions, missing.distinct())
+        return ReasoningState(
+            objective,
+            intent,
+            domain,
+            discovered.explicit,
+            decisions.assumptions,
+            missing.distinct(),
+            discovered.slots,
+            discovered.constraints,
+            discovered.dependencies
+        )
     }
 
     private fun isRefinement(lower: String): Boolean = lower.containsAny(
