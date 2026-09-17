@@ -1,6 +1,8 @@
 package com.brain.prompt
 
 import kotlinx.coroutines.runBlocking
+import java.util.Collections
+import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
 
 /** Biblioteca operacional de prompts reutilizáveis. */
@@ -32,11 +34,7 @@ interface PromptLibrarySnapshot {
     fun buscarPorContextoSnapshot(contextoDeUso: String): List<PromptTemplate>
 }
 
-/**
- * Liga a geração/reutilização de um prompt ao resultado real do ciclo que o consumiu.
- * A geração apenas registra uso pendente; o contador histórico só muda quando o ciclo
- * termina e o chamador informa sucesso/falha real.
- */
+/** Liga a geração/reutilização de um prompt ao resultado real do ciclo que o consumiu. */
 class PromptOutcomeTracker(private val library: PromptLibrary) {
     private data class Pending(val templateId: String)
     private val pending = ConcurrentHashMap<String, Pending>()
@@ -48,13 +46,21 @@ class PromptOutcomeTracker(private val library: PromptLibrary) {
 
     fun recordOutcome(actionId: String, success: Boolean, cost: Double, elapsedMs: Long): Boolean {
         val usage = pending.remove(actionId) ?: return false
-        runCatching {
+        val persisted = runCatching {
             runBlocking { library.registrarResultado(usage.templateId, success, cost, elapsedMs) }
-        }.onFailure {
-            pending[actionId] = usage
-        }
-        return true
+        }.isSuccess
+        if (!persisted) pending[actionId] = usage
+        return persisted
     }
 
     fun pendingCount(): Int = pending.size
+}
+
+/** Um único tracker por instância da biblioteca dentro do processo Android. */
+object PromptOutcomeTrackers {
+    private val trackers = Collections.synchronizedMap(WeakHashMap<PromptLibrary, PromptOutcomeTracker>())
+
+    fun forLibrary(library: PromptLibrary): PromptOutcomeTracker = synchronized(trackers) {
+        trackers.getOrPut(library) { PromptOutcomeTracker(library) }
+    }
 }
