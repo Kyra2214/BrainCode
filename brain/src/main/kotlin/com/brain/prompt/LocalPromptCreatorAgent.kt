@@ -56,7 +56,7 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
 
     private fun componsIrImagem(pedido: String, textoBase: String, contexto: PromptTemplate?, contextoPesquisa: String?): String {
         val componentes = detectarComponentesImagem(textoBase)
-        val sujeito = componentes["sujeito"] ?: extrairSujeito(pedido) ?: "o assunto principal descrito pelo pedido"
+        val sujeito = componentes["sujeito"] ?: extrairSujeito(pedido) ?: pedido.trim().removeSuffix(".")
         val estilo = componentes["estilo"] ?: (if ("fotorrealista" in pedido.lowercase() || "fotografia" in pedido.lowercase()) "fotografia fotorrealista" else "ilustração digital detalhada")
         val ambiente = componentes["ambiente"] ?: padraoImagem("ambiente")
         val composicao = componentes["composicao"] ?: padraoImagem("composicao")
@@ -115,8 +115,10 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
     }
 
     private fun extrairSujeito(pedido: String): String? {
-        val semPrefixo = Regex("(?i)crie (um |uma )?prompt(s)? (para|de) ").replace(pedido, "")
-        val match = Regex("(?i)(?:de |para )(um[a]? [^,.;]+)").find(semPrefixo)
+        val semPrefixo = pedido
+            .replace(Regex("(?i)^\\s*(crie|gere|escreva|faça|faca)\\s+(um[a]?\\s+)?prompt(s)?\\s*(para|de)?\\s*"), "")
+            .trim()
+        val match = Regex("(?i)(?:^|\\b(?:de|para)\\s+)(?:(?:um|uma|o|a)\\s+)?([^,.;]+)").find(semPrefixo)
         return match?.groupValues?.get(1)?.trim()?.takeIf { it.length in 4..160 }
     }
 
@@ -135,7 +137,7 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
 
     private fun componsIrVideo(pedido: String, textoBase: String, contexto: PromptTemplate?, contextoPesquisa: String?): String {
         val componentes = detectarComponentesImagem(textoBase)
-        val sujeito = componentes["sujeito"] ?: extrairSujeito(pedido) ?: "a cena principal descrita pelo pedido"
+        val sujeito = componentes["sujeito"] ?: extrairSujeito(pedido) ?: pedido.trim().removeSuffix(".")
         val movimento = primeiraOcorrencia(pedido.lowercase(), "travelling" to "travelling", "câmera lenta" to "câmera lenta", "zoom" to "zoom progressivo", "panorâmica" to "panorâmica") ?: "movimento de câmera suave"
         val duracao = Regex("(\\d+)\\s*(segundos|s\\b)").find(pedido)?.value ?: "duração curta (poucos segundos)"
         val iluminacao = componentes["iluminacao"] ?: padraoImagem("iluminacao")

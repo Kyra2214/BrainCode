@@ -58,9 +58,26 @@ object PromptQualityValidator {
         if (dominio != PromptDomain.IMAGEM && dominio != PromptDomain.VIDEO) {
             return if (texto.length >= 20) 1.0 else 0.4
         }
-        val esperados = listOf("ambient", "composi", "ilumina", "câmera", "camera", "lente", "profundidade", "realis", "qualidade", "estilo", "resolução")
-        val presentes = esperados.count { it in texto.lowercase(Locale.ROOT) }
-        return (presentes.toDouble() / 6.0).coerceIn(0.0, 1.0)
+        val termos = requisitosConcretos(pedido)
+        if (termos.isEmpty()) return 0.0
+        val lower = texto.lowercase(Locale.ROOT)
+        val presentes = termos.count { termo -> lower.split(Regex("[^\\p{L}\\p{Nd}]+" )).any { it == termo || it.startsWith(termo) || termo.startsWith(it) } }
+        return (presentes.toDouble() / termos.size).coerceIn(0.0, 1.0)
+    }
+
+    /** Termos observáveis do pedido; rótulos fixos como "Iluminação" não contam como cobertura. */
+    private fun requisitosConcretos(pedido: String): List<String> {
+        val stopwords = setOf(
+            "crie", "criar", "gere", "gerar", "escreva", "faca", "faça", "um", "uma", "uns", "umas",
+            "o", "a", "os", "as", "de", "do", "da", "dos", "das", "para", "por", "com", "e", "em",
+            "um", "prompt", "prompts", "imagem", "imagens", "foto", "fotografia", "fotografico", "fotográfico",
+            "video", "vídeo", "cena", "tipo", "sobre", "que", "seja"
+        )
+        return pedido.lowercase(Locale.ROOT)
+            .split(Regex("[^\\p{L}\\p{Nd}]+"))
+            .map { it.trim() }
+            .filter { it.length >= 4 && it !in stopwords }
+            .distinct()
     }
 
     private fun clareza(texto: String): Double {

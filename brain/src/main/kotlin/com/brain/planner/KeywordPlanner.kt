@@ -16,11 +16,14 @@ class KeywordFunctionSplitter : FunctionSplitter {
         val normalizado = texto.lowercase()
         val passos = mutableListOf<PassoPlano>()
         val pedidoDePrompt = normalizado.containsAny("prompt", "template de prompt")
-        if (!normalizado.contains("criar documento") && normalizado.containsAny(
+        val pesquisaExplicita = normalizado.containsAny(
                 "pesquis", "analis", "investig", "compar", "encontr", "document",
                 "mais atual", "mais recentes", "mudanças recentes", "técnicas atuais"
             )
-        ) {
+        // Prompts visuais se beneficiam de referências técnicas mesmo quando o usuário
+        // não escreve literalmente "pesquise"; a consulta continua bounded e evidenciada.
+        val pesquisaNecessaria = pedidoDePrompt || pesquisaExplicita
+        if (!normalizado.contains("criar documento") && pesquisaNecessaria) {
             passos += PassoPlano(
                 "pesquisar", "network.research", "evidência de pesquisa disponível",
                 parametros = listOf(texto),
