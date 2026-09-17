@@ -14,13 +14,14 @@ enum class PromptDomain {
             return when {
                 texto.containsAny("vídeo", "video", "clipe", "animação", "animacao", "cena em movimento", "storyboard") -> VIDEO
                 texto.containsAny(
+                    "código", "codigo", "função", "funcao", "classe", "script", "programa", "algoritmo",
+                    "endpoint", "api rest", "implementar", "refatorar", "bug", "compilar", "app", "aplicativo",
+                    "interface", "tela", "layout", "android", "ios", "chatbox", "frontend", "backend"
+                ) -> CODIGO
+                texto.containsAny(
                     "imagem", "foto", "fotografia", "fotorrealista", "foto-realista", "ilustra", "arte digital",
                     "pintura", "retrato", "desenho", "render", "wallpaper", "cartaz", "pôster", "poster", "capa"
-                ) || ("prompt" in texto && !texto.containsAny("código", "codigo", "program", "script", "texto", "resumo")) -> IMAGEM
-                texto.containsAny(
-                    "código", "codigo", "função", "funcao", "classe", "script", "programa", "algoritmo",
-                    "endpoint", "api rest", "implementar", "refatorar", "bug", "compilar"
-                ) -> CODIGO
+                ) -> IMAGEM
                 else -> TEXTO
             }
         }
