@@ -107,12 +107,12 @@ class AndroidKnowledgeMemory(context: Context) : KnowledgeMemory {
         source = json.optJSONObject("source")?.let {
             KnowledgeSource(
                 type = it.optString("type", "unknown"),
-                uri = it.optString("uri", null),
-                providerId = it.optString("providerId", null),
-                modelId = it.optString("modelId", null),
-                repository = it.optString("repository", null),
-                path = it.optString("path", null),
-                commit = it.optString("commit", null)
+                uri = it.optString("uri").takeIf { value -> value.isNotBlank() },
+                providerId = it.optString("providerId").takeIf { value -> value.isNotBlank() },
+                modelId = it.optString("modelId").takeIf { value -> value.isNotBlank() },
+                repository = it.optString("repository").takeIf { value -> value.isNotBlank() },
+                path = it.optString("path").takeIf { value -> value.isNotBlank() },
+                commit = it.optString("commit").takeIf { value -> value.isNotBlank() }
             )
         },
         retrievalHints = json.optJSONArray("retrievalHints").toStringList(),

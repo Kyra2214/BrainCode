@@ -82,7 +82,7 @@ object ApiKeyCatalogLoader {
                             region = providerObj.optString("region", ""),
                             officialUrl = providerObj.getString("officialUrl"),
                             documentationUrl = providerObj.optString("documentationUrl", providerObj.getString("officialUrl")),
-                            modelsEndpoint = providerObj.optString("modelsEndpoint", null),
+                            modelsEndpoint = providerObj.optString("modelsEndpoint").takeIf { it.isNotBlank() },
                             models = models
                         )
                     )
