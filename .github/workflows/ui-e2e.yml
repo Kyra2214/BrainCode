@@ -1,0 +1,61 @@
+name: UI E2E
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui-e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-ui-e2e:
+    name: Android UI E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Make Gradle executable
+        run: chmod +x ./gradlew
+
+      - name: Enable KVM
+        run: |
+          sudo chmod 666 /dev/kvm
+
+      - name: Run Android UI E2E on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: Pixel_2
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          disable-animations: true
+          script: ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace
+
+      - name: Upload UI E2E reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BrainCode-ui-e2e-reports-${{ github.sha }}
+          path: |
+            **/build/outputs/androidTest-results/**
+            **/build/reports/androidTests/**
+          if-no-files-found: ignore
+          retention-days: 14
