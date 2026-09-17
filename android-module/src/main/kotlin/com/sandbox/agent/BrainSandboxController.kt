@@ -98,8 +98,8 @@ class BrainSandboxController(
             }
     }
     private val durableJobs = DurableJobRunner(
-        JobStore(File(rootfsDir.parentFile ?: rootfsDir, "brain-jobs.json")),
-        WorkflowEngine(File(rootfsDir.parentFile ?: rootfsDir, "brain-workflows.json"))
+        JobStore(File(rootfsDir, "brain-jobs.json")),
+        WorkflowEngine(File(rootfsDir, "brain-workflows.json"))
     )
     private val intentClassifier = FastIntentClassifier()
     private val promptRetrieval = promptLibrary?.let { Retrieval(listOf(PromptLibraryRetrievalSource.from(it))) }
