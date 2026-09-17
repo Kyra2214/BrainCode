@@ -1,5 +1,7 @@
 name: UI E2E
 
+# Manual E2E trigger validation
+
 on:
   push:
     branches: ["main"]
