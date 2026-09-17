@@ -21,8 +21,13 @@ class KeywordFunctionSplitter : FunctionSplitter {
                 "mais atual", "mais recentes", "mudanças recentes", "técnicas atuais"
             )
         // Prompts visuais se beneficiam de referências técnicas mesmo quando o usuário
-        // não escreve literalmente "pesquise"; a consulta continua bounded e evidenciada.
-        val pesquisaNecessaria = pedidoDePrompt || pesquisaExplicita
+        // não escreve literalmente "pesquise"; prompts de arquitetura/texto não devem
+        // ganhar uma etapa de rede apenas por conter a palavra "prompt".
+        val promptVisual = pedidoDePrompt && normalizado.containsAny(
+            "imagem", "foto", "fotografia", "fotorrealista", "ilustra", "retrato", "paisagem",
+            "foguete", "céu", "iluminação", "cinematográfica", "decolando", "render", "wallpaper"
+        )
+        val pesquisaNecessaria = pesquisaExplicita || promptVisual
         if (!normalizado.contains("criar documento") && pesquisaNecessaria) {
             passos += PassoPlano(
                 "pesquisar", "network.research", "evidência de pesquisa disponível",

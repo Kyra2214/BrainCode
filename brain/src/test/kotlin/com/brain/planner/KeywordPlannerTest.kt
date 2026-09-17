@@ -24,10 +24,11 @@ class KeywordPlannerTest {
 
     @Test fun `pedido de prompt gera producao mesmo sem verbo de criacao`() = suspendTest {
         val plano = KeywordPlanner().planejar("quero um prompt para uma imagem realista de foguete")
-        val produzir = plano.passos.single()
+        val produzir = plano.passos.first { it.id == "produzir" }
         assertEquals("produzir", produzir.id)
         assertEquals("prompt.library.write", produzir.capacidade)
         assertEquals(PapelPipeline.ESCRITA_DE_PROMPT, produzir.papel)
+        assertTrue(plano.passos.any { it.capacidade == "network.research" })
     }
 
     @Test fun `objetivo desconhecido permanece seguro e local`() = suspendTest {
@@ -46,9 +47,9 @@ class KeywordPlannerTest {
         assertTrue(encontrar.passos.any { it.capacidade == "network.research" })
     }
 
-    @Test fun `pedidos comuns de prompt e codigo nao disparam pesquisa desnecessariamente`() = suspendTest {
+    @Test fun `pedidos comuns de prompt visual pesquisam e codigo nao pesquisa`() = suspendTest {
         val prompt = KeywordPlanner().planejar("crie um prompt de um foguete espacial decolando")
-        assertTrue(prompt.passos.none { it.capacidade == "network.research" })
+        assertTrue(prompt.passos.any { it.capacidade == "network.research" })
 
         val codigo = KeywordPlanner().planejar("implementar e testar código")
         assertTrue(codigo.passos.none { it.capacidade == "network.research" })
