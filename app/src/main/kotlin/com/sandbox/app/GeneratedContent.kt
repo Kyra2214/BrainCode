@@ -16,7 +16,7 @@ data class ResearchSourceUi(
  */
 fun copyPayloadFor(content: String, type: GeneratedContentType): String = when (type) {
     GeneratedContentType.PROMPT -> content
-        .replace(Regex("(?is)^.*?qualidade\\s+\\d+%:?\\s*\\n*"), "")
+        .replace(Regex("(?is)^.*?qualidade\\s+\\d+%[^\\n]*\\n*"), "")
         .substringBefore("\n\nContexto pesquisado considerado:")
         .substringBefore("\n\nTécnicas consideradas a partir da pesquisa:")
         .substringBefore("\n\n(Melhoria por IA não está disponível")
