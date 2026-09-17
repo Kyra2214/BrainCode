@@ -19,11 +19,9 @@ class DefaultPromptGenerator : PromptGenerator {
     }
 
     override suspend fun gerarPromptDeCorrecao(tarefa: Tarefa, motivoReprovacao: String, library: PromptLibrary): PromptGerado {
-        val template = library.buscarPorContexto(tarefa.descricao)
-            .map { it to compatibilidade(tarefa.descricao, it) }
+        val template = library.buscarPorContexto(tarefa.descricao).map { it to compatibilidade(tarefa.descricao, it) }
             .filter { (it, score) -> it.taxaSucessoEfetiva() >= TAXA_SUCESSO_MINIMA_PARA_REUSO && score >= COMPATIBILIDADE_MINIMA }
-            .maxByOrNull { it.second }
-            ?.first
+            .maxByOrNull { it.second }?.first
         val texto = if (template != null) renderizarCorrecaoComTemplate(tarefa, motivoReprovacao, template) else buildString {
             appendLine(HEADER_DESENVOLVEDOR); appendLine(); appendLine("CORREÇÃO NECESSÁRIA")
             appendLine("Tarefa: ${tarefa.descricao} (id: ${tarefa.id})")
@@ -36,11 +34,9 @@ class DefaultPromptGenerator : PromptGenerator {
 
     private suspend fun gerarParaTarefa(tarefa: Tarefa, fase: Fase, modulo: Modulo, submodulo: Submodulo, roadmap: Roadmap, library: PromptLibrary): PromptGerado {
         val contextoBusca = "${fase.nome} ${modulo.nome} ${submodulo.nome} ${tarefa.descricao} ${roadmap.projectIntent.projectType} ${roadmap.projectIntent.platform ?: ""}"
-        val template = library.buscarPorContexto(contextoBusca)
-            .map { it to compatibilidade(contextoBusca, it) }
+        val template = library.buscarPorContexto(contextoBusca).map { it to compatibilidade(contextoBusca, it) }
             .filter { (it, score) -> it.taxaSucessoEfetiva() >= TAXA_SUCESSO_MINIMA_PARA_REUSO && score >= COMPATIBILIDADE_MINIMA }
-            .maxByOrNull { it.second }
-            ?.first
+            .maxByOrNull { it.second }?.first
         val texto = if (template != null) renderizarComTemplate(tarefa, fase, modulo, submodulo, roadmap, template) else gerarDoZero(tarefa, fase, modulo, submodulo, roadmap)
         val origem = if (template != null) "ROUTER_TASK:${tarefa.id}:TEMPLATE:${template.id}" else "ROUTER_TASK:${tarefa.id}:GERADO"
         return PromptGerado(tarefaId = tarefa.id, texto = texto, origem = origem)
@@ -77,7 +73,7 @@ class DefaultPromptGenerator : PromptGenerator {
                 "PEDIDO", "OBJETIVO", "TAREFA", "DESCRICAO", "DESCRIÇÃO" -> tarefa
                 else -> "[${nome}: definir conforme a tarefa]"
             }
-            resultado = resultado.replace(Regex("\\{\\{?$nome\\}?\\}"), valor, ignoreCase = true)
+            resultado = Regex("\\{\\{?$nome\\}?\\}", RegexOption.IGNORE_CASE).replace(resultado, valor)
         }
         return resultado
     }
