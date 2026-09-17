@@ -14,14 +14,12 @@ android {
     defaultConfig {
         applicationId = "com.sandbox.app"
         minSdk = 26
-        // Fixado em 28 de propósito.
         targetSdk = 28
         versionCode = resolvedVersionCode
         versionName = "0.5.0-dev.$resolvedVersionCode"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    // Desenvolvimento: a assinatura é fornecida pelo CI via GitHub Secrets.
-    // Não usar uma chave privada versionada no repositório.
     val signingStoreFile = System.getenv("BRAINCODE_KEYSTORE_FILE")
     val signingStorePassword = System.getenv("BRAINCODE_KEYSTORE_PASSWORD")
     val signingKeyAlias = System.getenv("BRAINCODE_KEY_ALIAS")
@@ -39,9 +37,7 @@ android {
 
     buildTypes {
         getByName("debug") {
-            if (signingConfigs.findByName("devCi") != null) {
-                signingConfig = signingConfigs.getByName("devCi")
-            }
+            if (signingConfigs.findByName("devCi") != null) signingConfig = signingConfigs.getByName("devCi")
         }
     }
 
@@ -60,22 +56,16 @@ android {
         }
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
-    }
+    composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+    kotlinOptions { jvmTarget = "17" }
 
-    lint {
-        disable += "ExpiredTargetSdkVersion"
-    }
+    lint { disable += "ExpiredTargetSdkVersion" }
 }
 
 dependencies {
@@ -95,6 +85,10 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:runner:1.6.1")
+    androidTestImplementation("androidx.test:rules:1.6.1")
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 }
