@@ -38,7 +38,12 @@ for path in files:
         rows.append((status, cls, name, case.attrib.get("time", "")))
 
 passed = tests - failures - errors - skipped
-status = "PASS" if tests and failures == 0 and errors == 0 else "FAIL"
+if not files:
+    status = "NOT_EXECUTED"
+elif tests and failures == 0 and errors == 0:
+    status = "PASS"
+else:
+    status = "FAIL"
 
 lines = [
     "# BrainCode — Relatório E2E",
