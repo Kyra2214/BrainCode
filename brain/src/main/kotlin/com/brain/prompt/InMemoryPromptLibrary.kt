@@ -13,11 +13,13 @@ class InMemoryPromptLibrary(
     private val templates = ConcurrentHashMap<String, PromptTemplate>()
     private val contadores = ConcurrentHashMap<String, Contador>()
     private val file = storageFile ?: File(System.getProperty("java.io.tmpdir") ?: ".", STORAGE_NAME)
+    private val statsFile = File(file.parentFile ?: File("."), "${file.name}.stats")
 
     init {
         val persisted = loadPersisted()
         templatesIniciais.forEach { seed -> templates[seed.id] = persisted[seed.id]?.takeIf { it.versao >= seed.versao } ?: seed }
         persisted.forEach { (id, template) -> if (!templates.containsKey(id)) templates[id] = template }
+        loadCounters()
         rebuildCountersFromPersisted()
     }
 
@@ -41,7 +43,8 @@ class InMemoryPromptLibrary(
         val atual = templates[template.id]
         val finalTemplate = when {
             similar != null -> template.copy(
-                id = similar.id, versao = maxOf(template.versao, similar.versao + 1),
+                id = similar.id,
+                versao = maxOf(template.versao, similar.versao + 1),
                 taxaSucesso = if (template.amostrasObservadas == 0) similar.taxaSucesso else template.taxaSucesso,
                 custoMedio = if (template.amostrasObservadas == 0) similar.custoMedio else template.custoMedio,
                 tempoMedioMs = if (template.amostrasObservadas == 0) similar.tempoMedioMs else template.tempoMedioMs,
@@ -51,6 +54,9 @@ class InMemoryPromptLibrary(
             atual != null -> template.copy(versao = maxOf(template.versao, atual.versao + 1))
             else -> template
         }
+        if (similar != null && similar.id != finalTemplate.id) {
+            contadores[finalTemplate.id] = contadores[similar.id] ?: Contador()
+        }
         templates[finalTemplate.id] = finalTemplate
         persist()
     }
@@ -58,22 +64,55 @@ class InMemoryPromptLibrary(
     override suspend fun registrarResultado(templateId: String, sucesso: Boolean, custo: Double, tempoMs: Long) {
         val atual = templates[templateId] ?: return
         val contador = contadores.compute(templateId) { _, old ->
-            val base = old ?: Contador()
-            base.copy(sucesso = base.sucesso + if (sucesso) 1 else 0, falha = base.falha + if (sucesso) 0 else 1, custoTotal = base.custoTotal + custo, tempoTotalMs = base.tempoTotalMs + tempoMs)
+            val base = old ?: contadorInicial(atual)
+            base.copy(
+                sucesso = base.sucesso + if (sucesso) 1 else 0,
+                falha = base.falha + if (sucesso) 0 else 1,
+                custoTotal = base.custoTotal + custo,
+                tempoTotalMs = base.tempoTotalMs + tempoMs
+            )
         } ?: return
+        atualizarTemplateComContador(atual, contador)
+        persist()
+        persistCounters()
+    }
+
+    private fun contadorInicial(template: PromptTemplate): Contador {
+        val total = template.amostrasObservadas.coerceAtLeast(0)
+        if (total == 0) return Contador()
+        val ok = kotlin.math.round(template.taxaSucesso * total).toInt().coerceIn(0, total)
+        return Contador(ok, total - ok, template.custoMedio * total, template.tempoMedioMs * total)
+    }
+
+    private fun atualizarTemplateComContador(template: PromptTemplate, contador: Contador) {
         val total = contador.sucesso + contador.falha
-        templates[templateId] = atual.copy(
+        if (total <= 0) return
+        templates[template.id] = template.copy(
             taxaSucesso = contador.sucesso.toDouble() / total,
             custoMedio = contador.custoTotal / total,
             tempoMedioMs = contador.tempoTotalMs / total,
             amostrasObservadas = total,
-            historicoMelhorias = (atual.historicoMelhorias + "resultado=${if (sucesso) "sucesso" else "falha"};custo=$custo;tempoMs=$tempoMs").takeLast(MAX_HISTORY)
+            historicoMelhorias = (template.historicoMelhorias + "resultado=${if (contador.sucesso > 0) "sucesso" else "falha"}").takeLast(MAX_HISTORY)
         )
-        persist()
+    }
+
+    private fun loadCounters() = runCatching {
+        if (!statsFile.exists()) return@runCatching
+        statsFile.readLines().forEach { line ->
+            val fields = line.split('\t')
+            if (fields.size != 5) return@forEach
+            val id = decode(fields[0])
+            contadores[id] = Contador(fields[1].toInt(), fields[2].toInt(), fields[3].toDouble(), fields[4].toLong())
+        }
     }
 
     private fun rebuildCountersFromPersisted() {
         templates.values.forEach { template ->
+            if (contadores.containsKey(template.id)) {
+                val counter = contadores[template.id] ?: return@forEach
+                atualizarTemplateComContador(template, counter)
+                return@forEach
+            }
             val history = template.historicoMelhorias
             val successes = history.count { it.startsWith("resultado=sucesso;") }
             val failures = history.count { it.startsWith("resultado=falha;") }
@@ -83,8 +122,7 @@ class InMemoryPromptLibrary(
                 val tempo = history.sumOf { valueAfter(it, "tempoMs=").toLongOrNull() ?: 0L }
                 contadores[template.id] = Contador(successes, failures, custo, tempo)
             } else if (template.amostrasObservadas > 0) {
-                val ok = kotlin.math.round(template.taxaSucesso * template.amostrasObservadas).toInt().coerceIn(0, template.amostrasObservadas)
-                contadores[template.id] = Contador(ok, template.amostrasObservadas - ok, template.custoMedio * template.amostrasObservadas, template.tempoMedioMs * template.amostrasObservadas)
+                contadores[template.id] = contadorInicial(template)
             }
         }
     }
@@ -111,9 +149,22 @@ class InMemoryPromptLibrary(
         tmp.writeText(templates.values.joinToString("\n") { t -> listOf(t.id, t.versao.toString(), t.finalidade, t.contextoDeUso, t.skillRelacionada.orEmpty(), t.agenteRelacionado.orEmpty(), t.textoTemplate, t.taxaSucesso.toString(), t.custoMedio.toString(), t.tempoMedioMs.toString(), t.historicoMelhorias.joinToString("\u001f"), t.amostrasObservadas.toString()).joinToString("\t", transform = ::encode) })
         if (!tmp.renameTo(file)) { file.delete(); tmp.renameTo(file) }
     }
+
+    private fun persistCounters() = runCatching {
+        statsFile.parentFile?.mkdirs()
+        val tmp = File(statsFile.parentFile ?: File("."), "${statsFile.name}.tmp")
+        tmp.writeText(contadores.entries.joinToString("\n") { (id, c) -> listOf(encode(id), c.sucesso.toString(), c.falha.toString(), c.custoTotal.toString(), c.tempoTotalMs.toString()).joinToString("\t") })
+        if (!tmp.renameTo(statsFile)) { statsFile.delete(); tmp.renameTo(statsFile) }
+    }
+
     private fun encode(value: String): String = Base64.getEncoder().encodeToString(value.toByteArray(Charsets.UTF_8))
     private fun decode(value: String): String = String(Base64.getDecoder().decode(value), Charsets.UTF_8)
     private fun PromptTemplate.taxaSucessoEfetiva(): Double = if (amostrasObservadas > 0) taxaSucesso else NEUTRAL_PRIOR
 
-    companion object { private const val STORAGE_NAME = "brain-prompt-library.db"; private const val DUPLICATE_THRESHOLD = 0.90; private const val NEUTRAL_PRIOR = 0.50; private const val MAX_HISTORY = 100 }
+    companion object {
+        private const val STORAGE_NAME = "brain-prompt-library.db"
+        private const val DUPLICATE_THRESHOLD = 0.90
+        private const val NEUTRAL_PRIOR = 0.50
+        private const val MAX_HISTORY = 100
+    }
 }
