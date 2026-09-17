@@ -15,6 +15,7 @@ import com.brain.prompt.PromptQualityScore
 import com.brain.prompt.PromptQualityValidator
 import com.brain.prompt.PromptSimilarity
 import com.brain.prompt.PromptTemplate
+import com.brain.prompt.taxaSucessoEfetiva
 import com.brain.router.PapelPipeline
 import com.brain.capability.CostClass
 import kotlinx.coroutines.runBlocking

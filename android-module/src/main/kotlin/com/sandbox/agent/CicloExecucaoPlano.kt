@@ -98,7 +98,14 @@ class CicloExecucaoPlano(
         val decisions = linkedMapOf<String, PolicyDecision>()
         for (passo in plano.ordemDeExecucao) {
             val highRisk = passo.riskClass == com.brain.execution.RiskClass.HIGH || passo.riskClass == com.brain.execution.RiskClass.CRITICAL
-            val contexto = PolicyContext(runId, passo.id, actor, riskClass = passo.riskClass, approval = if (highRisk && passo.id !in approvedSteps) ApprovalRequired.USER else ApprovalRequired.NONE)
+            val contexto = PolicyContext(
+                runId,
+                passo.id,
+                actor,
+                riskClass = passo.riskClass,
+                networkAllowed = passo.capacidade == "network.research",
+                approval = if (highRisk && passo.id !in approvedSteps) ApprovalRequired.USER else ApprovalRequired.NONE
+            )
             val decision = policyBroker.authorize(actor, passo.capacidade, passo.id, contexto)
             if (decision.decision != Decision.ALLOW) {
                 val approvalId = if (decision.decision == Decision.ASK) approvalStore?.create(
