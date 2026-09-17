@@ -103,6 +103,8 @@ class ActionGateway(
     private val clock: () -> Instant = Instant::now,
     private val trace: ExecutionTrace? = null
 ) {
+    private val preActionCheck = PreActionCheck(policy)
+
     fun execute(request: ActionRequest): ActionGatewayResult {
         val started = clock()
         trace?.record(request.actionId, TraceStage.TASK, "created", request.actionId)
@@ -117,6 +119,13 @@ class ActionGateway(
         if (definition == null || decision.decision != Decision.ALLOW || !policy.check(decision, request.resource.takeIf { it.isNotBlank() })) {
             val error = definition?.let { decision.reason } ?: "capability não encontrada no registry"
             val execution = ActionExecution(false, error = error, provenance = request.provenance)
+            record(request, safeParameters, decision, started, execution)
+            return ActionGatewayResult(request.actionId, false, decision, execution)
+        }
+
+        val preCheck = preActionCheck.verify(request, decision)
+        if (!preCheck.allowed) {
+            val execution = ActionExecution(false, error = "pre-action check bloqueou: ${preCheck.reasons.joinToString("; ")}", provenance = request.provenance)
             record(request, safeParameters, decision, started, execution)
             return ActionGatewayResult(request.actionId, false, decision, execution)
         }
