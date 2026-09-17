@@ -24,7 +24,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class BrainCodeJourneyE2ETest {
     @get:Rule
-    val composeRule = createAndroidComposeRule<MainActivity>()
+    val composeRule = createAndroidComposeRule<BrainCodeActivity>()
 
     private fun waitUntilReady(timeoutMs: Long = 120_000) {
         composeRule.waitUntil(timeoutMillis = timeoutMs) {
