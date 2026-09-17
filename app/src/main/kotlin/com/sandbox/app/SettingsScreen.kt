@@ -18,8 +18,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.rememberScrollState
@@ -82,9 +80,7 @@ private fun DiagnosticsSettings(viewModel: SandboxViewModel) {
                 if (viewModel.selfCheckRunning) androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
             }
         }
-        item {
-            Button(onClick = { viewModel.runBrainHealthCheck() }, enabled = ready) { Text("Verificar Brain") }
-        }
+        item { Button(onClick = { viewModel.runBrainHealthCheck() }, enabled = ready) { Text("Verificar Brain") } }
         if (!ready) item { Text("Disponível quando o sandbox estiver pronto.", style = MaterialTheme.typography.bodySmall) }
     }
 }
@@ -112,7 +108,7 @@ private fun WorkspaceSettings(viewModel: SandboxViewModel) {
                 OutlinedButton(onClick = { viewModel.refreshBrainCatalogs() }, enabled = viewModel.phase == SandboxPhase.Ready, modifier = Modifier.fillMaxWidth()) { Text("Atualizar Brain") }
             }
         }
-        items(viewModel.workspaceProjects) { project ->
+        items(viewModel.workspaceProjects, key = { it.name }) { project ->
             OutlinedButton(onClick = { viewModel.workspaceProjectName = project.name }, modifier = Modifier.fillMaxWidth()) { Text(project.name) }
         }
     }
@@ -127,7 +123,7 @@ private fun ToolchainSettings(viewModel: SandboxViewModel) {
                 OutlinedButton(onClick = { viewModel.refreshToolchains() }, enabled = viewModel.phase == SandboxPhase.Ready) { Text("Atualizar") }
             }
         }
-        items(BuiltInToolchains.all) { profile ->
+        items(BuiltInToolchains.all, key = { it.id }) { profile ->
             val status = viewModel.toolchainStatuses[profile.id]
             CardLikeToolchain(
                 name = profile.displayName,
