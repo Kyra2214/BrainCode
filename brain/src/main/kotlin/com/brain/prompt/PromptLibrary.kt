@@ -25,6 +25,9 @@ data class PromptTemplate(
     val aposentado: Boolean = false
 )
 
+/** Taxa usada para ordenar/reutilizar templates, com prior neutro para seeds sem observações. */
+fun PromptTemplate.taxaSucessoEfetiva(): Double = if (amostrasObservadas > 0) taxaSucesso else 0.5
+
 interface PromptLibrary {
     suspend fun buscarPorContexto(contextoDeUso: String): List<PromptTemplate>
 
@@ -57,37 +60,55 @@ interface PromptLibrarySnapshot {
  * - real do usuário ([recordUserFeedback]): reação explícita (👍/👎) de quem recebeu o prompt —
  *   só existe quando o passo técnico foi bem-sucedido (não há o que avaliar se nem foi entregue).
  */
-class PromptOutcomeTracker(private val library: PromptLibrary) {
-    private data class Usage(val templateId: String)
+class PromptOutcomeTracker(
+    private val library: PromptLibrary,
+    private val nowMillis: () -> Long = System::currentTimeMillis,
+    private val ttlMillis: Long = DEFAULT_TTL_MILLIS
+) {
+    private data class Usage(val templateId: String, val createdAtMillis: Long)
     private val pending = ConcurrentHashMap<String, Usage>()
     private val delivered = ConcurrentHashMap<String, Usage>()
 
     fun markUsed(actionId: String, templateId: String) {
         if (actionId.isBlank() || templateId.isBlank()) return
-        pending[actionId] = Usage(templateId)
+        evictExpired()
+        pending[actionId] = Usage(templateId, nowMillis())
     }
 
     /** Chamado automaticamente logo após a execução do passo (sucesso/falha técnica). */
     fun recordTechnicalOutcome(actionId: String, success: Boolean, cost: Double, elapsedMs: Long): Boolean {
+        evictExpired()
         val usage = pending.remove(actionId) ?: return false
         val persisted = runCatching {
             runBlocking { library.registrarResultado(usage.templateId, success, cost, elapsedMs) }
         }.isSuccess
         if (!persisted) { pending[actionId] = usage; return false }
-        if (success) delivered[actionId] = usage
+        if (success) delivered[actionId] = usage.copy(createdAtMillis = nowMillis())
         return true
     }
 
     /** Chamado quando o usuário reage explicitamente ao prompt entregue. Sinal mais forte que o técnico. */
     fun recordUserFeedback(actionId: String, positivo: Boolean): Boolean {
+        evictExpired()
         val usage = delivered.remove(actionId) ?: return false
         return runCatching {
             runBlocking { library.registrarResultado(usage.templateId, positivo, 0.0, 0L) }
         }.isSuccess
     }
 
-    fun pendingCount(): Int = pending.size
-    fun awaitingFeedbackCount(): Int = delivered.size
+    fun pendingCount(): Int { evictExpired(); return pending.size }
+    fun awaitingFeedbackCount(): Int { evictExpired(); return delivered.size }
+
+    private fun evictExpired() {
+        val now = nowMillis()
+        val expiration = now - ttlMillis.coerceAtLeast(0L)
+        pending.entries.removeIf { it.value.createdAtMillis <= expiration }
+        delivered.entries.removeIf { it.value.createdAtMillis <= expiration }
+    }
+
+    private companion object {
+        const val DEFAULT_TTL_MILLIS = 24L * 60L * 60L * 1000L
+    }
 }
 
 /** Um único tracker por instância da biblioteca dentro do processo Android. */

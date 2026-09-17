@@ -171,12 +171,9 @@ class InMemoryPromptLibrary(
 
     private fun encode(value: String): String = Base64.getEncoder().encodeToString(value.toByteArray(Charsets.UTF_8))
     private fun decode(value: String): String = String(Base64.getDecoder().decode(value), Charsets.UTF_8)
-    private fun PromptTemplate.taxaSucessoEfetiva(): Double = if (amostrasObservadas > 0) taxaSucesso else NEUTRAL_PRIOR
-
     companion object {
         private const val STORAGE_NAME = "brain-prompt-library.db"
         private const val DUPLICATE_THRESHOLD = 0.90
-        private const val NEUTRAL_PRIOR = 0.50
         private const val MAX_HISTORY = 100
         /** Poda automática: amostras mínimas antes de considerar o histórico confiável o
          *  suficiente pra aposentar, e taxa de sucesso abaixo da qual isso acontece. */

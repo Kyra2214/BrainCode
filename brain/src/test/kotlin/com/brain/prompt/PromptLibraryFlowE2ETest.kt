@@ -116,6 +116,31 @@ class PromptLibraryFlowE2ETest {
     }
 
     @Test
+    fun `tracker expira usos pendentes e feedbacks sem retorno`() {
+        val storage = File.createTempFile("brain-prompt-ttl", ".db").apply { delete() }
+        val template = PromptTemplate("ttl", 1, "gerar prompt", "app teste", null, null, "Faça {OBJETIVO}", 0.5, 0.0, 0L)
+        val library = InMemoryPromptLibrary(listOf(template), storage)
+        var now = 1_000L
+        val tracker = PromptOutcomeTracker(library, nowMillis = { now }, ttlMillis = 100L)
+
+        tracker.markUsed("pending", template.id)
+        assertEquals(1, tracker.pendingCount())
+        now += 101L
+        assertEquals(0, tracker.pendingCount())
+        assertTrue(!tracker.recordTechnicalOutcome("pending", success = true, cost = 0.0, elapsedMs = 0L))
+
+        tracker.markUsed("delivered", template.id)
+        assertTrue(tracker.recordTechnicalOutcome("delivered", success = true, cost = 0.0, elapsedMs = 0L))
+        assertEquals(1, tracker.awaitingFeedbackCount())
+        now += 101L
+        assertEquals(0, tracker.awaitingFeedbackCount())
+        assertTrue(!tracker.recordUserFeedback("delivered", positivo = true))
+
+        storage.delete()
+        File(storage.parentFile, "${storage.name}.stats").delete()
+    }
+
+    @Test
     fun `historico longo nao altera estatisticas persistidas`() {
         val storage = File.createTempFile("brain-prompt-e2e-long", ".db").apply { delete() }
         val template = PromptTemplate("long", 1, "teste", "execucao prompt", null, null, "Execute a tarefa", 0.5, 0.0, 0L)

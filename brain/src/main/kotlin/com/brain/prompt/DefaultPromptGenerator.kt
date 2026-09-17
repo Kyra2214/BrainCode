@@ -78,8 +78,6 @@ class DefaultPromptGenerator : PromptGenerator {
         appendLine("FASE"); appendLine(fase.nome); appendLine(); appendLine("MÓDULO"); appendLine(modulo.nome); appendLine(); appendLine("SUBMÓDULO"); appendLine(submodulo.nome); appendLine()
     }
 
-    private fun PromptTemplate.taxaSucessoEfetiva(): Double = if (amostrasObservadas > 0) taxaSucesso else 0.5
-
     companion object {
         const val HEADER_DESENVOLVEDOR = """MODO DE EXECUÇÃO SILENCIOSA
 FASE → MÓDULO → SUBMÓDULO
