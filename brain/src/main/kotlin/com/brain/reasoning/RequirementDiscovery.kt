@@ -79,6 +79,7 @@ class RequirementDiscovery {
         return tail.split(Regex("(?i)\\s+(?:e|mas|para|com)\\s+|[,.;]")).firstOrNull()?.trim()?.takeIf { it.length >= 3 }
     }
 
-    private fun extractConstraint(text: String): String = text.substringAfterLast("sem", text, ignoreCase = true).trim().ifBlank { text }
+    private fun extractConstraint(text: String): String =
+        Regex("(?i)\\bsem\\s+(.+)").find(text)?.groupValues?.getOrNull(1)?.trim().orEmpty().ifBlank { text }
     private fun String.containsAny(vararg terms: String): Boolean = terms.any { it in this }
 }
