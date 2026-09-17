@@ -6,16 +6,18 @@ import com.brain.gateway.ActionExecutor
 import com.brain.gateway.ActionRequest
 import com.brain.policy.PolicyDecision
 import com.brain.prompt.PromptLibrary
+import com.brain.prompt.PromptOutcomeTracker
 import com.brain.prompt.PromptSimilarity
 import com.brain.prompt.PromptTemplate
 import com.brain.router.PapelPipeline
 import kotlinx.coroutines.runBlocking
 import java.util.Locale
 
-/** Fluxo: biblioteca -> compatibilidade -> adaptação; somente depois API -> persistência -> resultado. */
+/** Fluxo: biblioteca -> compatibilidade -> adaptação; somente depois API -> persistência -> resultado real. */
 class PromptGenerationExecutor(
     private val gateway: BrainApiGateway,
-    private val promptLibrary: PromptLibrary
+    private val promptLibrary: PromptLibrary,
+    private val outcomeTracker: PromptOutcomeTracker
 ) : ActionExecutor {
     override fun execute(request: ActionRequest, capability: CapabilityDefinition, decision: PolicyDecision): ActionExecution {
         val startedAt = System.nanoTime()
@@ -37,17 +39,18 @@ class PromptGenerationExecutor(
             val score = PromptSimilarity.compatibility(objective, candidato)
             val adapted = adaptPrompt(candidato, objective)
             val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
-            registerOutcome(candidato.id, true, 0.0, elapsedMs)
+            outcomeTracker.markUsed(request.actionId, candidato.id)
             return ActionExecution(
                 success = true,
                 result = "Encontrei um prompt compatível na biblioteca (compatibilidade ${(score * 100).toInt()}%) e adaptei ao seu pedido:\n\n$adapted",
                 evidence = listOf(
                     "prompt-library:${candidato.id}",
-                    "prompt-library:observed-samples:${candidato.amostrasObservadas + 1}",
-                    "prompt-library:result:success",
+                    "prompt-library:observed-samples:${candidato.amostrasObservadas}",
+                    "prompt-library:result:pending-real-outcome",
                     "retrieval:biblioteca-local",
                     "compatibility:${"%.2f".format(Locale.US, score)}",
-                    "compatibility-source:metadata"
+                    "compatibility-source:metadata",
+                    "prompt-library:selection-latency-ms:$elapsedMs"
                 ),
                 provenance = provenance(capability)
             )
@@ -61,7 +64,7 @@ class PromptGenerationExecutor(
 
             val savedId = saveGeneratedPrompt(objective, generated)
             val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
-            registerOutcome(savedId, true, 0.0, elapsedMs)
+            outcomeTracker.markUsed(request.actionId, savedId)
             ActionExecution(
                 success = true,
                 result = "Não encontrei prompt compatível na biblioteca. Criei um novo com a API especialista, salvei na biblioteca e deixei pronto para aprendizado por resultado:\n\n$generated",
@@ -71,8 +74,8 @@ class PromptGenerationExecutor(
                     "model:${response.modelId}",
                     "prompt-library:saved-before-response",
                     "prompt-library:id:$savedId",
-                    "prompt-library:result:success",
-                    "prompt-library:initial-success-neutral"
+                    "prompt-library:result:pending-real-outcome",
+                    "prompt-library:generation-latency-ms:$elapsedMs"
                 ),
                 provenance = provenance(capability)
             )
@@ -81,10 +84,6 @@ class PromptGenerationExecutor(
         } catch (error: Exception) {
             ActionExecution(false, error = "Falha ao gerar prompt: ${error.message ?: error.javaClass.simpleName}", provenance = provenance(capability))
         }
-    }
-
-    private fun registerOutcome(templateId: String, success: Boolean, cost: Double, elapsedMs: Long) {
-        runCatching { runBlocking { promptLibrary.registrarResultado(templateId, success, cost, elapsedMs) } }
     }
 
     private fun buildSpecialistRequest(objective: String): String = """
