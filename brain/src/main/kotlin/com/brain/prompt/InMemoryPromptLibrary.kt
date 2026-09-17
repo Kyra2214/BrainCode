@@ -12,7 +12,7 @@ class InMemoryPromptLibrary(
     private data class Contador(val sucesso: Int = 0, val falha: Int = 0, val custoTotal: Double = 0.0, val tempoTotalMs: Long = 0)
     private val templates = ConcurrentHashMap<String, PromptTemplate>()
     private val contadores = ConcurrentHashMap<String, Contador>()
-    private val file = storageFile ?: File(System.getProperty("java.io.tmpdir") ?: ".", STORAGE_NAME)
+    private val file = storageFile ?: defaultStorageFile()
     private val statsFile = File(file.parentFile ?: File("."), "${file.name}.stats")
 
     init {
@@ -166,5 +166,15 @@ class InMemoryPromptLibrary(
         private const val DUPLICATE_THRESHOLD = 0.90
         private const val NEUTRAL_PRIOR = 0.50
         private const val MAX_HISTORY = 100
+
+        private fun defaultStorageFile(): File {
+            val androidFilesDir = runCatching {
+                val activityThread = Class.forName("android.app.ActivityThread")
+                val application = activityThread.getMethod("currentApplication").invoke(null)
+                application?.javaClass?.getMethod("getFilesDir")?.invoke(application) as? File
+            }.getOrNull()
+            return androidFilesDir?.let { File(it, "brain/$STORAGE_NAME") }
+                ?: File(System.getProperty("java.io.tmpdir") ?: ".", STORAGE_NAME)
+        }
     }
 }
