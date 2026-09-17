@@ -36,6 +36,13 @@ import com.brain.events.InMemoryEventStore
 import com.brain.retrieval.PromptLibraryRetrievalSource
 import com.brain.retrieval.Retrieval
 import com.brain.retrieval.RetrievalQuery
+import com.brain.reasoning.ReasoningEngine
+import com.brain.reasoning.TaskState
+import com.brain.execution.OperationalState
+import com.brain.execution.Observation
+import com.brain.memory.LayeredMemory
+import com.brain.memory.Provenance
+import com.brain.planner.TreeOfThoughts
 import java.io.File
 import java.time.Instant
 import kotlin.coroutines.Continuation
@@ -114,6 +121,10 @@ class BrainSandboxController(
             dispatcher = dispatcher
         )
     )
+    private val reasoningEngine = ReasoningEngine()
+    private val treeOfThoughts = TreeOfThoughts()
+    private val layeredMemory = LayeredMemory()
+    @Volatile private var taskState: TaskState? = null
 
     /** Executa o primeiro caso de uso real do Brain dentro do Sandbox preparado. */
     fun healthCheck(runId: String): ResultadoCiclo {
@@ -157,13 +168,23 @@ class BrainSandboxController(
     ): ResultadoCiclo {
         emit(runId, "chat", "TaskCreated", mapOf("objective" to objective.take(500)))
         val classification = intentClassifier.classify(objective)
+        val reasoning = reasoningEngine.analyze(objective)
+        taskState = TaskState(objective).withReasoning(reasoning)
+        layeredMemory.rememberEpisode(objective, Provenance("brain:task-created", confidence = 1.0))
         val planner = com.brain.planner.KeywordPlanner()
         val basePlan = runBlockingPlanner { planner.planejar(classification.intent.objective) }
         if (basePlan.passos.any { it.capacidade == "brain.analyze" } && !apiKeyAvailable()) {
             throw IllegalStateException("Nenhuma chave de API válida está configurada no catálogo. Configure uma chave em Configurações antes de usar o diagnóstico por fallback.")
         }
         val promptHit = promptRetrieval?.retrieve(RetrievalQuery(objective))?.hit
-        val plan = if (promptHit != null) basePlan.copy(assumptions = basePlan.assumptions + "prompt-template:${promptHit.id}") else basePlan
+        val treeAssumptions = if (treeOfThoughts.shouldExplore(objective)) {
+            val selection = treeOfThoughts.explore(objective)
+            emit(runId, "planner", "ThoughtsExplored", mapOf("branches" to selection.explored.size.toString(), "selected" to selection.selected.name))
+            setOf("tree-of-thoughts:${selection.selected.name}")
+        } else emptySet()
+        val plan = basePlan.copy(
+            assumptions = basePlan.assumptions + treeAssumptions + if (promptHit != null) setOf("prompt-template:${promptHit.id}") else emptySet()
+        )
         var cycle: ResultadoCiclo? = null
         durableJobs.run(
             jobId = "job-$runId",
@@ -195,11 +216,27 @@ class BrainSandboxController(
                 )
             }
         )
-        return requireNotNull(cycle) { "Workflow não produziu resultado do plano" }
+        val finalCycle = requireNotNull(cycle) { "Workflow não produziu resultado do plano" }
+        val operational = OperationalState(
+            objective = objective,
+            completed = finalCycle.passos.filter { it.status == StatusPasso.APROVADO }.map { it.passoId },
+            observations = finalCycle.passos.map { Observation(it.passoId, it.status == StatusPasso.APROVADO, it.motivo ?: it.status.name) }
+        )
+        taskState = taskState?.withOperational(operational)
+        finalCycle.researchSources.forEach { source ->
+            layeredMemory.rememberEvidence(
+                source,
+                Provenance("web-research:${source.source}", confidence = source.confidence),
+                source.validationStatus.name == "VERIFIED"
+            )
+        }
+        return finalCycle
     }
 
     fun localEvents(runId: String? = null) = events.replay(runId)
     fun localEventsHealthy(): Boolean = events.verifyIntegrity()
+    fun currentTaskState(): TaskState? = taskState
+    fun memorySnapshot() = layeredMemory.evidences()
 
     /**
      * Fecha o ciclo de aprendizado do Prompt Creator com o sinal real de quem recebeu o prompt —
