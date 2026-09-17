@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -25,13 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.sandbox.sandbox.BuiltInToolchains
 import com.sandbox.sandbox.ComponentKind
-
-private fun formatBytes(bytes: Long): String = when {
-    bytes >= 1024L * 1024L * 1024L -> "%.2f GiB".format(bytes / (1024.0 * 1024.0 * 1024.0))
-    bytes >= 1024L * 1024L -> "%.1f MiB".format(bytes / (1024.0 * 1024.0))
-    bytes >= 1024L -> "%.1f KiB".format(bytes / 1024.0)
-    else -> "$bytes B"
-}
+import com.sandbox.sandbox.ToolchainState
 
 @Composable
 fun SettingsScreen(viewModel: SandboxViewModel, onBack: () -> Unit) {
@@ -48,7 +43,7 @@ fun SettingsScreen(viewModel: SandboxViewModel, onBack: () -> Unit) {
                 .padding(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            listOf("Provedores", "Extensões", "Workspace", "Toolchains", "Diagnóstico").forEachIndexed { index, label ->
+            listOf("Provedores", "Extensões", "Workspace", "Diagnóstico").forEachIndexed { index, label ->
                 FilterChip(selected = section == index, onClick = { section = index }, label = { Text(label) })
             }
         }
@@ -56,7 +51,6 @@ fun SettingsScreen(viewModel: SandboxViewModel, onBack: () -> Unit) {
             0 -> ApiKeysScreen(viewModel)
             1 -> ExtensionsSettings(viewModel)
             2 -> WorkspaceSettings(viewModel)
-            3 -> ToolchainSettings(viewModel)
             else -> DiagnosticsSettings(viewModel)
         }
     }
@@ -93,7 +87,63 @@ private fun ExtensionsSettings(viewModel: SandboxViewModel) {
             FilterChip(selected = kind == 0, onClick = { kind = 0 }, label = { Text("Tools") })
             FilterChip(selected = kind == 1, onClick = { kind = 1 }, label = { Text("Plugins") })
         }
-        PluginsScreen(viewModel, if (kind == 0) ComponentKind.TOOL else ComponentKind.PLUGIN)
+        if (kind == 0) {
+            ToolCatalog(viewModel)
+        } else {
+            PluginsScreen(viewModel, ComponentKind.PLUGIN)
+        }
+    }
+}
+
+@Composable
+private fun ToolCatalog(viewModel: SandboxViewModel) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            Text(
+                "Ferramentas disponíveis no Sandbox. A lista mostra apenas o nome e o estado de instalação.",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+        items(BuiltInToolchains.all, key = { it.id }) { profile ->
+            val status = viewModel.toolchainStatuses[profile.id]
+            val installed = status?.state == ToolchainState.INSTALLED
+            val installing = status?.state == ToolchainState.INSTALLING
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(profile.displayName, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            when {
+                                installed -> "Instalado"
+                                installing -> "Instalando…"
+                                else -> "Não instalado"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = when {
+                                installed -> MaterialTheme.colorScheme.primary
+                                status?.state == ToolchainState.FAILED -> MaterialTheme.colorScheme.error
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
+                    if (!installed) {
+                        OutlinedButton(
+                            onClick = { viewModel.installToolchain(profile.id) },
+                            enabled = viewModel.phase == SandboxPhase.Ready && !installing
+                        ) {
+                            Text(if (installing) "Instalando…" else "Instalar")
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -110,54 +160,6 @@ private fun WorkspaceSettings(viewModel: SandboxViewModel) {
         }
         items(viewModel.workspaceProjects, key = { it.name }) { project ->
             OutlinedButton(onClick = { viewModel.workspaceProjectName = project.name }, modifier = Modifier.fillMaxWidth()) { Text(project.name) }
-        }
-    }
-}
-
-@Composable
-private fun ToolchainSettings(viewModel: SandboxViewModel) {
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Toolchains", style = MaterialTheme.typography.titleMedium)
-                OutlinedButton(onClick = { viewModel.refreshToolchains() }, enabled = viewModel.phase == SandboxPhase.Ready) { Text("Atualizar") }
-            }
-        }
-        items(BuiltInToolchains.all, key = { it.id }) { profile ->
-            val status = viewModel.toolchainStatuses[profile.id]
-            CardLikeToolchain(
-                name = profile.displayName,
-                details = buildString {
-                    append(status?.versionOutput.orEmpty())
-                    if (status != null && status.installedBytes > 0L) {
-                        if (isNotEmpty()) append(" · ")
-                        append(formatBytes(status.installedBytes))
-                    }
-                },
-                error = status?.error,
-                actionLabel = status?.state?.name ?: "Instalar",
-                enabled = viewModel.phase == SandboxPhase.Ready,
-                onAction = { viewModel.installToolchain(profile.id) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun CardLikeToolchain(
-    name: String,
-    details: String,
-    error: String?,
-    actionLabel: String,
-    enabled: Boolean,
-    onAction: () -> Unit
-) {
-    androidx.compose.material3.Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(name, style = MaterialTheme.typography.titleSmall)
-            if (details.isNotBlank()) Text(details, style = MaterialTheme.typography.bodySmall)
-            error?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
-            Button(onClick = onAction, enabled = enabled, modifier = Modifier.fillMaxWidth()) { Text(actionLabel) }
         }
     }
 }
