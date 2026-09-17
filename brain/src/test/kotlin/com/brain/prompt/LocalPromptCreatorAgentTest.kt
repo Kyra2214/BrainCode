@@ -20,6 +20,14 @@ class LocalPromptCreatorAgentTest {
         assertFalse("não deve ser concatenação crua de palavras-chave (deve ter frases completas)", criado.texto.split(". ").size < 3)
     }
 
+    @Test fun `nao duplica fotografia fotorrealista ao extrair sujeito`() {
+        val pedido = "Crie um prompt para uma fotografia fotorrealista de um foguete espacial decolando, com iluminação cinematográfica."
+        val texto = agent.criar(pedido).texto
+
+        assertTrue(texto.startsWith("Fotografia fotorrealista de um foguete espacial decolando"))
+        assertFalse(texto.contains("de fotografia fotorrealista de"))
+    }
+
     @Test fun `sem componentes explicitos usa padroes deterministicos, nunca vazio`() {
         val a = agent.criar("Crie um prompt de uma xícara de café em cima de uma mesa")
         val b = agent.criar("Crie um prompt de uma xícara de café em cima de uma mesa")

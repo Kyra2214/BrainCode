@@ -12,6 +12,12 @@ class GeneratedContentTest {
     }
 
     @Test
+    fun `prompt copiado nao inclui referencia da biblioteca`() {
+        val prompt = "Prompt final de um foguete.\n\nReferência da biblioteca considerada (generated-19um8f9): adaptado ao pedido acima."
+        assertEquals("Prompt final de um foguete.", copyPayloadFor(prompt, GeneratedContentType.PROMPT))
+    }
+
+    @Test
     fun `codigo preserva quebras indentacao e caracteres especiais`() {
         val code = "#!/bin/bash\nif [ \"\$1\" = \"x\" ]; then\n  echo \"á\"\nfi\n"
         assertEquals(code, copyPayloadFor(code, GeneratedContentType.SCRIPT))

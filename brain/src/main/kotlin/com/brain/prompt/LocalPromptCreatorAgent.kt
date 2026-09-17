@@ -119,8 +119,18 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
             .replace(Regex("(?i)^\\s*(crie|gere|escreva|faça|faca)\\s+(um[a]?\\s+)?prompt(s)?\\s*(para|de)?\\s*"), "")
             .trim()
         val match = Regex("(?i)(?:^|\\b(?:de|para)\\s+)(?:(?:um|uma|o|a)\\s+)?([^,.;]+)").find(semPrefixo)
-        return match?.groupValues?.get(1)?.trim()?.takeIf { it.length in 4..160 }
+        return match?.groupValues?.get(1)?.trim()
+            ?.let(::normalizarSujeito)
+            ?.takeIf { it.length in 4..160 }
     }
+
+    /** O estilo já é emitido separadamente; nunca deve voltar a fazer parte do sujeito. */
+    private fun normalizarSujeito(valor: String): String = valor
+        .replace(
+            Regex("(?i)^(?:um[a]?|o|a)?\\s*(?:fotografia|foto|imagem|ilustração)(?:\\s+fotorrealista)?\\s+(?:de|do|da)\\s+"),
+            ""
+        )
+        .trim()
 
     private fun extrairAmbiente(texto: String): String? {
         val match = Regex("(?i)(?:com |ao |em |no |na )([^,.;]*fundo[^,.;]*|[^,.;]*céu[^,.;]*|[^,.;]*cenário[^,.;]*)").find(texto)

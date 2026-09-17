@@ -19,6 +19,7 @@ fun copyPayloadFor(content: String, type: GeneratedContentType): String = when (
         .replace(Regex("(?is)^.*?qualidade\\s+\\d+%[^\\n]*\\n*"), "")
         .substringBefore("\n\nContexto pesquisado considerado:")
         .substringBefore("\n\nTécnicas consideradas a partir da pesquisa:")
+        .substringBefore("\n\nReferência da biblioteca considerada")
         .substringBefore("\n\n(Melhoria por IA não está disponível")
         .trim()
     else -> content
