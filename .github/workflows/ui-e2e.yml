@@ -49,6 +49,14 @@ jobs:
           disable-animations: true
           script: ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace
 
+      - name: Generate human-readable E2E report
+        if: always()
+        run: python3 scripts/generate_e2e_report.py
+
+      - name: Publish E2E report to job summary
+        if: always()
+        run: cat e2e-report/BrainCode-E2E-Report.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload UI E2E reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -57,5 +65,6 @@ jobs:
           path: |
             **/build/outputs/androidTest-results/**
             **/build/reports/androidTests/**
+            e2e-report/BrainCode-E2E-Report.md
           if-no-files-found: ignore
           retention-days: 14
