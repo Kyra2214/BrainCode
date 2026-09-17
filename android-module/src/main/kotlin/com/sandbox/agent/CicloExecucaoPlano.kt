@@ -28,7 +28,8 @@ data class ResultadoPasso(
     val resultado: String? = null,
     val evidencias: List<EvidenciaComando> = emptyList(),
     val motivo: String? = null,
-    val approvalId: String? = null
+    val approvalId: String? = null,
+    val actionId: String? = null
 )
 
 data class ResultadoCiclo(
@@ -153,7 +154,8 @@ class CicloExecucaoPlano(
                 decisaoPolicy = dispatch.gateway?.decision ?: decision,
                 resultado = dispatch.gateway?.execution?.result,
                 decisaoRouter = decisaoRouter,
-                motivo = dispatch.reason ?: if (dispatch.status == DispatchStatus.DISPATCHED) null else "Dispatcher não executou a capability"
+                motivo = dispatch.reason ?: if (dispatch.status == DispatchStatus.DISPATCHED) null else "Dispatcher não executou a capability",
+                actionId = "${passo.id}:${passo.id}"
             )
         }
         sandbox.abrirSessao(authorization).use { sessao ->
@@ -165,11 +167,6 @@ class CicloExecucaoPlano(
         }
     }
 
-    /**
-     * Se o catálogo for dinâmico, a API escolhida é consultada imediatamente
-     * antes do uso. Se a lista mudou, o Router decide novamente. Assim um
-     * modelo removido/deprecado não fica preso no seed/cache antigo.
-     */
     private fun decidirComRefresh(passo: PassoPlano): RoutingDecision? {
         val papel = passo.papel ?: return null
         val primeira = router.decidir(papel, catalog, profiles) ?: return null
