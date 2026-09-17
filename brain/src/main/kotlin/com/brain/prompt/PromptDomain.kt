@@ -24,12 +24,17 @@ enum class PromptDomain {
                 "endpoint", "api rest", "implementar", "refatorar", "bug", "compilar", "app", "aplicativo",
                 "interface", "tela", "layout", "android", "ios", "chatbox", "frontend", "backend"
             )
+            val textoGenerico = texto.containsAny(
+                "resumo", "resumo executivo", "reunião", "reuniao", "relatório", "relatorio",
+                "documento", "artigo", "ata", "email", "e-mail", "mensagem", "texto",
+                "explicação", "explicacao", "análise", "analise", "síntese", "sintese"
+            )
             return when {
                 querVideo && !querImagem -> VIDEO
                 querImagem && !querCodigo -> IMAGEM
                 querCodigo && !querImagem -> CODIGO
                 querImagem -> IMAGEM
-                texto.containsAny(
+                !textoGenerico && texto.containsAny(
                     " prompt de uma ", " prompt de um ", " prompt para uma ", " prompt para um ",
                     " prompt para criar ", " prompt para gerar ", " prompt para fazer ", " prompt de imagem "
                 ) -> IMAGEM
