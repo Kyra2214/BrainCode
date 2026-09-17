@@ -112,7 +112,7 @@ class PromptGenerationExecutor(
                     "PEDIDO", "OBJETIVO", "TAREFA", "DESCRICAO", "DESCRIÇÃO" -> objective
                     else -> "[${name}: definir conforme o contexto da tarefa]"
                 }
-                adapted = adapted.replace(Regex("\\{\\{?$name\\}?\\}"), value, ignoreCase = true)
+                adapted = adapted.replace(Regex("\\{\\{?$name\\}?\\}", RegexOption.IGNORE_CASE), value)
             }
         if (PromptSimilarity.tokenize(adapted).intersect(PromptSimilarity.tokenize(objective)).isEmpty()) adapted += "\n\nContexto específico do pedido: $objective"
         return adapted.trim()
