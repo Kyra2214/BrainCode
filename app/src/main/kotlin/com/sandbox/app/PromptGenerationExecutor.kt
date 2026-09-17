@@ -7,6 +7,7 @@ import com.brain.gateway.ActionRequest
 import com.brain.policy.PolicyDecision
 import com.brain.prompt.PromptLibrary
 import com.brain.prompt.PromptOutcomeTracker
+import com.brain.prompt.PromptOutcomeTrackers
 import com.brain.prompt.PromptSimilarity
 import com.brain.prompt.PromptTemplate
 import com.brain.router.PapelPipeline
@@ -17,7 +18,7 @@ import java.util.Locale
 class PromptGenerationExecutor(
     private val gateway: BrainApiGateway,
     private val promptLibrary: PromptLibrary,
-    private val outcomeTracker: PromptOutcomeTracker
+    private val outcomeTracker: PromptOutcomeTracker = PromptOutcomeTrackers.forLibrary(promptLibrary)
 ) : ActionExecutor {
     override fun execute(request: ActionRequest, capability: CapabilityDefinition, decision: PolicyDecision): ActionExecution {
         val startedAt = System.nanoTime()
