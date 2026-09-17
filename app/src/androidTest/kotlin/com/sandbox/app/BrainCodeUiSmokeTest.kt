@@ -1,9 +1,9 @@
 package com.sandbox.app
 
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -29,7 +29,7 @@ class BrainCodeUiSmokeTest {
         composeRule.onNodeWithText("Extensões").performClick()
         composeRule.onNodeWithText("Tools").assertIsDisplayed()
         composeRule.onNodeWithText("Plugins").assertIsDisplayed()
-        composeRule.onAllNodesWithText("Toolchains").assertCountEquals(0)
+        composeRule.onNodeWithText("Toolchains").assertDoesNotExist()
     }
 
     @Test
