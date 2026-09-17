@@ -3,9 +3,6 @@ name: UI E2E
 on:
   push:
     branches: ["main"]
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
   pull_request:
     branches: ["main"]
   workflow_dispatch:
