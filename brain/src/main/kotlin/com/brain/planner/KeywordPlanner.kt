@@ -23,6 +23,7 @@ class KeywordFunctionSplitter : FunctionSplitter {
         ) {
             passos += PassoPlano(
                 "pesquisar", "network.research", "evidência de pesquisa disponível",
+                parametros = listOf(texto),
                 papel = PapelPipeline.PLANEJAMENTO, riskClass = RiskClass.MEDIUM
             )
         }
