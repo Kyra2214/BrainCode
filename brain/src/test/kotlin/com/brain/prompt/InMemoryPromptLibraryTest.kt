@@ -19,6 +19,26 @@ class InMemoryPromptLibraryTest {
         assertEquals(0.02, atual.custoMedio, 0.0001)
         assertEquals(1200L, atual.tempoMedioMs)
         storage.delete()
+        File("${storage.absolutePath}.stats").delete()
+    }
+
+    @Test
+    fun `contadores persistem mesmo quando historico operacional e limitado`() {
+        val storage = File.createTempFile("brain-prompt-library-long", ".db").apply { delete() }
+        val template = PromptTemplate("longo", 1, "gerar prompt", "imagem foguete realista", "prompt-generation", null, "Crie {OBJETIVO}", 0.6, 0.0, 0)
+        val first = InMemoryPromptLibrary(listOf(template), storage)
+        runBlockingCompat {
+            repeat(120) { first.registrarResultado(template.id, sucesso = true, custo = 0.01, tempoMs = 100) }
+            repeat(30) { first.registrarResultado(template.id, sucesso = false, custo = 0.02, tempoMs = 200) }
+        }
+        val reloaded = InMemoryPromptLibrary(emptyList(), storage)
+        val atual = reloaded.snapshotTemplates().first { it.id == template.id }
+        assertEquals(150, atual.amostrasObservadas)
+        assertEquals(120.0 / 150.0, atual.taxaSucesso, 0.0001)
+        assertEquals((120 * 0.01 + 30 * 0.02) / 150.0, atual.custoMedio, 0.0001)
+        assertEquals((120 * 100L + 30 * 200L) / 150L, atual.tempoMedioMs)
+        storage.delete()
+        File("${storage.absolutePath}.stats").delete()
     }
 
     @Test
@@ -29,6 +49,7 @@ class InMemoryPromptLibraryTest {
         assertEquals(0, library.snapshotTemplates().first().amostrasObservadas)
         assertTrue(library.snapshotTemplates().first().taxaSucesso >= 0.0)
         storage.delete()
+        File("${storage.absolutePath}.stats").delete()
     }
 
     @Test
@@ -44,6 +65,7 @@ class InMemoryPromptLibraryTest {
         assertEquals(1, matches.size)
         assertEquals(2, matches.first().versao)
         storage.delete()
+        File("${storage.absolutePath}.stats").delete()
     }
 
     private fun runBlockingCompat(block: suspend () -> Unit) = kotlinx.coroutines.runBlocking { block() }
