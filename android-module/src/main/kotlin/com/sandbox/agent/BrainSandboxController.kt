@@ -210,12 +210,14 @@ class BrainSandboxController(
         val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
         promptOutcomeTracker?.let { tracker ->
             result.passos.forEach { passo ->
-                tracker.recordOutcome(
-                    actionId = "${passo.passoId}:${passo.passoId}",
-                    success = result.aprovado && passo.status == StatusPasso.APROVADO,
-                    cost = 0.0,
-                    elapsedMs = elapsedMs
-                )
+                passo.actionId?.let { actionId ->
+                    tracker.recordOutcome(
+                        actionId = actionId,
+                        success = result.aprovado && passo.status == StatusPasso.APROVADO,
+                        cost = 0.0,
+                        elapsedMs = elapsedMs
+                    )
+                }
             }
         }
         emit(runId, "execution", if (result.aprovado) "Delivered" else "ValidationFailed", mapOf("approved" to result.aprovado.toString()))
