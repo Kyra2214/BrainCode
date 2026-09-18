@@ -18,11 +18,20 @@ class AccountAwareProviderClient(
             IllegalArgumentException("accountId é obrigatório para provider account-aware")
         )
         val credentialHeaders = credentials.headersFor(accountId, providerId)
-        require(credentialHeaders.keys.none { it.equals("accountId", ignoreCase = true) }) {
-            "CredentialProvider não pode devolver accountId como header"
+        require(credentialHeaders.keys.none { it.lowercase() in FORBIDDEN_HEADERS }) {
+            "CredentialProvider não pode devolver header de controle"
         }
+        val callerHeaders = request.headers.filterKeys { it.lowercase() !in SENSITIVE_HEADERS }
         return delegate.complete(
-            request.copy(headers = request.headers + credentialHeaders, accountId = accountId)
+            request.copy(headers = callerHeaders + credentialHeaders, accountId = accountId)
         )
+    }
+
+    private companion object {
+        val SENSITIVE_HEADERS = setOf(
+            "authorization", "proxy-authorization", "x-api-key", "api-key",
+            "x-auth-token", "cookie", "set-cookie"
+        )
+        val FORBIDDEN_HEADERS = setOf("accountid", "host", "content-length")
     }
 }

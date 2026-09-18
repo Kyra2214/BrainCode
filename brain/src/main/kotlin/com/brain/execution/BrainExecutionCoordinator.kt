@@ -98,7 +98,7 @@ class BrainExecutionCoordinator(
                     emit(
                         runId,
                         step.id,
-                        if (retry < maxRetries) "Retry" else "ProviderFailed",
+                        if (retry < retryLimit(step)) "Retry" else "ProviderFailed",
                         mapOf(
                             "attemptId" to attemptId(runId, step.id, attempts.getValue(step.id)),
                             "attempt" to (attempts[step.id] ?: 1).toString(),
@@ -155,11 +155,11 @@ class BrainExecutionCoordinator(
                                 "error" to safeError(attempt.error)
                             )
                         )
-                        if (retry < retryLimit(step) && errorType !in setOf(TipoErro.CHAVE_INVALIDA, TipoErro.LIMITE_ATINGIDO)) {
+                        if (retry < retryLimit(step) && errorType !in NON_RETRYABLE_ERRORS) {
                             sleepBeforeRetry(retry + 1)
                             emit(runId, step.id, "CorrectionRequested", mapOf("reason" to safeError(attempt.error)))
                         }
-                        if (errorType in setOf(TipoErro.CHAVE_INVALIDA, TipoErro.LIMITE_ATINGIDO)) break
+                        if (errorType in NON_RETRYABLE_ERRORS) break
                     }
                     if (result?.success == true) break
                 }
@@ -221,6 +221,8 @@ class BrainExecutionCoordinator(
         TipoErro.CHAVE_INVALIDA -> AccountFailureClass.AUTH_FAILURE
         TipoErro.TIMEOUT -> AccountFailureClass.TIMEOUT
         TipoErro.ERRO_SERVIDOR -> AccountFailureClass.TEMPORARY_PROVIDER_FAILURE
+        TipoErro.POLICY_NEGADA -> AccountFailureClass.POLICY_DENIED
+        TipoErro.REQUISICAO_INVALIDA -> AccountFailureClass.INVALID_REQUEST
         TipoErro.DESCONHECIDO, null -> AccountFailureClass.UNKNOWN
     }
 
@@ -228,7 +230,9 @@ class BrainExecutionCoordinator(
         val text = error.orEmpty().lowercase()
         return when {
             "429" in text || "rate limit" in text || "rate_limit" in text || "quota" in text || "too many requests" in text || "insufficient" in text -> TipoErro.LIMITE_ATINGIDO
-            "401" in text || "403" in text || "invalid api key" in text || "invalid key" in text || "unauthorized" in text -> TipoErro.CHAVE_INVALIDA
+            "401" in text || "invalid api key" in text || "invalid key" in text || "unauthorized" in text -> TipoErro.CHAVE_INVALIDA
+            "403" in text || "forbidden" in text || "policy denied" in text || "policy negada" in text -> TipoErro.POLICY_NEGADA
+            "400" in text || "422" in text || "invalid request" in text || "requisição inválida" in text -> TipoErro.REQUISICAO_INVALIDA
             "timeout" in text || "timed out" in text -> TipoErro.TIMEOUT
             "500" in text || "502" in text || "503" in text || "server error" in text || "service unavailable" in text -> TipoErro.ERRO_SERVIDOR
             else -> TipoErro.DESCONHECIDO
@@ -278,5 +282,14 @@ class BrainExecutionCoordinator(
             override fun resumeWith(result: Result<T>) { completed = result }
         })
         return completed!!.getOrThrow()
+    }
+
+    private companion object {
+        val NON_RETRYABLE_ERRORS = setOf(
+            TipoErro.CHAVE_INVALIDA,
+            TipoErro.LIMITE_ATINGIDO,
+            TipoErro.POLICY_NEGADA,
+            TipoErro.REQUISICAO_INVALIDA
+        )
     }
 }

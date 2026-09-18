@@ -70,6 +70,7 @@ class DefaultAIRouter(
             TipoErro.CHAVE_INVALIDA -> pesos.penalidadeChaveInvalida
             TipoErro.LIMITE_ATINGIDO -> pesos.penalidadeLimite
             TipoErro.ERRO_SERVIDOR, TipoErro.TIMEOUT -> pesos.penalidadeErroTransitorio
+            TipoErro.POLICY_NEGADA, TipoErro.REQUISICAO_INVALIDA -> pesos.penalidadeChaveInvalida
             TipoErro.DESCONHECIDO -> pesos.penalidadeErroTransitorio / 2
             null -> 0.0
         }

@@ -44,7 +44,7 @@ data class ErroObservado(
     val ocorridoEm: Instant
 )
 
-enum class TipoErro { LIMITE_ATINGIDO, TIMEOUT, ERRO_SERVIDOR, CHAVE_INVALIDA, DESCONHECIDO }
+enum class TipoErro { LIMITE_ATINGIDO, TIMEOUT, ERRO_SERVIDOR, CHAVE_INVALIDA, POLICY_NEGADA, REQUISICAO_INVALIDA, DESCONHECIDO }
 
 /**
  * Catálogo em runtime. O Android instala uma implementação dinâmica através

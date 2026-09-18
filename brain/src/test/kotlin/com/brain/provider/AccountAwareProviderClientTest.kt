@@ -21,11 +21,13 @@ class AccountAwareProviderClientTest {
             mapOf("Authorization" to "Bearer secret-not-in-brain")
         }
 
-        val result = client.complete(ProviderRequest("model-a", "prompt", mapOf("Authorization" to "caller-value"), "account-a"))
+        val result = client.complete(ProviderRequest("model-a", "prompt", mapOf("Authorization" to "caller-value", "X-Api-Key" to "caller-key", "X-Trace" to "trace"), "account-a"))
 
         assertTrue(result.isSuccess)
         assertEquals("account-a", received?.accountId)
         assertEquals("Bearer secret-not-in-brain", received?.headers?.get("Authorization"))
+        assertEquals(null, received?.headers?.get("X-Api-Key"))
+        assertEquals("trace", received?.headers?.get("X-Trace"))
     }
 
     @Test
