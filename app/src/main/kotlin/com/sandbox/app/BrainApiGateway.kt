@@ -11,6 +11,17 @@ import com.brain.provider.ProviderClient
 import com.brain.provider.ProviderDispatcher
 import com.brain.provider.ProviderRequest
 import com.brain.provider.ProviderResponse
+import com.brain.provider.AccountAwareProviderClient
+import com.brain.provider.CredentialProvider
+import com.brain.account.Account
+import com.brain.account.AccountHealth
+import com.brain.account.AccountPool
+import com.brain.account.AccountRouteDecision
+import com.brain.account.AccountRouteRequest
+import com.brain.account.AccountRouter
+import com.brain.account.AccountFailureClass
+import com.brain.account.CredentialRef
+import com.brain.account.SelectionPolicy
 import com.brain.router.ApiCatalogRegistry
 import com.brain.router.DefaultAIRouter
 import com.brain.router.DynamicFreeApiCatalog
@@ -59,10 +70,42 @@ class BrainApiGateway(
         val tried = mutableSetOf<String>()
         fun decide(): RoutingDecision? = router.decidir(papel, catalog, emptyList())
         val decision = decide()
+        val accountPool = AccountPool(
+            poolId = "android-${papel.name.lowercase()}",
+            capability = papel.name,
+            members = catalog.listarPorPapel(papel).groupBy { it.providerId }.map { (providerId, _) ->
+                val hasCredential = !keyStore.get(providerId).isNullOrBlank()
+                Account(
+                    accountId = "android:$providerId",
+                    providerId = providerId,
+                    displayName = providerId,
+                    credentialRef = CredentialRef.of("credential:android:$providerId"),
+                    capabilities = setOf(papel.name),
+                    priority = 0,
+                    health = if (hasCredential) AccountHealth() else AccountHealth().afterFailure(AccountFailureClass.AUTH_FAILURE, java.time.Instant.now())
+                )
+            },
+            selectionPolicy = SelectionPolicy(maxAttempts = 8, allowFallback = true)
+        )
+        val accountDecision = AccountRouter().route(
+            AccountRouteRequest(
+                executionId = "android:${papel.name}:${prompt.hashCode()}",
+                capability = papel.name,
+                pool = accountPool,
+                authorizedAccountIds = accountPool.members.map { it.accountId }.toSet(),
+                idempotent = true,
+                requestedModelId = decision?.escolhido?.modeloId,
+                catalog = catalog
+            ),
+            java.time.Instant.now()
+        )
+        val allowedProviders = when (accountDecision) {
+            is AccountRouteDecision.Selected -> setOf(accountDecision.providerId) + accountDecision.alternatives.map { it.providerId }
+            is AccountRouteDecision.Unavailable -> emptySet()
+        }
         val ordered = ArrayDeque<ProviderModel>()
         if (decision != null) {
-            ordered.add(decision.escolhido)
-            ordered.addAll(decision.alternativas)
+            ordered.addAll((listOf(decision.escolhido) + decision.alternativas).filter { it.providerId in allowedProviders })
         }
 
         while (ordered.isNotEmpty()) {
@@ -86,19 +129,24 @@ class BrainApiGateway(
                 attempts += "$key: provider não cadastrado"
                 continue
             }
-            val apiKey = keyStore.get(model.providerId)?.takeIf { it.isNotBlank() }
-            if (apiKey == null) {
-                attempts += "$key: chave não cadastrada"
-                continue
-            }
             val baseEndpoint = provider.models.firstOrNull()?.endpoint
             if (baseEndpoint.isNullOrBlank()) {
                 attempts += "$key: endpoint ausente"
                 continue
             }
 
-            val client = AndroidProviderClient(model.providerId, chatCompletionsEndpoint(baseEndpoint))
-            val request = ProviderRequest(model.modeloId, prompt, mapOf("Authorization" to "Bearer $apiKey"))
+            val accountId = "android:${model.providerId}"
+            val client = AccountAwareProviderClient(
+                delegate = AndroidProviderClient(model.providerId, chatCompletionsEndpoint(baseEndpoint)),
+                providerId = model.providerId,
+                credentials = CredentialProvider { requestedAccountId, requestedProviderId ->
+                    require(requestedAccountId == accountId) { "accountId não autorizado para provider" }
+                    val apiKey = keyStore.get(requestedProviderId)?.takeIf { it.isNotBlank() }
+                        ?: error("chave não cadastrada")
+                    mapOf("Authorization" to "Bearer $apiKey")
+                }
+            )
+            val request = ProviderRequest(model.modeloId, prompt, accountId = accountId)
             val response = ProviderDispatcher(catalog).dispatch(model, client, request).getOrNull()
             if (response != null && response.statusCode in 200..299) {
                 val text = extractText(response.body)
