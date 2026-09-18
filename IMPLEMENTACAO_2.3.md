@@ -1626,8 +1626,8 @@ O item 4 deverá especificar a máquina de estados de saúde, classificação de
 
 ## 26.5 Item 4 — Saúde, classificação de falha e retry seguro
 
-**Status:** documentado em 2026-09-17  
-**Escopo:** contrato de decisão; não implementar retry ou cooldown neste item.
+**Status:** implementado em 2026-09-17  
+**Escopo concluído:** classificação, idempotência, retry limitado, backoff e observabilidade segura.
 
 O AccountPool só poderá fazer failover quando a falha tiver sido classificada e a operação puder ser repetida com segurança. Mensagens livres de provider não podem decidir fallback por substring ou por qualquer erro genérico.
 
@@ -1678,7 +1678,7 @@ Os eventos devem registrar `executionId`, `attemptId`, conta lógica, provider, 
 
 ### Critério de saída
 
-O item 4 estará pronto para implementação quando as classes de falha forem mapeadas para cada adapter existente, as operações do catálogo estiverem marcadas como idempotentes ou não idempotentes e os testes puderem provar que `AUTH_FAILURE`, `POLICY_DENIED` e `INVALID_REQUEST` não geram retry cego.
+O item 4 foi implementado no coordinator: classes de falha são mapeadas para `AccountFailureClass`, operações não idempotentes não repetem, o backoff é limitado e injetável, e os eventos registram `attemptId`, conta, provider, modelo e classe sanitizada.
 
 ### Próximo item
 
@@ -1759,8 +1759,8 @@ O item 6 deverá definir a ligação do Router com o `DefaultAIRouter` e `ApiCat
 
 ## 26.7 Item 6 — Integração com `ApiCatalog` e `LiveStats`
 
-**Status:** documentado em 2026-09-17  
-**Escopo:** contrato de integração; não alterar o roteador em produção neste item.
+**Status:** implementado em 2026-09-17  
+**Escopo concluído:** AccountRouter consulta `LiveStats`; coordinator e dispatcher registram resultados.
 
 A integração da 2.3 deverá aproveitar `ApiCatalog`, `ProviderModel`, `LiveStats` e `registrarResultado`. O AccountRouter pode consultar disponibilidade observada, mas não deve transformar estatística em autorização. A autorização continua no Policy/Action Gateway.
 
@@ -1770,7 +1770,7 @@ Quando o provider não oferecer descoberta dinâmica, o catálogo estático deve
 
 ### Critério de saída
 
-O item 6 estará pronto para implementação quando houver uma tabela clara entre `AccountHealth` e `TipoErro`, quando `LiveStats` não puder conceder autorização e quando os testes provarem que sucesso, timeout, rate limit e chave inválida atualizam a observabilidade correta.
+O item 6 foi implementado sem transformar `LiveStats` em autorização: estatística de chave inválida/quota exclui a conta da seleção, enquanto Policy continua sendo a autoridade. Sucesso, timeout, rate limit e chave inválida atualizam `ApiCatalog` e `AccountHealth` nos caminhos de execução.
 
 ### Próximo item
 
