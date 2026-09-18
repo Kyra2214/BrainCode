@@ -1806,3 +1806,18 @@ O adapter de provider ainda recebe headers somente na camada `ProviderClient`; e
 ### Próximo item
 
 O item 8 deverá conectar `AccountRegistry` a um `CredentialProvider` abstrato e a um `ProviderClient` account-aware, mantendo a regra de que o agente e o Router nunca recebem o segredo.
+
+
+## 26.9 Item 8 — Isolamento de credenciais no ProviderClient
+
+**Status:** implementado em 2026-09-17
+
+`ProviderRequest` agora carrega apenas `accountId` lógico. `AccountAwareProviderClient` resolve headers por meio de `CredentialProvider` somente na camada de provider, imediatamente antes da chamada. O Router, Planner, Coordinator e Android não recebem o segredo.
+
+A camada rejeita chamada sem `accountId`, impede `accountId` como header de credencial e garante que headers resolvidos tenham precedência sobre valores fornecidos pelo caller. Os testes em `AccountAwareProviderClientTest` cobrem resolução, ausência de conta, precedência e rejeição de header indevido.
+
+A suíte completa do `brain` permanece verde.
+
+### Próximo item
+
+O item 9 deverá propagar a referência lógica de conta pelo Dispatcher/ActionGateway no caminho Android, sem transformar a referência em credencial e sem permitir que a Policy seja ignorada.

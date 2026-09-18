@@ -6,7 +6,12 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 
-data class ProviderRequest(val model: String, val prompt: String, val headers: Map<String, String> = emptyMap())
+data class ProviderRequest(
+    val model: String,
+    val prompt: String,
+    val headers: Map<String, String> = emptyMap(),
+    val accountId: String? = null
+)
 data class ProviderResponse(val statusCode: Int, val body: String, val latencyMs: Long, val providerId: String)
 
 interface ProviderClient {
