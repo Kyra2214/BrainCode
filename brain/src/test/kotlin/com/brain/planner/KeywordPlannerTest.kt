@@ -31,6 +31,16 @@ class KeywordPlannerTest {
         assertTrue(plano.passos.any { it.capacidade == "network.research" })
     }
 
+    @Test fun `transformacao de foto sem palavra prompt gera prompt e nao diagnostico`() = suspendTest {
+        val plano = KeywordPlanner().planejar(
+            "irei enviar uma foto minha pra ia para ela fazer uma alteração quero que ela pegue a foto e transforme minha imagem em um cavaleiro dos zodíacos de ouro"
+        )
+
+        assertEquals("prompt.library.write", plano.passos.last().capacidade)
+        assertTrue(plano.passos.none { it.capacidade == "brain.analyze" })
+        assertTrue(plano.passos.none { it.capacidade == "sandbox.info" })
+    }
+
     @Test fun `objetivo desconhecido permanece seguro e local`() = suspendTest {
         val plano = KeywordPlanner().planejar("organizar ideias")
         assertEquals("brain.analyze", plano.passos.single().capacidade)

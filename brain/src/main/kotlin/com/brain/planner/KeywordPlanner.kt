@@ -18,7 +18,14 @@ class KeywordFunctionSplitter : FunctionSplitter {
         require(texto.isNotBlank()) { "objetivo não pode ser vazio" }
         val normalizado = texto.lowercase()
         val passos = mutableListOf<PassoPlano>()
-        val pedidoDePrompt = TermMatcher.containsAnyWhole(normalizado, "prompt", "template de prompt")
+        val pedidoLiteralDePrompt = TermMatcher.containsAnyWhole(normalizado, "prompt", "template de prompt")
+        // Pedidos de transformação de foto frequentemente dizem apenas o que a IA deve
+        // fazer ("transforme minha imagem", "vou enviar uma foto"), sem usar a palavra
+        // "prompt". Eles ainda precisam cair no Prompt Creator, não no fallback de análise
+        // local que pode executar sandbox.info.
+        val pedidoVisualDePrompt = PromptDomain.classificar(normalizado) == PromptDomain.IMAGEM &&
+            TermMatcher.containsAnyStem(normalizado, "transform", "alter", "modific", "edita", "conver", "recri", "aplic")
+        val pedidoDePrompt = pedidoLiteralDePrompt || pedidoVisualDePrompt
         val pesquisaExplicita = TermMatcher.containsAnyStem(normalizado,
                 "pesquis", "analis", "investig", "compar", "encontr", "document",
                 "mais atual", "mais recentes", "mudanças recentes", "técnicas atuais"
