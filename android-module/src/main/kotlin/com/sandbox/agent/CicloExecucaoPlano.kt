@@ -64,7 +64,8 @@ class CicloExecucaoPlano(
     private val approvalStore: ApprovalStore? = null,
     private val dispatcher: Dispatcher? = null,
     private val accountRouter: AccountRouter? = null,
-    private val accountPools: Map<String, AccountPool> = emptyMap()
+    private val accountPools: Map<String, AccountPool> = emptyMap(),
+    private val authorizedAccountIds: Set<String> = emptySet()
 ) {
     private val approvedSteps = mutableSetOf<String>()
 
@@ -113,6 +114,7 @@ class CicloExecucaoPlano(
                 actor,
                 riskClass = passo.riskClass,
                 networkAllowed = passo.capacidade == "network.research",
+                authorizedAccountIds = authorizedAccountIds,
                 approval = if (highRisk && passo.id !in approvedSteps) ApprovalRequired.USER else ApprovalRequired.NONE
             )
             val decision = policyBroker.authorize(actor, passo.capacidade, passo.id, contexto)
@@ -156,7 +158,7 @@ class CicloExecucaoPlano(
     }
 
     private fun processarPasso(passo: PassoPlano, authorization: ExecutionAuthorization, decision: PolicyDecision?): ResultadoPasso {
-        val decisaoRouter = decidirComRefresh(passo)
+        val decisaoRouter = decidirComRefresh(passo, decision)
         dispatcher?.let { modernDispatcher ->
             val dispatch = modernDispatcher.dispatch(
                 DispatchTask(
@@ -171,7 +173,8 @@ class CicloExecucaoPlano(
                         sandboxRequired = true,
                         networkAllowed = decision?.networkAllowed ?: false,
                         filesystemRoots = decision?.filesystemRoots ?: emptyList(),
-                        budget = decision?.budget ?: emptyMap()
+                        budget = decision?.budget ?: emptyMap(),
+                        authorizedAccountIds = decision?.authorizedAccountIds ?: emptySet()
                     ),
                     accountId = decisaoRouter?.accountId
                 )
@@ -198,7 +201,7 @@ class CicloExecucaoPlano(
         }
     }
 
-    private fun decidirComRefresh(passo: PassoPlano): RoutingDecision? {
+    private fun decidirComRefresh(passo: PassoPlano, policyDecision: PolicyDecision? = null): RoutingDecision? {
         val papel = passo.papel ?: return null
         val primeira = router.decidir(papel, catalog, profiles) ?: return null
         val refreshed = if (catalog !is DynamicFreeApiCatalog) {
@@ -213,8 +216,8 @@ class CicloExecucaoPlano(
                 executionId = passo.id,
                 capability = passo.capacidade,
                 pool = pool,
-                authorizedAccountIds = pool.members.map { it.accountId }.toSet(),
-                idempotent = true,
+                authorizedAccountIds = policyDecision?.authorizedAccountIds ?: emptySet(),
+                idempotent = passo.idempotent,
                 requestedModelId = refreshed.escolhido.modeloId
             ),
             java.time.Instant.now()

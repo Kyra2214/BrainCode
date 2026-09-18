@@ -77,7 +77,8 @@ class PolicyBroker(
             expiresAt = expires.toString(),
             reason = reason,
             resource = resource,
-            limitsApplied = limitsApplied
+            limitsApplied = limitsApplied,
+            authorizedAccountIds = context.authorizedAccountIds.toSet()
         )
         return unsigned.copy(authorizationToken = AuthorizationToken.issue(unsigned))
     }

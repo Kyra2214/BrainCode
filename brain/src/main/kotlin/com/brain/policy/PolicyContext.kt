@@ -30,7 +30,9 @@ data class PolicyContext(
     val ttlSeconds: Int = 300,
     val expiresAt: String? = null,
     val dataClassifications: Set<String> = emptySet(),
-    val environment: String = "sandbox"
+    val environment: String = "sandbox",
+    /** Contas que a Policy permite para esta execução; vazio significa nenhuma conta externa. */
+    val authorizedAccountIds: Set<String> = emptySet()
 ) {
     init {
         require(runId.isNotBlank()) { "runId não pode ser vazio" }
@@ -38,6 +40,7 @@ data class PolicyContext(
         require(actor.isNotBlank()) { "actor não pode ser vazio" }
         require(dataClassifications.none { it.isBlank() }) { "classificação de dado não pode ser vazia" }
         require(environment.isNotBlank()) { "environment não pode ser vazio" }
+        require(authorizedAccountIds.none { it.isBlank() }) { "accountId autorizado não pode ser vazio" }
     }
 }
 
@@ -66,7 +69,8 @@ data class PolicyDecision(
     val reason: String,
     val resource: String = "",
     val authorizationToken: AuthorizationToken? = null,
-    val limitsApplied: Boolean = false
+    val limitsApplied: Boolean = false,
+    val authorizedAccountIds: Set<String> = emptySet()
 ) {
     val outcome: PolicyOutcome
         get() = when {

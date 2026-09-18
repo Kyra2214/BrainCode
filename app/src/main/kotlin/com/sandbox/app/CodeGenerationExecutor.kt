@@ -38,7 +38,7 @@ class CodeGenerationExecutor(
                 Objetivo:
                 $objective
             """.trimIndent()
-            val response = gateway.complete(prompt, PapelPipeline.PRODUCAO_DE_ARTEFATO)
+            val response = gateway.complete(prompt, PapelPipeline.PRODUCAO_DE_ARTEFATO, decision.authorizedAccountIds)
             val files = parseFiles(response.text)
             if (files.isEmpty()) {
                 return ActionExecution(false, error = "A IA não retornou blocos de arquivos válidos", provenance = provenance(capability))

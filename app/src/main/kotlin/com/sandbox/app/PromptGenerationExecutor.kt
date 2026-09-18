@@ -31,6 +31,9 @@ fun interface PromptImprover {
     fun melhorar(promptAtual: String, pedidoOriginal: String, pontosFracos: Set<String>): String =
         melhorar(promptAtual, pedidoOriginal)
 
+    fun melhorar(promptAtual: String, pedidoOriginal: String, pontosFracos: Set<String>, authorizedAccountIds: Set<String>): String =
+        melhorar(promptAtual, pedidoOriginal, pontosFracos)
+
     /**
      * Tier de custo real da última chamada a [melhorar]. Default FREE para implementações
      * (fakes de teste, por exemplo) que não sabem/não têm custo real a reportar.
@@ -46,6 +49,15 @@ class GatewayPromptImprover(private val gateway: BrainApiGateway) : PromptImprov
         melhorar(promptAtual, pedidoOriginal, emptySet())
 
     override fun melhorar(promptAtual: String, pedidoOriginal: String, pontosFracos: Set<String>): String {
+        return melhorar(promptAtual, pedidoOriginal, pontosFracos, emptySet())
+    }
+
+    override fun melhorar(
+        promptAtual: String,
+        pedidoOriginal: String,
+        pontosFracos: Set<String>,
+        authorizedAccountIds: Set<String>
+    ): String {
         val specialistPrompt = """
             Você é o especialista de engenharia de prompts do BrainCode.
             Reescreva somente o prompt existente, preservando rigorosamente a intenção original.
@@ -60,7 +72,7 @@ class GatewayPromptImprover(private val gateway: BrainApiGateway) : PromptImprov
             Prompt atual (a melhorar):
             $promptAtual
         """.trimIndent()
-        val resultado = gateway.complete(specialistPrompt, PapelPipeline.ESCRITA_DE_PROMPT)
+        val resultado = gateway.complete(specialistPrompt, PapelPipeline.ESCRITA_DE_PROMPT, authorizedAccountIds)
         ultimoCusto = resultado.costClass
         return resultado.text.trim()
     }
@@ -108,7 +120,7 @@ class PromptGenerationExecutor(
 
         // 1) Pedido explícito de melhoria de um prompt já existente — vai direto para o ciclo de melhoria.
         if (pedidoDeMelhoria != null) {
-            return processarMelhoriaExplicita(pedidoDeMelhoria, contextoPesquisa, capability, evidenciasBase, startedAt, request.actionId)
+            return processarMelhoriaExplicita(pedidoDeMelhoria, contextoPesquisa, capability, evidenciasBase, startedAt, request.actionId, decision.authorizedAccountIds)
         }
 
         val objetivo = objetivoBruto
@@ -128,7 +140,7 @@ class PromptGenerationExecutor(
         }
 
         val criado = creator.criar(objetivo, candidato, contextoPesquisa)
-        return finalizar(objetivo, criado, candidato, contextoPesquisa, evidenciasBase, capability, startedAt, request.actionId)
+        return finalizar(objetivo, criado, candidato, contextoPesquisa, evidenciasBase, capability, startedAt, request.actionId, decision.authorizedAccountIds)
     }
 
     /** "melhore esse prompt" / "otimize" / "deixe mais profissional" — escala direto, sem passar pela biblioteca. */
@@ -138,14 +150,16 @@ class PromptGenerationExecutor(
         capability: CapabilityDefinition,
         evidenciasBase: List<String>,
         startedAt: Long,
-        actionId: String
+        actionId: String,
+        authorizedAccountIds: Set<String>
     ): ActionExecution {
         val scoreInicial = PromptQualityValidator.validar(pedido.instrucao, pedido.promptAnterior, com.brain.prompt.PromptDomain.classificar(pedido.instrucao))
         val (textoFinal, origem, scoreFinal, aiUsada) = escalonar(
             pedido.instrucao,
             PromptCriado(pedido.promptAnterior, com.brain.prompt.PromptDomain.classificar(pedido.instrucao), "usuario:prompt-anterior"),
             scoreInicial,
-            contextoPesquisa
+            contextoPesquisa,
+            authorizedAccountIds
         )
         val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
         val prefixo = if (aiUsada) "Melhorei o prompt com apoio de IA especialista" else "Melhorei o prompt com o Prompt Creator local"
@@ -172,10 +186,11 @@ class PromptGenerationExecutor(
         evidenciasBase: List<String>,
         capability: CapabilityDefinition,
         startedAt: Long,
-        actionId: String
+        actionId: String,
+        authorizedAccountIds: Set<String>
     ): ActionExecution {
         val scoreInicial = PromptQualityValidator.validar(objetivo, criado.texto, criado.dominio)
-        val (textoEscalonado, origem, scoreFinal, aiUsada) = escalonar(objetivo, criado, scoreInicial, contextoPesquisa)
+        val (textoEscalonado, origem, scoreFinal, aiUsada) = escalonar(objetivo, criado, scoreInicial, contextoPesquisa, authorizedAccountIds)
         val textoFinal = textoEscalonado
         val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
         val savedId = saveGeneratedPrompt(objetivo, textoFinal)
@@ -210,11 +225,12 @@ class PromptGenerationExecutor(
         pedido: String,
         criado: PromptCriado,
         scoreInicial: PromptQualityScore,
-        contextoPesquisa: String?
+        contextoPesquisa: String?,
+        authorizedAccountIds: Set<String>
     ): EscalonamentoResultado {
         if (!scoreInicial.abaixoDoPadrao) return EscalonamentoResultado(criado.texto, criado.origem, scoreInicial, false)
 
-        val viaIa = runCatching { improver.melhorar(criado.texto, pedido, scoreInicial.pontosFracos) }.getOrNull()?.takeIf { it.isNotBlank() }
+        val viaIa = runCatching { improver.melhorar(criado.texto, pedido, scoreInicial.pontosFracos, authorizedAccountIds) }.getOrNull()?.takeIf { it.isNotBlank() }
         if (viaIa != null) {
             val scoreIa = PromptQualityValidator.validar(pedido, viaIa, criado.dominio)
             if (scoreIa.total >= scoreInicial.total) return EscalonamentoResultado(viaIa, "${criado.origem}+ia-especialista", scoreIa, true)

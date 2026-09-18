@@ -54,7 +54,11 @@ class BrainApiGateway(
         val costClass: CostClass = CostClass.FREE
     )
 
-    fun complete(prompt: String, papel: PapelPipeline = PapelPipeline.ESCRITA_DE_PROMPT): GatewayResult {
+    fun complete(
+        prompt: String,
+        papel: PapelPipeline = PapelPipeline.ESCRITA_DE_PROMPT,
+        authorizedAccountIds: Set<String> = emptySet()
+    ): GatewayResult {
         require(prompt.isNotBlank()) { "prompt não pode ser vazio" }
 
         // 1. Memória: se o Brain já conhece a resposta validada, não consulta nada externo.
@@ -92,7 +96,7 @@ class BrainApiGateway(
                 executionId = "android:${papel.name}:${prompt.hashCode()}",
                 capability = papel.name,
                 pool = accountPool,
-                authorizedAccountIds = accountPool.members.map { it.accountId }.toSet(),
+                authorizedAccountIds = authorizedAccountIds,
                 idempotent = true,
                 requestedModelId = decision?.escolhido?.modeloId,
                 catalog = catalog

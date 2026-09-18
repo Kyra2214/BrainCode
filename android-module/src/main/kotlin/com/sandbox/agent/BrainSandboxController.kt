@@ -21,6 +21,7 @@ import com.brain.policy.FileApprovalStore
 import com.brain.router.ApiCatalogRegistry
 import com.brain.router.DefaultAIRouter
 import com.brain.router.InMemoryApiCatalog
+import com.brain.account.AccountRouter
 import com.sandbox.runtime.ManagedSandboxRuntime
 import com.brain.workflow.WorkflowEngine
 import com.brain.workflow.WorkflowManifest
@@ -109,6 +110,7 @@ class BrainSandboxController(
     )
     private val promptRetrieval = promptLibrary?.let { Retrieval(listOf(PromptLibraryRetrievalSource.from(it))) }
     private val apiCatalog = ApiCatalogRegistry.current() ?: InMemoryApiCatalog(emptyList())
+    private val authorizedProviderAccounts = apiCatalog.listarModelos().map { "android:${it.providerId}" }.toSet()
     private val bridge = BrainSandboxExecutionBridge(
         CicloExecucaoPlano(
             policyBroker = policy,
@@ -116,7 +118,9 @@ class BrainSandboxController(
             router = DefaultAIRouter(),
             catalog = apiCatalog,
             approvalStore = approvals,
-            dispatcher = dispatcher
+                dispatcher = dispatcher,
+                accountRouter = AccountRouter(),
+                authorizedAccountIds = authorizedProviderAccounts
         )
     )
     private val reasoningEngine = ReasoningEngine()
