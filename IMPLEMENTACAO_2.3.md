@@ -1500,3 +1500,57 @@ O item 1 está documentalmente concluído, mas o gate operacional permanece **PE
 ## 26.2 Próximo item
 
 O próximo item será a definição e implementação dos contratos mínimos de `Account`, `AccountRegistry`, `AccountHealth`, `AccountPool`, `SelectionPolicy` e `ExecutionAttempt`, sem ainda conectar o pool ao fluxo de produção. A integração só deverá ocorrer depois que os contratos tiverem testes unitários e nenhum segredo puder aparecer nos modelos ou logs.
+
+
+## 26.3 Item 2 — Contratos mínimos de identidade, saúde e tentativa
+
+**Status:** documentado em 2026-09-17  
+**Escopo:** somente contratos e critérios; nenhuma classe de produção deve ser criada neste item.
+
+O primeiro incremento funcional da 2.3 deverá começar por modelos neutros, sem credenciais e sem dependência do Android. Os contratos precisam ser pequenos o suficiente para testes unitários e expressivos o suficiente para impedir que o agente escolha uma conta diretamente.
+
+### Contratos previstos
+
+`Account` representa apenas uma identidade lógica autorizada. Deve conter `accountId`, `providerId`, nome de exibição, prioridade, capacidades declaradas, referência opaca de credencial e estado de disponibilidade. O modelo não pode carregar token, senha, cookie ou conteúdo de arquivo de autenticação.
+
+`AccountHealth` representa o estado operacional observável da conta. Deve distinguir disponibilidade, cooldown, rate limit, falha de autenticação, falha temporária, falha permanente, quota baixa e quota esgotada. O estado deve registrar somente metadados seguros, como classe da falha, horário e mensagem sanitizada.
+
+`SelectionPolicy` define regras de seleção sem conhecer o segredo. Deve limitar capabilities, providers, modelos, tentativas e fallback. A policy precisa indicar se o fallback é permitido para uma classe de operação e se a operação é idempotente.
+
+`AccountPool` representa um conjunto nomeado de contas elegíveis para uma capability. Deve conter membros, prioridade, policy de seleção, policy de fallback e limite de tentativas. O pool não deve ser responsável por executar HTTP, acessar o sandbox ou ler credenciais.
+
+`ExecutionAttempt` representa uma tentativa auditável. Deve conter `executionId`, `attemptId`, `accountId`, `providerId`, `modelId`, horários, classe de falha e resultado sanitizado. O conteúdo integral do request e qualquer header secreto ficam fora do modelo de observabilidade.
+
+### Invariantes obrigatórias
+
+1. Um `AgentDefinition` poderá referenciar um pool, mas não uma credencial.
+2. Um pool vazio deve produzir uma decisão explícita de indisponibilidade, nunca uma seleção arbitrária.
+3. Uma conta em cooldown não pode ser selecionada.
+4. Uma falha de autenticação não pode gerar retry cego.
+5. Fallback automático exige operação idempotente ou uma chave de idempotência validada.
+6. O modelo serializável de tentativa não pode conter campos com nomes de token, senha, cookie ou authorization.
+7. Prioridade não pode superar os filtros de policy, capability e disponibilidade.
+
+### Testes obrigatórios antes do próximo item
+
+- criação e validação de `Account` sem segredo;
+- rejeição de campos inválidos;
+- transições de `AccountHealth`;
+- seleção de `AccountPool` por prioridade;
+- exclusão de cooldown e indisponibilidade;
+- pool vazio;
+- policy que nega fallback;
+- tentativa sanitizada sem credencial;
+- falha de autenticação sem retry automático.
+
+### Não fazer neste item
+
+Não conectar `AccountPool` ao `DefaultAIRouter`, `BrainApiGateway`, `BrainExecutionCoordinator`, `DurableJobRunner` ou Android. Não criar armazenamento persistente. Não copiar código do CodexRouter. A integração e a persistência ficam para itens posteriores, depois de os contratos serem revisados e testados isoladamente.
+
+### Critério de saída
+
+O item 2 só poderá ser marcado como implementado quando os contratos tiverem testes unitários determinísticos, nenhuma credencial puder ser representada diretamente e a decisão de seleção puder ser explicada sem revelar segredo.
+
+### Próximo item
+
+O item 3 deverá mapear os registries existentes e decidir se `ProviderRegistry`, `ApiCatalogRegistry` e `CapabilityDiscovery` serão estendidos ou apenas adaptados. A regra será não criar um segundo catálogo paralelo.
