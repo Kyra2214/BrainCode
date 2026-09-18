@@ -1,6 +1,7 @@
 package com.brain.planner
 
 import com.brain.execution.RiskClass
+import com.brain.reasoning.ReasoningState
 import com.brain.router.PapelPipeline
 
 /**
@@ -51,7 +52,8 @@ data class PlanoExecucao(
     val passos: List<PassoPlano>,
     val assumptions: Set<String> = emptySet(),
     val policies: Set<String> = emptySet(),
-    val fallback: String? = null
+    val fallback: String? = null,
+    val missingRequirements: List<String> = emptyList()
 ) {
     val ordemDeExecucao: List<PassoPlano>
     val requiredCapabilities: Set<String>
@@ -124,4 +126,12 @@ typealias ExecutionPlan = PlanoExecucao
  */
 interface Planner {
     suspend fun planejar(objetivo: String): PlanoExecucao
+
+    /** Entrada canônica: o plano recebe o raciocínio já calculado, em vez de descartá-lo. */
+    suspend fun planejar(objetivo: String, reasoning: ReasoningState): PlanoExecucao =
+        planejar(objetivo).copy(
+            assumptions = reasoning.assumptions.toSet(),
+            fallback = if (reasoning.missing.isEmpty()) null else "prosseguir-localmente-com-suposições-explicitas",
+            missingRequirements = reasoning.missing
+        )
 }

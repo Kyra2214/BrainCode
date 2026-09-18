@@ -19,8 +19,7 @@ import java.time.format.DateTimeFormatter
  */
 class WebResearchExecutor(
     private val provider: WebResearchProvider,
-    private val maxResultados: Int = 3,
-    private val maxCaracteresPorResultado: Int = 320
+    private val maxResultados: Int = 3
 ) : ActionExecutor {
     override fun execute(request: ActionRequest, capability: CapabilityDefinition, decision: PolicyDecision): ActionExecution {
         val query = request.parameters["parameter.0"]?.trim().orEmpty()
@@ -45,28 +44,23 @@ class WebResearchExecutor(
             )
         }
 
-        val contexto = montarContexto(resultados)
         return ActionExecution(
             success = true,
-            result = contexto,
+            result = montarResumo(resultados),
             evidence = resultados.map { evidenciaDe(it) },
             provenance = provenance(capability),
             researchSources = resultados
         )
     }
 
-    private fun montarContexto(resultados: List<ResearchResult>): String = buildString {
-        appendLine("Contexto de pesquisa web (${resultados.size} fonte(s)):")
-        resultados.forEach { r ->
-            appendLine("- ${r.title} (${r.source}): ${resumir(r.relevantContent, maxCaracteresPorResultado)} [${r.url}]")
-        }
+    private fun montarResumo(resultados: List<ResearchResult>): String = buildString {
+        append("Pesquisa web concluída com ${resultados.size} fonte(s). ")
+        append("As fontes foram preservadas como evidência interna e exibidas separadamente na UI: ")
+        append(resultados.joinToString("; ") { "${it.title} (${it.source})" })
     }.trim()
 
     private fun evidenciaDe(r: ResearchResult): String =
         "web-research:source=${r.source};title=${r.title.take(80)};url=${r.url};retrievedAt=${DateTimeFormatter.ISO_INSTANT.format(r.retrievedAt)}"
-
-    private fun resumir(texto: String, maxChars: Int): String =
-        texto.trim().let { if (it.length > maxChars) it.take(maxChars) + "…" else it }
 
     private fun provenance(capability: CapabilityDefinition) = listOf("app:WebResearchExecutor", "capability:${capability.id}")
 }

@@ -127,6 +127,14 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     private val factory = AndroidSandboxFactory(application)
     val namespaceSupport = NamespaceSupport.detect()
     private var runtime: ManagedSandboxRuntime? = null
+
+    override fun onCleared() {
+        runCatching { runtime?.shutdown() }
+        runtime = null
+        brainController = null
+        platform = null
+        super.onCleared()
+    }
     private var platform: SandboxPlatform? = null
     private var brainController: BrainSandboxController? = null
     private var brainIntegration: BrainIntegrationFacade? = null
@@ -618,7 +626,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         val capability = cycle.passos.lastOrNull { it.resultado != null }?.capacidade
                         ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability), researchSources = cycle.researchSources.map { it.toUiSource() })
                     } else {
-                        ChatMessage(ChatRole.ASSISTANT, brainApiGateway.complete(prompt).text)
+                        ChatMessage(ChatRole.ERROR, "Brain indisponível enquanto o sandbox não está pronto. Prepare o sandbox e envie novamente.")
                     }
                 }
                     .getOrElse { ChatMessage(ChatRole.ERROR, "Brain não conseguiu responder: ${it.message ?: it.javaClass.simpleName}") }
@@ -682,7 +690,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         val capability = cycle.passos.lastOrNull { it.resultado != null }?.capacidade
                         ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability), researchSources = cycle.researchSources.map { it.toUiSource() })
                     } else {
-                        ChatMessage(ChatRole.ASSISTANT, brainApiGateway.complete(prompt).text)
+                        ChatMessage(ChatRole.ERROR, "Brain indisponível enquanto o sandbox não está pronto. Prepare o sandbox e envie novamente.")
                     }
                 }
                     .getOrElse { ChatMessage(ChatRole.ERROR, "Brain não conseguiu responder ao comando ${entrada.comando}: ${it.message ?: it.javaClass.simpleName}") }

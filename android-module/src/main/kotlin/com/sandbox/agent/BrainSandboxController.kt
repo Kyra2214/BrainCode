@@ -16,7 +16,6 @@ import com.brain.gateway.InMemoryActionAuditLog
 import com.brain.job.DurableJobRunner
 import com.brain.job.JobStore
 import com.brain.execution.RiskClass
-import com.brain.planner.FastIntentClassifier
 import com.brain.policy.PolicyBroker
 import com.brain.policy.FileApprovalStore
 import com.brain.router.ApiCatalogRegistry
@@ -108,7 +107,6 @@ class BrainSandboxController(
         JobStore(File(rootfsDir, "brain-jobs.json")),
         WorkflowEngine(File(rootfsDir, "brain-workflows.json"))
     )
-    private val intentClassifier = FastIntentClassifier()
     private val promptRetrieval = promptLibrary?.let { Retrieval(listOf(PromptLibraryRetrievalSource.from(it))) }
     private val apiCatalog = ApiCatalogRegistry.current() ?: InMemoryApiCatalog(emptyList())
     private val bridge = BrainSandboxExecutionBridge(
@@ -167,12 +165,11 @@ class BrainSandboxController(
         onPasso: (ResultadoPasso) -> Unit = {}
     ): ResultadoCiclo {
         emit(runId, "chat", "TaskCreated", mapOf("objective" to objective.take(500)))
-        val classification = intentClassifier.classify(objective)
         val reasoning = reasoningEngine.analyze(objective)
         taskState = TaskState(objective).withReasoning(reasoning)
         layeredMemory.rememberEpisode(objective, Provenance("brain:task-created", confidence = 1.0))
         val planner = com.brain.planner.KeywordPlanner()
-        val basePlan = runBlockingPlanner { planner.planejar(classification.intent.objective) }
+        val basePlan = runBlockingPlanner { planner.planejar(reasoning.objective, reasoning) }
         if (basePlan.passos.any { it.capacidade == "brain.analyze" } && !apiKeyAvailable()) {
             emit(runId, "reasoning", "LocalFallbackSelected", mapOf("reason" to "api-unavailable"))
         }

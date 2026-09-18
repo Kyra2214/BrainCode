@@ -12,7 +12,7 @@ import java.util.Locale
 class LocalPromptCreatorAgent : PromptCreatorAgent {
 
     override fun criar(pedido: String, contexto: PromptTemplate?, contextoPesquisa: String?): PromptCriado {
-        val textoBase = listOfNotNull(pedido, contextoPesquisa).joinToString("\n")
+        val textoBase = pedido
         val dominio = PromptDomain.classificar(pedido)
         val texto = when (dominio) {
             PromptDomain.IMAGEM -> componsIrImagem(pedido, textoBase, contexto, contextoPesquisa)
@@ -36,9 +36,6 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
     ): PromptCriado {
         val dominio = PromptDomain.classificar(pedidoOriginal)
         var melhorado = aplicarAlteracoesConcretas(promptAtual.trim(), pedidoOriginal)
-        if (contextoPesquisa != null && contextoPesquisa.isNotBlank()) {
-            melhorado += "\n\nContexto adicional considerado: ${resumir(contextoPesquisa, 240)}"
-        }
         if ("especificidade" in pontosFracos || "presença de elementos" in pontosFracos) {
             val faltantes = detectarComponentesImagem("$promptAtual $pedidoOriginal $contextoPesquisa")
                 .filterValues { it == null }.keys
@@ -92,7 +89,6 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
             append("Nível de realismo: $realismo. Qualidade: $qualidade.")
         }
         if (contexto != null) return "$base\n\nReferência da biblioteca considerada (${contexto.id}): adaptado ao pedido acima."
-        if (!contextoPesquisa.isNullOrBlank()) return "$base\n\nTécnicas consideradas a partir da pesquisa: ${resumir(contextoPesquisa, 200)}"
         return base
     }
 
@@ -177,7 +173,7 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
         val iluminacao = componentes["iluminacao"] ?: padraoImagem("iluminacao")
         val estilo = componentes["estilo"] ?: "estilo cinematográfico"
         val base = "Vídeo com $sujeito. Movimento de câmera: $movimento. Duração: $duracao. Iluminação: $iluminacao. Estilo visual: $estilo."
-        return if (!contextoPesquisa.isNullOrBlank()) "$base\n\nTécnicas consideradas a partir da pesquisa: ${resumir(contextoPesquisa, 200)}" else base
+        return base
     }
 
     // ---------------- TEXTO ----------------
@@ -188,11 +184,6 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
         appendLine()
         appendLine("FORMATO DE SAÍDA")
         appendLine("Responder apenas com o conteúdo pedido, sem explicações adicionais além do necessário.")
-        if (!contextoPesquisa.isNullOrBlank()) {
-            appendLine()
-            appendLine("CONTEXTO RELEVANTE")
-            appendLine(resumir(contextoPesquisa, 400))
-        }
         if (contexto != null) {
             appendLine()
             appendLine("REFERÊNCIA")
@@ -210,10 +201,5 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
         appendLine("- Preservar a arquitetura existente do projeto.")
         appendLine("- Cobrir o caso descrito com testes quando aplicável.")
         appendLine("- Não introduzir dependências desnecessárias.")
-        if (!contextoPesquisa.isNullOrBlank()) {
-            appendLine()
-            appendLine("REFERÊNCIA TÉCNICA (pesquisa)")
-            appendLine(resumir(contextoPesquisa, 400))
-        }
     }.trim()
 }

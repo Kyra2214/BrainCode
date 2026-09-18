@@ -3,6 +3,7 @@ package com.sandbox.app
 import android.widget.Toast
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -59,12 +61,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.onSizeChanged
 import com.sandbox.runtime.SandboxExecutionResult
 
 data class DiffLine(val prefix: Char, val text: String)
@@ -98,6 +102,11 @@ fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var confirmClear by rememberSaveable { mutableStateOf(false) }
+    val density = LocalDensity.current
+
+    BackHandler(enabled = sidebarOpen || searchOpen) {
+        if (searchOpen) { searchOpen = false; query = "" } else sidebarOpen = false
+    }
 
     if (confirmClear) {
         AlertDialog(
@@ -136,8 +145,13 @@ fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
             // Configurações > Diagnóstico. Mantemos aqui só os estados que bloqueiam o uso
             // (preparar/baixar/erro), para não esconder uma ação necessária do usuário.
             if (viewModel.phase != SandboxPhase.Ready) StatusSection(viewModel)
-            val events = threadEvents(viewModel, query)
+            val events = remember(
+                viewModel.activeThreadEvents.toList(), viewModel.liveTerminalOutput, viewModel.lastExecution,
+                viewModel.lastResult, viewModel.pendingApprovalId, viewModel.lastTestLabReport,
+                viewModel.lastSecurityAssessment, viewModel.lastGitStatus, viewModel.phase, query
+            ) { threadEvents(viewModel, query) }
             val listState = rememberLazyListState()
+            var composerHeight by remember { mutableStateOf(104.dp) }
             androidx.compose.runtime.LaunchedEffect(events.size) {
                 if (events.isNotEmpty()) {
                     val visible = listState.layoutInfo.visibleItemsInfo
@@ -158,7 +172,8 @@ fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
                     SelectionContainer {
                         LazyColumn(
                             state = listState,
-                            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp).padding(bottom = 104.dp),
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                            contentPadding = PaddingValues(bottom = composerHeight),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             itemsIndexed(events, key = { index, event -> eventKey(event, index) }) { _, event -> ThreadEventCard(event, viewModel) }
@@ -166,7 +181,9 @@ fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
                     }
                 }
                 Surface(
-                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { size ->
+                        composerHeight = with(density) { size.height.toDp() }
+                    },
                     color = MaterialTheme.colorScheme.background.copy(alpha = 0.98f)
                 ) {
                     ThreadComposer(viewModel)
@@ -233,7 +250,7 @@ private fun TaskSidebar(viewModel: SandboxViewModel, onClose: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Button(onClick = { viewModel.createSession() }) { Text("+ Nova") }; TextButton(onClick = onClose) { Text("Thread") } }
         }
         viewModel.sessionSummaries.forEach { session ->
-            Card(onClick = { viewModel.switchSession(session.id); onClose() }, modifier = Modifier.fillMaxWidth()) {
+            Card(onClick = { viewModel.switchSession(session.id); onClose() }, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Abrir sessão ${session.title}" }) {
                 Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(session.title, style = MaterialTheme.typography.titleSmall)
                     Text("${session.status.name} · ${session.workspaceProjectName ?: "sem workspace"}", style = MaterialTheme.typography.labelSmall)
@@ -260,15 +277,15 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
     val context = LocalContext.current
     fun copy(text: String) { clipboard.setText(AnnotatedString(text)); Toast.makeText(context, "Copiado", Toast.LENGTH_SHORT).show() }
     when (event) {
-        is ThreadEvent.User -> Row(modifier = Modifier.fillMaxWidth().combinedClickable(onClick = { viewModel.quoteEvent(event) }, onLongClick = { viewModel.quoteEvent(event) }), horizontalArrangement = Arrangement.End) { Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) { Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) } }
-        is ThreadEvent.Agent -> Column(modifier = Modifier.fillMaxWidth().combinedClickable(onClick = { viewModel.quoteEvent(event) }, onLongClick = { viewModel.quoteEvent(event) }), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        is ThreadEvent.User -> Row(modifier = Modifier.fillMaxWidth().combinedClickable(onClickLabel = "Citar mensagem", onLongClickLabel = "Citar mensagem", onClick = { viewModel.quoteEvent(event) }, onLongClick = { viewModel.quoteEvent(event) }), horizontalArrangement = Arrangement.End) { Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) { Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) } }
+        is ThreadEvent.Agent -> Column(modifier = Modifier.fillMaxWidth().combinedClickable(onClickLabel = "Citar resposta", onLongClickLabel = "Citar resposta", onClick = { viewModel.quoteEvent(event) }, onLongClick = { viewModel.quoteEvent(event) }), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             GeneratedContentCard(event = event, onCopy = ::copy)
             if (event.researchSources.isNotEmpty()) ResearchSourcesCard(event.researchSources)
             event.promptActionId?.let { actionId ->
                 var feedbackDado by remember(actionId) { mutableStateOf<Boolean?>(null) }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(onClick = { feedbackDado = true; viewModel.recordPromptFeedback(actionId, true) }, enabled = feedbackDado == null) { Text(if (feedbackDado == true) "👍 Obrigado" else "👍") }
-                    TextButton(onClick = { feedbackDado = false; viewModel.recordPromptFeedback(actionId, false) }, enabled = feedbackDado == null) { Text(if (feedbackDado == false) "👎 Obrigado" else "👎") }
+                    TextButton(onClick = { feedbackDado = true; viewModel.recordPromptFeedback(actionId, true) }, enabled = feedbackDado == null, modifier = Modifier.semantics { contentDescription = "Avaliar prompt como útil" }) { Text(if (feedbackDado == true) "👍 Obrigado" else "👍") }
+                    TextButton(onClick = { feedbackDado = false; viewModel.recordPromptFeedback(actionId, false) }, enabled = feedbackDado == null, modifier = Modifier.semantics { contentDescription = "Avaliar prompt como não útil" }) { Text(if (feedbackDado == false) "👎 Obrigado" else "👎") }
                 }
             }
         }
@@ -344,7 +361,7 @@ private fun ThreadComposer(viewModel: SandboxViewModel) {
         val canSend = viewModel.chatInput.isNotBlank() && viewModel.phase == SandboxPhase.Ready
         Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
             Row(modifier = Modifier.padding(start = 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Box(modifier = Modifier.weight(1f).heightIn(min = 40.dp).padding(vertical = 8.dp)) {
+                Box(modifier = Modifier.weight(1f).heightIn(min = 40.dp).padding(vertical = 8.dp).semantics { contentDescription = if (viewModel.chatInput.isEmpty()) "Campo de mensagem vazio" else "Campo de mensagem" }) {
                     if (viewModel.chatInput.isEmpty()) Text(if (viewModel.chatRunning) "Executando…" else "Descreva a tarefa ou use /comando", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     BasicTextField(value = viewModel.chatInput, onValueChange = { viewModel.chatInput = it }, enabled = enabled, modifier = Modifier.fillMaxWidth(), textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface), cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), maxLines = 6)
                 }

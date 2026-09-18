@@ -33,7 +33,7 @@ class ConversationContextEngine {
         val requirements = compact(all.filter { REQUIREMENT_MARKERS.any { marker -> it.lowercase().contains(marker) } }
             .filterNot { discarded.any { rejected -> overlaps(it, rejected) } })
         val artifacts = compact(assistantText.filter(::isArtifact), 12000)
-        val references = if (REFERENCE_PATTERN.containsMatchIn(prompt.lowercase())) {
+        val references = if (REFERENCE_PATTERN.containsMatchIn(prompt.lowercase()) || artifacts.lastOrNull()?.let { overlaps(prompt, it) } == true) {
             listOfNotNull(idea?.let { "ideia: $it" }, artifacts.lastOrNull()?.let { "artefato anterior: $it" })
         } else emptyList()
         val context = ConversationContext(idea, requirements, decisions, discarded, pending, artifacts, references)
@@ -41,8 +41,7 @@ class ConversationContextEngine {
     }
 
     private fun buildObjective(prompt: String, context: ConversationContext): String {
-        if (context.idea == null && context.requirements.isEmpty() && context.decisions.isEmpty() && context.artifacts.isEmpty()) return prompt
-        if (!REFERENCE_PATTERN.containsMatchIn(prompt.lowercase())) return prompt
+        if (context.idea == null && context.requirements.isEmpty() && context.decisions.isEmpty() && context.references.isEmpty()) return prompt
         return buildString {
             append("Objetivo atual: ").append(prompt)
             context.idea?.let { append("\nIdeia/projeto ativo: ").append(it) }

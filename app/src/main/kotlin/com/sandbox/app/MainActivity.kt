@@ -2,6 +2,7 @@ package com.sandbox.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.core.view.WindowCompat
@@ -57,6 +58,7 @@ open class MainActivity : ComponentActivity() {
 @Composable
 fun SandboxMobileApp(viewModel: SandboxViewModel) {
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = settingsOpen) { settingsOpen = false }
     if (settingsOpen) {
         SettingsScreen(viewModel, onBack = { settingsOpen = false })
     } else {

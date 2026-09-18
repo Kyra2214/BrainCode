@@ -28,6 +28,9 @@ fun interface PromptImprover {
     /** @return texto melhorado, ou lança se nenhuma IA estiver disponível/responder. */
     fun melhorar(promptAtual: String, pedidoOriginal: String): String
 
+    fun melhorar(promptAtual: String, pedidoOriginal: String, pontosFracos: Set<String>): String =
+        melhorar(promptAtual, pedidoOriginal)
+
     /**
      * Tier de custo real da última chamada a [melhorar]. Default FREE para implementações
      * (fakes de teste, por exemplo) que não sabem/não têm custo real a reportar.
@@ -39,13 +42,17 @@ fun interface PromptImprover {
 class GatewayPromptImprover(private val gateway: BrainApiGateway) : PromptImprover {
     @Volatile private var ultimoCusto: CostClass = CostClass.FREE
 
-    override fun melhorar(promptAtual: String, pedidoOriginal: String): String {
+    override fun melhorar(promptAtual: String, pedidoOriginal: String): String =
+        melhorar(promptAtual, pedidoOriginal, emptySet())
+
+    override fun melhorar(promptAtual: String, pedidoOriginal: String, pontosFracos: Set<String>): String {
         val specialistPrompt = """
             Você é o especialista de engenharia de prompts do BrainCode.
-            Um prompt já foi criado localmente para o pedido abaixo, mas a validação de
-            qualidade encontrou pontos fracos. Melhore o prompt preservando a intenção
-            original — não mude o assunto, apenas aumente clareza, especificidade e
-            coerência. Responda somente com o prompt final melhorado.
+            Reescreva somente o prompt existente, preservando rigorosamente a intenção original.
+            Não mude o assunto, não invente requisitos e não adicione explicações.
+            A validação determinística encontrou estes pontos fracos: ${pontosFracos.ifEmpty { setOf("qualidade geral") }.joinToString(", ")}.
+            Corrija esses pontos sem alterar o objetivo. Responda somente com o prompt final,
+            sem aspas, prefácio, conclusão ou comentários.
 
             Pedido original:
             $pedidoOriginal
@@ -169,9 +176,7 @@ class PromptGenerationExecutor(
     ): ActionExecution {
         val scoreInicial = PromptQualityValidator.validar(objetivo, criado.texto, criado.dominio)
         val (textoEscalonado, origem, scoreFinal, aiUsada) = escalonar(objetivo, criado, scoreInicial, contextoPesquisa)
-        val textoFinal = if (!contextoPesquisa.isNullOrBlank() && !textoEscalonado.contains(contextoPesquisa)) {
-            "$textoEscalonado\n\nContexto pesquisado considerado:\n$contextoPesquisa"
-        } else textoEscalonado
+        val textoFinal = textoEscalonado
         val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
         val savedId = saveGeneratedPrompt(objetivo, textoFinal)
         outcomeTracker.markUsed(actionId, savedId)
@@ -209,7 +214,7 @@ class PromptGenerationExecutor(
     ): EscalonamentoResultado {
         if (!scoreInicial.abaixoDoPadrao) return EscalonamentoResultado(criado.texto, criado.origem, scoreInicial, false)
 
-        val viaIa = runCatching { improver.melhorar(criado.texto, pedido) }.getOrNull()?.takeIf { it.isNotBlank() }
+        val viaIa = runCatching { improver.melhorar(criado.texto, pedido, scoreInicial.pontosFracos) }.getOrNull()?.takeIf { it.isNotBlank() }
         if (viaIa != null) {
             val scoreIa = PromptQualityValidator.validar(pedido, viaIa, criado.dominio)
             if (scoreIa.total >= scoreInicial.total) return EscalonamentoResultado(viaIa, "${criado.origem}+ia-especialista", scoreIa, true)

@@ -17,9 +17,8 @@ import org.junit.Test
 
 /**
  * Diferente de com.sandbox.agent.WebResearchIntegrationTest (que usa executores fake
- * só para provar o despacho), este teste usa o WebResearchExecutor e o
- * PromptGenerationExecutor REAIS de produção — prova que o texto pesquisado realmente
- * chega ao Prompt Creator e aparece na resposta final entregue ao usuário.
+ * só para provar o despacho), este teste usa os executores reais de produção — prova que
+ * as fontes pesquisadas chegam como evidência sem poluir o prompt final.
  */
 class PromptCreatorWebResearchIntegrationTest {
 
@@ -70,7 +69,7 @@ class PromptCreatorWebResearchIntegrationTest {
         )
     }
 
-    @Test fun `contexto pesquisado chega de verdade ao texto final do prompt entregue`() {
+    @Test fun `fontes pesquisadas chegam como evidencia sem texto cru no prompt entregue`() {
         val root = Files.createTempDirectory("prompt-web-research-").toFile()
         try {
             val library = FakePromptLibrary()
@@ -82,16 +81,14 @@ class PromptCreatorWebResearchIntegrationTest {
 
             assertTrue("ciclo deveria aprovar pesquisar + produzir", cycle.aprovado)
             val resposta = cycle.resposta.orEmpty()
-            assertTrue(
-                "a resposta final deveria conter o conteúdo trazido pela pesquisa, não só o pedido original",
-                resposta.contains("iluminação de três pontos") || resposta.contains("fotografia-tecnica.exemplo")
-            )
+            assertTrue("o ciclo deve preservar a fonte pesquisada", cycle.researchSources.any { it.source == "fotografia-tecnica.exemplo" })
+            assertTrue("o prompt final não deve colar URL ou texto cru da pesquisa", !resposta.contains("fotografia-tecnica.exemplo") && !resposta.contains("iluminação de três pontos"))
         } finally {
             root.deleteRecursively()
         }
     }
 
-    @Test fun `prompt visual concreto inclui o contexto da pesquisa na resposta`() {
+    @Test fun `prompt visual concreto preserva a fonte separada da resposta`() {
         val root = Files.createTempDirectory("prompt-web-research-").toFile()
         try {
             val library = FakePromptLibrary()
@@ -101,7 +98,8 @@ class PromptCreatorWebResearchIntegrationTest {
             )
 
             assertTrue(cycle.aprovado)
-            assertTrue("prompt visual concreto deveria incluir a pesquisa", cycle.resposta.orEmpty().contains("fotografia-tecnica.exemplo"))
+            assertTrue("prompt visual concreto deveria preservar a fonte", cycle.researchSources.any { it.source == "fotografia-tecnica.exemplo" })
+            assertTrue("prompt visual concreto não deve incluir URL crua", !cycle.resposta.orEmpty().contains("fotografia-tecnica.exemplo"))
         } finally {
             root.deleteRecursively()
         }

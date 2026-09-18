@@ -1,7 +1,10 @@
 package com.brain.planner
 
 import com.brain.execution.RiskClass
+import com.brain.prompt.PromptDomain
+import com.brain.reasoning.ReasoningState
 import com.brain.router.PapelPipeline
+import com.brain.text.TermMatcher
 
 /** Decompõe objetivo em funções declarativas; não autoriza nem executa. */
 fun interface FunctionSplitter {
@@ -15,18 +18,15 @@ class KeywordFunctionSplitter : FunctionSplitter {
         require(texto.isNotBlank()) { "objetivo não pode ser vazio" }
         val normalizado = texto.lowercase()
         val passos = mutableListOf<PassoPlano>()
-        val pedidoDePrompt = normalizado.containsAny("prompt", "template de prompt")
-        val pesquisaExplicita = normalizado.containsAny(
+        val pedidoDePrompt = TermMatcher.containsAnyWhole(normalizado, "prompt", "template de prompt")
+        val pesquisaExplicita = TermMatcher.containsAnyStem(normalizado,
                 "pesquis", "analis", "investig", "compar", "encontr", "document",
                 "mais atual", "mais recentes", "mudanças recentes", "técnicas atuais"
             )
         // Prompts visuais se beneficiam de referências técnicas mesmo quando o usuário
         // não escreve literalmente "pesquise"; prompts de arquitetura/texto não devem
         // ganhar uma etapa de rede apenas por conter a palavra "prompt".
-        val promptVisual = pedidoDePrompt && normalizado.containsAny(
-            "imagem", "foto", "fotografia", "fotorrealista", "ilustra", "retrato", "paisagem",
-            "foguete", "céu", "iluminação", "cinematográfica", "decolando", "render", "wallpaper"
-        )
+        val promptVisual = pedidoDePrompt && PromptDomain.classificar(normalizado) == PromptDomain.IMAGEM
         val pesquisaNecessaria = pesquisaExplicita || promptVisual
         if (!normalizado.contains("criar documento") && pesquisaNecessaria) {
             passos += PassoPlano(
@@ -35,7 +35,7 @@ class KeywordFunctionSplitter : FunctionSplitter {
                 papel = PapelPipeline.PLANEJAMENTO, riskClass = RiskClass.MEDIUM
             )
         }
-        if (pedidoDePrompt || normalizado.containsAny("escrev", "cri", "ger", "document", "relatóri", "relatori", "desenvolv", "constru", "mont", "aplicat", "aplicativo", "sistem", "site", "software")) {
+        if (pedidoDePrompt || TermMatcher.containsAnyStem(normalizado, "escrev", "cri", "ger", "document", "relatóri", "relatori", "desenvolv", "constru", "mont", "aplicat", "aplicativo", "sistem", "site", "software")) {
             passos += PassoPlano(
                 "produzir", if (pedidoDePrompt) "prompt.library.write" else "workspace.write", "artefato produzido",
                 parametros = listOf(texto),
@@ -43,7 +43,7 @@ class KeywordFunctionSplitter : FunctionSplitter {
                 riskClass = RiskClass.MEDIUM
             )
         }
-        if (normalizado.containsAny("códig", "codig", "program", "implement", "compil", "test")) {
+        if (TermMatcher.containsAnyStem(normalizado, "códig", "codig", "program", "implement", "compil", "test")) {
             passos += PassoPlano(
                 "executar", "sandbox.code", "execução e testes concluídos",
                 dependeDe = passos.map { it.id }, papel = PapelPipeline.EXECUCAO_CODIGO,
@@ -56,7 +56,6 @@ class KeywordFunctionSplitter : FunctionSplitter {
         return passos
     }
 
-    private fun String.containsAny(vararg termos: String) = termos.any { it in this }
 }
 
 /** Planner canônico: recebe funções divididas e apenas monta o ExecutionPlan. */
@@ -68,4 +67,11 @@ class KeywordPlanner(
         require(texto.isNotBlank()) { "objetivo não pode ser vazio" }
         return PlanoExecucao(texto, splitter.split(texto))
     }
+
+    override suspend fun planejar(objetivo: String, reasoning: ReasoningState): PlanoExecucao =
+        planejar(objetivo).copy(
+            assumptions = reasoning.assumptions.toSet(),
+            fallback = if (reasoning.missing.isEmpty()) null else "prosseguir-localmente-com-suposições-explicitas",
+            missingRequirements = reasoning.missing
+        )
 }
