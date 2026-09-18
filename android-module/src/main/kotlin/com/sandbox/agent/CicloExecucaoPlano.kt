@@ -40,7 +40,8 @@ data class ResultadoPasso(
     /** Capacidade declarativa do passo (ex.: "prompt.library.write") — permite ao caller (UI)
      * reconhecer o tipo do resultado sem duplicar a lógica do Planner. */
     val capacidade: String? = null,
-    val researchSources: List<ResearchResult> = emptyList()
+    val researchSources: List<ResearchResult> = emptyList(),
+    val executionEvidence: List<String> = emptyList()
 )
 
 data class ResultadoCiclo(
@@ -189,7 +190,8 @@ class CicloExecucaoPlano(
                 actionId = "${passo.id}:${passo.id}",
                 custo = dispatch.gateway?.execution?.custo ?: 0.0,
                 capacidade = passo.capacidade,
-                researchSources = dispatch.gateway?.execution?.researchSources ?: emptyList()
+                researchSources = dispatch.gateway?.execution?.researchSources ?: emptyList(),
+                executionEvidence = dispatch.gateway?.execution?.evidence ?: emptyList()
             )
         }
         sandbox.abrirSessao(authorization).use { sessao ->

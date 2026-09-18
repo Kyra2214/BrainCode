@@ -31,4 +31,16 @@ class GeneratedContentTest {
         assertEquals(GeneratedContentType.YAML, detectGeneratedContentType("```yaml\nkey: value\n```"))
         assertTrue(detectGeneratedContentType("texto simples") == GeneratedContentType.TEXT)
     }
+
+    @Test
+    fun `esclarecimento do checklist nao e classificado como prompt`() {
+        assertEquals(
+            GeneratedContentType.CLARIFICATION,
+            detectGeneratedContentType(
+                "Antes de gerar o prompt, preciso confirmar: qual é a referência?",
+                "prompt.library.write",
+                listOf("prompt-checklist:aguardando-esclarecimento")
+            )
+        )
+    }
 }

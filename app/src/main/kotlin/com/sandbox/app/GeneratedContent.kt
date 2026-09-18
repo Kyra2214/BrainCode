@@ -1,7 +1,7 @@
 package com.sandbox.app
 
 /** Tipo semântico do conteúdo produzido por um agente, independente da sua apresentação visual. */
-enum class GeneratedContentType { TEXT, PROMPT, CODE, MARKDOWN, SCRIPT, JSON, YAML }
+enum class GeneratedContentType { TEXT, CLARIFICATION, PROMPT, CODE, MARKDOWN, SCRIPT, JSON, YAML }
 
 data class ResearchSourceUi(
     val title: String,
@@ -25,8 +25,9 @@ fun copyPayloadFor(content: String, type: GeneratedContentType): String = when (
     else -> content
 }
 
-fun detectGeneratedContentType(content: String, capability: String? = null): GeneratedContentType {
+fun detectGeneratedContentType(content: String, capability: String? = null, evidence: Iterable<String> = emptyList()): GeneratedContentType {
     val lower = content.lowercase()
+    if (evidence.any { it == "prompt-checklist:aguardando-esclarecimento" }) return GeneratedContentType.CLARIFICATION
     if (capability == "prompt.library.write" || lower.contains("prompt gerado") || lower.contains("prompt novo localmente")) return GeneratedContentType.PROMPT
     if (Regex("(?s)```(bash|sh|shell|zsh)\\b").containsMatchIn(lower) || lower.contains("#!/bin/")) return GeneratedContentType.SCRIPT
     if (Regex("(?s)```(json)\\b").containsMatchIn(lower)) return GeneratedContentType.JSON

@@ -255,7 +255,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         activeThreadEvents.forEach { event ->
             when (event) {
                 is ThreadEvent.User -> chatMessages.add(ChatMessage(ChatRole.USER, event.text))
-                is ThreadEvent.Agent -> chatMessages.add(ChatMessage(ChatRole.ASSISTANT, event.text))
+                is ThreadEvent.Agent -> chatMessages.add(ChatMessage(ChatRole.ASSISTANT, event.text, contentType = event.contentType))
                 is ThreadEvent.System -> chatMessages.add(ChatMessage(ChatRole.ERROR, event.text))
                 else -> Unit
             }
@@ -636,7 +636,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         val promptActionId = cycle.passos.firstOrNull { it.capacidade == "prompt.library.write" }?.actionId
                         val content = cycle.resposta ?: "Plano concluído: ${cycle.aprovado}"
                         val capability = cycle.passos.lastOrNull { it.resultado != null }?.capacidade
-                        ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability), researchSources = cycle.researchSources.map { it.toUiSource() })
+                        val evidence = cycle.passos.flatMap { it.executionEvidence }
+                        ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability, evidence), researchSources = cycle.researchSources.map { it.toUiSource() })
                     } else {
                         ChatMessage(ChatRole.ERROR, "Brain indisponível enquanto o sandbox não está pronto. Prepare o sandbox e envie novamente.")
                     }
@@ -700,7 +701,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         val promptActionId = cycle.passos.firstOrNull { it.capacidade == "prompt.library.write" }?.actionId
                         val content = cycle.resposta ?: "Plano concluído: ${cycle.aprovado}"
                         val capability = cycle.passos.lastOrNull { it.resultado != null }?.capacidade
-                        ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability), researchSources = cycle.researchSources.map { it.toUiSource() })
+                        val evidence = cycle.passos.flatMap { it.executionEvidence }
+                        ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability, evidence), researchSources = cycle.researchSources.map { it.toUiSource() })
                     } else {
                         ChatMessage(ChatRole.ERROR, "Brain indisponível enquanto o sandbox não está pronto. Prepare o sandbox e envie novamente.")
                     }

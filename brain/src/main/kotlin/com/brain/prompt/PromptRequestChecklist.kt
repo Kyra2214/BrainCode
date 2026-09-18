@@ -24,12 +24,11 @@ data class PromptGeneratedChecklist(
  * apenas impede que uma solicitação incompleta seja apresentada como prompt pronto.
  */
 object PromptRequestChecklist {
-    private val IMPROVEMENT_WORDS = listOf("melhor", "melhora", "melhore", "otimiz", "reformul", "aperfeiç", "aperfeic")
     fun analisar(pedido: String): PromptRequestAnalysis {
         val texto = pedido.trim()
         val lower = texto.lowercase(Locale.ROOT)
         val dominio = PromptDomain.classificar(texto)
-        val melhoria = IMPROVEMENT_WORDS.any { it in lower }
+        val melhoria = ImprovementVocabulary.radicals.any { it in lower }
         if (melhoria) {
             return PromptRequestAnalysis(
                 tipo = PromptRequestType.MELHORIA,

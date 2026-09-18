@@ -17,6 +17,18 @@ class ConversationContextEngineTest {
     }
 
     @Test
+    fun `melhorar e mudar recuperam o artefato anterior`() {
+        val history = listOf(
+            ChatMessage(ChatRole.USER, "crie um prompt de uma casa na montanha"),
+            ChatMessage(ChatRole.ASSISTANT, "Prompt final: casa moderna na montanha ao amanhecer")
+        )
+        val melhorar = engine.resolve(history, "vamos melhorar o prompt")
+        val mudar = engine.resolve(history, "vamos mudar o prompt para uma casa de madeira")
+        assertTrue(melhorar.context.references.any { it.contains("artefato anterior") })
+        assertTrue(mudar.context.references.any { it.contains("artefato anterior") })
+    }
+
+    @Test
     fun `contexto longo preserva ideia inicial e requisitos antigos`() {
         val history = buildList {
             add(ChatMessage(ChatRole.USER, "Tenho uma ideia de aplicativo offline para criar projetos"))

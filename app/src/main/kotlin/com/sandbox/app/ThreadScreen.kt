@@ -311,12 +311,20 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
 @Composable
 private fun GeneratedContentCard(event: ThreadEvent.Agent, onCopy: (String) -> Unit) {
     val content = copyPayloadFor(event.text, event.contentType)
-    val structured = event.contentType != GeneratedContentType.TEXT
+    val structured = event.contentType != GeneratedContentType.TEXT && event.contentType != GeneratedContentType.CLARIFICATION
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(if (event.contentType == GeneratedContentType.PROMPT) "Prompt gerado" else "Resultado", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                TextButton(onClick = { onCopy(content) }) { Text(if (structured) "Copiar tudo" else "Copiar prompt") }
+                Text(
+                    if (event.contentType == GeneratedContentType.PROMPT) "Prompt gerado"
+                    else if (event.contentType == GeneratedContentType.CLARIFICATION) "Esclarecimento"
+                    else "Resultado",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f)
+                )
+                if (event.contentType != GeneratedContentType.CLARIFICATION) {
+                    TextButton(onClick = { onCopy(content) }) { Text(if (structured) "Copiar tudo" else "Copiar prompt") }
+                }
             }
             if (structured) SelectionContainer { Text(content, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) }
             else Text(content, style = MaterialTheme.typography.bodyMedium)

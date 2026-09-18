@@ -1,5 +1,7 @@
 package com.sandbox.app
 
+import com.brain.prompt.ImprovementVocabulary
+
 data class ConversationContext(
     val idea: String? = null,
     val requirements: List<String> = emptyList(),
@@ -84,7 +86,7 @@ class ConversationContextEngine {
         listOf("```", "prompt", "especificação", "implementação", "arquivo").any { it in text.lowercase() }
 
     companion object {
-        private val REFERENCE_PATTERN = Regex("\\b(isso|isso aí|ele|ela|aquele|aquela|continua|melhore|melhora|aquilo|adicione|adiciona|mude|muda|troque|troca|substitua|substitui)\\b|vamos\\s+fazer|agora\\s+(?:implement|quero\\s+(?:o|a|um|uma)\\s+(?:fundo|ambiente|elemento|objeto))")
+        private val REFERENCE_PATTERN = Regex("\\b(?:isso|isso aí|ele|ela|aquele|aquela|continua|aquilo|${ImprovementVocabulary.regex})\\p{L}*\\b|vamos\\s+fazer|agora\\s+(?:implement|quero\\s+(?:o|a|um|uma)\\s+(?:fundo|ambiente|elemento|objeto))")
         private val IDEA_MARKERS = listOf("tenho uma ideia", "projeto", "aplicativo", "aplicação", "produto")
         private val REQUIREMENT_MARKERS = listOf("precisa", "deve", "requisito", "quero também", "não quero", "poderá", "offline")
         private val DECISION_MARKERS = listOf("vamos usar", "decidimos", "escolhemos", "mudamos", "usar ")
