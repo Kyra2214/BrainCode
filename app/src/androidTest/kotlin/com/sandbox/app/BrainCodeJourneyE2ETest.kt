@@ -11,7 +11,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -32,6 +31,10 @@ class BrainCodeJourneyE2ETest {
     @Before
     fun requireSandboxForJourney() {
         runCatching {
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                composeRule.onAllNodesWithText("Preparar sandbox", substring = true, useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
             composeRule.onNodeWithText("Preparar sandbox", substring = true, useUnmergedTree = true).performClick()
         }
         val ready = runCatching {
@@ -45,10 +48,7 @@ class BrainCodeJourneyE2ETest {
             }
             true
         }.getOrDefault(false)
-        assumeTrue(
-            "Sandbox RootFS não está disponível no ambiente E2E; smoke tests continuam cobrindo a UI.",
-            ready,
-        )
+        check(ready) { "Sandbox não ficou pronto no ambiente E2E; jornada funcional não pode ser ignorada." }
     }
 
     private fun send(text: String) {
