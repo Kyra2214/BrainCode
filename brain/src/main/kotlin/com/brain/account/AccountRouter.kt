@@ -17,6 +17,11 @@ data class AccountRouteRequest(
     }
 }
 
+data class AccountRouteCandidate(
+    val accountId: String,
+    val providerId: String
+)
+
 sealed interface AccountRouteDecision {
     val executionId: String
 
@@ -26,7 +31,8 @@ sealed interface AccountRouteDecision {
         val providerId: String,
         val requestedModelId: String?,
         val attemptNumber: Int,
-        val reasonCodes: List<String>
+        val reasonCodes: List<String>,
+        val alternatives: List<AccountRouteCandidate> = emptyList()
     ) : AccountRouteDecision
 
     data class Unavailable(
@@ -62,7 +68,8 @@ class AccountRouter {
             providerId = selected.providerId,
             requestedModelId = request.requestedModelId,
             attemptNumber = 1,
-            reasonCodes = listOf("PRIORITY", "HEALTHY", "AUTHORIZED")
+            reasonCodes = listOf("PRIORITY", "HEALTHY", "AUTHORIZED"),
+            alternatives = candidates.drop(1).map { AccountRouteCandidate(it.accountId, it.providerId) }
         )
     }
 }

@@ -1775,3 +1775,34 @@ O item 6 estará pronto para implementação quando houver uma tabela clara entr
 ### Próximo item
 
 O item 7 deverá especificar o teste de integração interno Agent → Policy → Pool → Router → Provider, com falha controlada na conta A e sucesso na conta B.
+
+
+## 26.8 Item 7 — Integração interna com failover entre contas
+
+**Status:** implementado em 2026-09-17
+
+O caminho interno agora aceita `AccountRouter`, `AccountPool` e `AccountRegistry` no `BrainExecutionCoordinator`. A Policy continua sendo verificada antes da decisão de conta. O executor recebe `accountId` lógico por uma sobrecarga compatível, sem receber `CredentialRef` materializada.
+
+O coordinator atualiza a saúde da conta após sucesso ou falha classificada. Falhas de chave inválida e rate limit não repetem cegamente a mesma conta; quando existir alternativa elegível, o fluxo prossegue para a próxima conta/provider. A decisão de conta continua separada da execução do provider.
+
+O teste `BrainExecutionCoordinatorAccountTest` prova:
+
+1. Policy permite a capability;
+2. AccountRouter seleciona Account A;
+3. Account A falha com erro de autenticação;
+4. a saúde de A passa para `AUTHENTICATION_ERROR`;
+5. Account B é selecionada;
+6. B executa com sucesso;
+7. o resultado final é `COMPLETED`;
+8. somente IDs lógicos chegam ao executor;
+9. credenciais não entram no evento de execução.
+
+A suíte completa do módulo `brain` ficou verde após esta integração.
+
+### Limitação explícita
+
+O adapter de provider ainda recebe headers somente na camada `ProviderClient`; este item não materializa nem persiste credenciais. A associação completa entre `accountId`, Credential layer e headers do provider será implementada no próximo item, com testes de isolamento e redaction.
+
+### Próximo item
+
+O item 8 deverá conectar `AccountRegistry` a um `CredentialProvider` abstrato e a um `ProviderClient` account-aware, mantendo a regra de que o agente e o Router nunca recebem o segredo.
