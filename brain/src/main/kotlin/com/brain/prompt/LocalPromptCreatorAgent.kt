@@ -12,8 +12,16 @@ import java.util.Locale
 class LocalPromptCreatorAgent : PromptCreatorAgent {
 
     override fun criar(pedido: String, contexto: PromptTemplate?, contextoPesquisa: String?): PromptCriado {
-        val textoBase = pedido
         val dominio = PromptDomain.classificar(pedido)
+        // Para IMAGEM/VIDEO, removemos primeiro o "invólucro" da própria solicitação
+        // ("vamos criar um prompt para uma imagem de ...") — sem isso, quando o pedido
+        // não começa com um verbo reconhecido (ex.: "vamos criar" em vez de "crie"), o
+        // pedido inteiro (incluindo o pedido de meta-prompt) acaba virando o sujeito E
+        // o ambiente da imagem, duplicando o texto do usuário no prompt final.
+        val textoBase = when (dominio) {
+            PromptDomain.IMAGEM, PromptDomain.VIDEO -> limparMetaPrompt(pedido)
+            else -> pedido
+        }
         val texto = when (dominio) {
             PromptDomain.IMAGEM -> componsIrImagem(pedido, textoBase, contexto, contextoPesquisa)
             PromptDomain.VIDEO -> componsIrVideo(pedido, textoBase, contexto, contextoPesquisa)
@@ -70,9 +78,10 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
 
     private fun componsIrImagem(pedido: String, textoBase: String, contexto: PromptTemplate?, contextoPesquisa: String?): String {
         val componentes = detectarComponentesImagem(textoBase)
-        val sujeito = componentes["sujeito"] ?: extrairSujeito(pedido) ?: pedido.trim().removeSuffix(".")
+        val (sujeitoSplit, ambienteSplit) = extrairSujeitoEAmbiente(textoBase)
+        val sujeito = sujeitoSplit ?: componentes["sujeito"] ?: extrairSujeito(textoBase) ?: textoBase.trim().removeSuffix(".")
         val estilo = componentes["estilo"] ?: (if ("fotorrealista" in pedido.lowercase() || "fotografia" in pedido.lowercase()) "fotografia fotorrealista" else "ilustração digital detalhada")
-        val ambiente = componentes["ambiente"] ?: padraoImagem("ambiente")
+        val ambiente = ambienteSplit ?: componentes["ambiente"] ?: padraoImagem("ambiente")
         val composicao = componentes["composicao"] ?: padraoImagem("composicao")
         val iluminacao = componentes["iluminacao"] ?: padraoImagem("iluminacao")
         val camera = componentes["camera"] ?: padraoImagem("camera")
@@ -127,11 +136,51 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
         "realismo" -> "Realismo"; "qualidade" -> "Qualidade"; else -> campo.replaceFirstChar { it.uppercase() }
     }
 
+    /**
+     * Remove o "invólucro" de meta-pedido ("vamos criar um prompt para uma imagem realista de...")
+     * cobrindo tanto pedidos formais ("crie um prompt de...") quanto informais/conversacionais
+     * ("vamos criar", "eu quero", "preciso de", "gostaria de"...), e em seguida remove também o
+     * substantivo do meio ("uma imagem realista de...") para chegar direto ao assunto pedido.
+     * Sem isso, um pedido que não comece com um verbo imperativo reconhecido faz o texto inteiro
+     * (incluindo o próprio pedido de meta-prompt) virar sujeito/ambiente da imagem, duplicando
+     * a instrução do usuário dentro do prompt gerado.
+     */
+    private fun limparMetaPrompt(texto: String): String {
+        val semMeta = texto.replace(
+            Regex(
+                "(?i)^\\s*(?:vamos\\s+|eu\\s+quero\\s+|quero\\s+|preciso\\s+(?:de\\s+)?|gostaria\\s+de\\s+|" +
+                    "me\\s+ajude\\s+a\\s+|ajude-me\\s+a\\s+|podia\\s+|pode\\s+)?" +
+                    "(?:criar|crie|gerar|gere|escrever|escreva|fazer|fa[çc]a|montar|monte|desenvolver|desenvolva|elaborar|elabore)\\s+" +
+                    "(?:um[a]?\\s+)?prompt(?:s)?\\s*(?:para|de)?\\s*"
+            ),
+            ""
+        ).trim()
+        return semMeta.replace(
+            Regex("(?i)^(?:um[a]?\\s+)?(?:fotografia|foto|imagem|ilustra[çc][ãa]o)(?:\\s+(?:realista|fotorrealista))?\\s+(?:de|do|da)\\s+"),
+            ""
+        ).trim()
+    }
+
+    /**
+     * Tenta separar num único passo o que é "sujeito/ação" (o que acontece em primeiro plano)
+     * do que é "ambiente/cenário" (onde acontece), usando o primeiro " em um(a)/o/a ..." do texto
+     * já limpo como divisor. Evita que o mesmo trecho longo vire sujeito E ambiente ao mesmo tempo
+     * (o sintoma relatado: o prompt final repetindo a frase inteira do usuário duas vezes).
+     * Se não houver esse divisor, cada componente cai de volta nos extratores individuais.
+     */
+    private fun extrairSujeitoEAmbiente(textoLimpo: String): Pair<String?, String?> {
+        val divisor = Regex("(?i)^(.+?)\\s+em\\s+(um[a]?\\s+.+|o\\s+.+|a\\s+.+)$").find(textoLimpo)
+        if (divisor != null) {
+            val sujeito = normalizarSujeito(divisor.groupValues[1].trim()).takeIf { it.length in 4..160 }
+            val ambiente = divisor.groupValues[2].trim().takeIf { it.length in 4..200 }
+            if (sujeito != null) return sujeito to ambiente
+        }
+        return extrairSujeito(textoLimpo) to extrairAmbiente(textoLimpo)
+    }
+
     private fun extrairSujeito(pedido: String): String? {
-        val semPrefixo = pedido
-            .replace(Regex("(?i)^\\s*(crie|gere|escreva|faça|faca)\\s+(um[a]?\\s+)?prompt(s)?\\s*(para|de)?\\s*"), "")
-            .trim()
-        val match = Regex("(?i)(?:^|\\b(?:de|para)\\s+)(?:(?:um|uma|o|a)\\s+)?([^,.;]+)").find(semPrefixo)
+        val semPrefixo = limparMetaPrompt(pedido)
+        val match = Regex("(?i)(?:^|\\b(?:de|para)\\s+)((?:(?:um|uma|o|a)\\s+)?[^,.;]+)").find(semPrefixo)
         return match?.groupValues?.get(1)?.trim()
             ?.let(::normalizarSujeito)
             ?.takeIf { it.length in 4..160 }
@@ -167,7 +216,7 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
 
     private fun componsIrVideo(pedido: String, textoBase: String, contexto: PromptTemplate?, contextoPesquisa: String?): String {
         val componentes = detectarComponentesImagem(textoBase)
-        val sujeito = componentes["sujeito"] ?: extrairSujeito(pedido) ?: pedido.trim().removeSuffix(".")
+        val sujeito = extrairSujeitoEAmbiente(textoBase).first ?: componentes["sujeito"] ?: extrairSujeito(textoBase) ?: textoBase.trim().removeSuffix(".")
         val movimento = primeiraOcorrencia(pedido.lowercase(), "travelling" to "travelling", "câmera lenta" to "câmera lenta", "zoom" to "zoom progressivo", "panorâmica" to "panorâmica") ?: "movimento de câmera suave"
         val duracao = Regex("(\\d+)\\s*(segundos|s\\b)").find(pedido)?.value ?: "duração curta (poucos segundos)"
         val iluminacao = componentes["iluminacao"] ?: padraoImagem("iluminacao")
