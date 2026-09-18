@@ -1,6 +1,5 @@
 package com.brain.account
 
-import com.brain.router.ApiCatalog
 import java.time.Instant
 
 data class AccountRouteRequest(
@@ -10,7 +9,8 @@ data class AccountRouteRequest(
     val authorizedAccountIds: Set<String>,
     val idempotent: Boolean,
     val requestedModelId: String? = null,
-    val catalog: ApiCatalog? = null
+    /** Contas previamente filtradas pelo serviço de disponibilidade; não é autorização. */
+    val eligibleAccountIds: Set<String>? = null
 ) {
     init {
         require(executionId.isNotBlank()) { "executionId é obrigatório" }
@@ -50,12 +50,7 @@ class AccountRouter {
             now = now,
             idempotent = request.idempotent,
             authorizedAccountIds = request.authorizedAccountIds
-        ).filter { account ->
-            val modelId = request.requestedModelId ?: return@filter true
-            val stats = request.catalog?.statsAtuais(account.providerId, modelId) ?: return@filter true
-            stats.ultimoErro?.tipo != com.brain.router.TipoErro.CHAVE_INVALIDA &&
-                (stats.quotaRestanteEstimada == null || stats.quotaRestanteEstimada > 0)
-        }
+        ).filter { request.eligibleAccountIds == null || it.accountId in request.eligibleAccountIds }
 
         val selected = candidates.firstOrNull()
             ?: return AccountRouteDecision.Unavailable(
@@ -64,7 +59,7 @@ class AccountRouter {
                     if (request.pool.members.isEmpty()) add("POOL_EMPTY")
                     if (request.pool.members.none { it.capabilities.contains(request.capability) }) add("CAPABILITY_UNAVAILABLE")
                     if (request.pool.members.any { !it.health.canSelect(now) }) add("NO_HEALTHY_ACCOUNT")
-                    if (request.catalog != null && request.requestedModelId != null) add("MODEL_STATS_UNAVAILABLE_OR_LIMITED")
+                    if (request.eligibleAccountIds != null) add("MODEL_STATS_UNAVAILABLE_OR_LIMITED")
                     if (request.pool.members.isNotEmpty() && request.pool.members.none { it.accountId in request.authorizedAccountIds }) add("POLICY_NO_AUTHORIZED_ACCOUNT")
                     add("NO_ELIGIBLE_ACCOUNT")
                 }

@@ -164,7 +164,10 @@ data class AccountPool(
         .filter { policy.allows(it, capability, now) }
         .sortedWith(compareByDescending<Account> { it.priority }.thenBy { it.accountId })
         .toList()
-        val fallbackAllowed = !policy.allowFallback || !policy.requireIdempotencyForFallback || idempotent
+        // A política limita a quantidade de candidatos já filtrados. Usar `members`
+        // aqui permitia selecionar contas fora da capability, provider autorizado ou
+        // estado saudável — e invertia o sentido de fallbackAllowed.
+        val fallbackAllowed = policy.allowFallback && (!policy.requireIdempotencyForFallback || idempotent)
         return if (fallbackAllowed) eligible.take(policy.maxAttempts) else eligible.take(1)
     }
 

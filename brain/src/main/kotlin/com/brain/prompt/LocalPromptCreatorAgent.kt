@@ -88,8 +88,8 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
             append("Câmera e lente: $camera, $lente, $profundidade. ")
             append("Nível de realismo: $realismo. Qualidade: $qualidade.")
         }
-        if (contexto != null) return "$base\n\nReferência da biblioteca considerada (${contexto.id}): adaptado ao pedido acima."
-        return base
+        val referencia = if (contexto != null) "\n\nReferência da biblioteca considerada (${contexto.id}): adaptado ao pedido acima." else ""
+        return base + referencia + diretrizesDaPesquisa(contextoPesquisa)
     }
 
     /** Extrai cada componente só quando há evidência textual — nunca inventa o que o usuário não disse. */
@@ -173,7 +173,7 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
         val iluminacao = componentes["iluminacao"] ?: padraoImagem("iluminacao")
         val estilo = componentes["estilo"] ?: "estilo cinematográfico"
         val base = "Vídeo com $sujeito. Movimento de câmera: $movimento. Duração: $duracao. Iluminação: $iluminacao. Estilo visual: $estilo."
-        return base
+        return base + diretrizesDaPesquisa(contextoPesquisa)
     }
 
     // ---------------- TEXTO ----------------
@@ -189,6 +189,7 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
             appendLine("REFERÊNCIA")
             appendLine("Baseado no template ${contexto.id}, adaptado ao pedido acima.")
         }
+        append(diretrizesDaPesquisa(contextoPesquisa))
     }.trim()
 
     // ---------------- CODIGO ----------------
@@ -201,5 +202,22 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
         appendLine("- Preservar a arquitetura existente do projeto.")
         appendLine("- Cobrir o caso descrito com testes quando aplicável.")
         appendLine("- Não introduzir dependências desnecessárias.")
+        append(diretrizesDaPesquisa(contextoPesquisa))
     }.trim()
+
+    /** Converte evidência de pesquisa em orientação de execução; URLs e fontes não entram no prompt. */
+    private fun diretrizesDaPesquisa(contextoPesquisa: String?): String {
+        val bruto = contextoPesquisa?.trim().orEmpty()
+        if (bruto.isBlank()) return ""
+        val insight = bruto.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !it.startsWith("http", true) && !it.contains("source:", true) }
+            .joinToString(" ")
+            .replace(Regex("\\s+"), " ")
+            .replace(Regex("(?i)(title|url|query|retrievedAt)\\s*[:=]\\s*[^ ]+"), "")
+            .trim()
+            .take(420)
+        if (insight.isBlank()) return ""
+        return "\n\nDIRETRIZES SEMÂNTICAS DERIVADAS DA PESQUISA:\nAplique estas evidências ao resultado, preservando a intenção do pedido: $insight"
+    }
 }

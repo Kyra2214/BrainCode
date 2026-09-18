@@ -153,7 +153,7 @@ class PromptGenerationExecutor(
         actionId: String,
         authorizedAccountIds: Set<String>
     ): ActionExecution {
-        val scoreInicial = PromptQualityValidator.validar(pedido.instrucao, pedido.promptAnterior, com.brain.prompt.PromptDomain.classificar(pedido.instrucao))
+        val scoreInicial = PromptQualityValidator.validar(pedido.instrucao, pedido.promptAnterior, com.brain.prompt.PromptDomain.classificar(pedido.instrucao), reasoningEngine.analyze(pedido.instrucao).requirements)
         val (textoFinal, origem, scoreFinal, aiUsada) = escalonar(
             pedido.instrucao,
             PromptCriado(pedido.promptAnterior, com.brain.prompt.PromptDomain.classificar(pedido.instrucao), "usuario:prompt-anterior"),
@@ -189,7 +189,7 @@ class PromptGenerationExecutor(
         actionId: String,
         authorizedAccountIds: Set<String>
     ): ActionExecution {
-        val scoreInicial = PromptQualityValidator.validar(objetivo, criado.texto, criado.dominio)
+        val scoreInicial = PromptQualityValidator.validar(objetivo, criado.texto, criado.dominio, reasoningEngine.analyze(objetivo).requirements)
         val (textoEscalonado, origem, scoreFinal, aiUsada) = escalonar(objetivo, criado, scoreInicial, contextoPesquisa, authorizedAccountIds)
         val textoFinal = textoEscalonado
         val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
@@ -232,7 +232,7 @@ class PromptGenerationExecutor(
 
         val viaIa = runCatching { improver.melhorar(criado.texto, pedido, scoreInicial.pontosFracos, authorizedAccountIds) }.getOrNull()?.takeIf { it.isNotBlank() }
         if (viaIa != null) {
-            val scoreIa = PromptQualityValidator.validar(pedido, viaIa, criado.dominio)
+            val scoreIa = PromptQualityValidator.validar(pedido, viaIa, criado.dominio, reasoningEngine.analyze(pedido).requirements)
             if (scoreIa.total >= scoreInicial.total) return EscalonamentoResultado(viaIa, "${criado.origem}+ia-especialista", scoreIa, true)
         }
 

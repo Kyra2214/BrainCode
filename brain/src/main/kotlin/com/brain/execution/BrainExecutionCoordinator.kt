@@ -9,6 +9,8 @@ import com.brain.planner.PlanoExecucao
 import com.brain.policy.*
 import com.brain.router.*
 import com.brain.account.*
+import com.brain.runtime.NoopRuntimeDoctor
+import com.brain.runtime.RuntimeDoctor
 import java.time.Instant
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.EmptyCoroutineContext
@@ -37,6 +39,7 @@ class BrainExecutionCoordinator(
     private val accountRouter: AccountRouter? = null,
     private val accountPools: Map<String, AccountPool> = emptyMap(),
     private val accountRegistry: AccountRegistry? = null,
+    private val runtimeDoctor: RuntimeDoctor = NoopRuntimeDoctor,
     private val retryBackoffMs: (Int) -> Long = { retry -> (100L * (1L shl (retry - 1).coerceAtMost(4))).coerceAtMost(1600L) },
     private val sleeper: (Long) -> Unit = Thread::sleep
 ) {
@@ -65,7 +68,12 @@ class BrainExecutionCoordinator(
                         authorizedAccountIds = pool.members.map { it.accountId }.toSet(),
                         idempotent = step.idempotent,
                         requestedModelId = route?.escolhido?.modeloId,
-                        catalog = catalog
+                        eligibleAccountIds = pool.members.filter { account ->
+                            val modelId = route?.escolhido?.modeloId ?: return@filter true
+                            val stats = catalog.statsAtuais(account.providerId, modelId)
+                            stats?.ultimoErro?.tipo != TipoErro.CHAVE_INVALIDA &&
+                                (stats?.quotaRestanteEstimada == null || stats.quotaRestanteEstimada > 0)
+                        }.map { it.accountId }.toSet()
                     ),
                     Instant.now()
                 )
@@ -185,6 +193,11 @@ class BrainExecutionCoordinator(
             val finalResult = result ?: StepAttempt(false, error = "failed")
             recordExperience(runId, plano, step, selectedProvider, finalResult, attempts.getValue(step.id), System.currentTimeMillis() - startedAt)
             if (!finalResult.success) {
+                val diagnosis = runtimeDoctor.diagnose(runId, step.id, finalResult.error)
+                emit(runId, step.id, "RuntimeDiagnosed", mapOf("healthy" to diagnosis.healthy.toString(), "symptoms" to diagnosis.symptoms.joinToString("|").take(256)))
+                if (!diagnosis.healthy && runtimeDoctor.repair(runId, step.id, diagnosis)) {
+                    emit(runId, step.id, "RuntimeRepairRequested", mapOf("recommendation" to (diagnosis.recommendedRepair ?: "default")))
+                }
                 errors += "${step.id}: ${safeError(finalResult.error)}"
                 return CoordinatorResult(runId, CoordinatorStatus.FAILED, attempts, errors)
             }

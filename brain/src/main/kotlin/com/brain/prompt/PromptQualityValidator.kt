@@ -1,5 +1,6 @@
 package com.brain.prompt
 
+import com.brain.reasoning.Requirement
 import java.util.Locale
 
 data class PromptQualityScore(
@@ -25,11 +26,21 @@ data class PromptQualityScore(
 object PromptQualityValidator {
 
     fun validar(pedido: String, promptGerado: String, dominio: PromptDomain): PromptQualityScore {
+        return validar(pedido, promptGerado, dominio, emptyList())
+    }
+
+    /** Validação alinhada ao Brain: requisitos explícitos não dependem apenas de tokens do pedido. */
+    fun validar(
+        pedido: String,
+        promptGerado: String,
+        dominio: PromptDomain,
+        requisitos: List<Requirement>
+    ): PromptQualityScore {
         val texto = promptGerado.trim()
         if (texto.isBlank()) return PromptQualityScore(0.0, emptyMap(), setOf("clareza", "presença de elementos"))
 
         val fidelidade = fidelidade(pedido, texto)
-        val presencaElementos = presencaElementos(pedido, texto, dominio)
+        val presencaElementos = presencaElementos(pedido, texto, dominio, requisitos)
         val clareza = clareza(texto)
         val especificidade = especificidade(texto)
         val coerencia = coerencia(texto)
@@ -54,11 +65,14 @@ object PromptQualityValidator {
         (it * 2.5).coerceIn(0.0, 1.0)
     }
 
-    private fun presencaElementos(pedido: String, texto: String, dominio: PromptDomain): Double {
+    private fun presencaElementos(pedido: String, texto: String, dominio: PromptDomain, requisitos: List<Requirement>): Double {
         if (dominio != PromptDomain.IMAGEM && dominio != PromptDomain.VIDEO) {
             return if (texto.length >= 20) 1.0 else 0.4
         }
-        val termos = requisitosConcretos(pedido)
+        val termos = (requisitos.map { it.text } + requisitosConcretos(pedido))
+            .flatMap { it.lowercase(Locale.ROOT).split(Regex("[^\\p{L}\\p{Nd}]+")) }
+            .filter { it.length >= 4 }
+            .distinct()
         if (termos.isEmpty()) return 0.0
         val lower = texto.lowercase(Locale.ROOT)
         val presentes = termos.count { termo -> lower.split(Regex("[^\\p{L}\\p{Nd}]+" )).any { it == termo || it.startsWith(termo) || termo.startsWith(it) } }
