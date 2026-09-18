@@ -54,4 +54,21 @@ class ConversationContextEngineTest {
         assertTrue(resolved.objective == novoPedido)
         assertTrue(resolved.context.references.isEmpty())
     }
+
+    @Test
+    fun `pedido independente nao herda ideia requisitos ou decisoes da conversa anterior`() {
+        val history = listOf(
+            ChatMessage(ChatRole.USER, "Tenho uma ideia de aplicativo offline para controlar estoque"),
+            ChatMessage(ChatRole.USER, "vamos usar SQLite e ele precisa funcionar sem internet"),
+            ChatMessage(ChatRole.ASSISTANT, "Prompt anterior: aplicativo de estoque offline com SQLite")
+        )
+
+        val resolved = engine.resolve(history, "crie um prompt para um cavaleiro dos zodíacos de ouro")
+
+        assertTrue(resolved.objective == "crie um prompt para um cavaleiro dos zodíacos de ouro")
+        assertTrue(resolved.context.idea == null)
+        assertTrue(resolved.context.requirements.isEmpty())
+        assertTrue(resolved.context.decisions.isEmpty())
+        assertTrue(resolved.context.artifacts.isEmpty())
+    }
 }

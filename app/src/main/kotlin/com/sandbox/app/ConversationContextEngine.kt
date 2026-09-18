@@ -22,8 +22,14 @@ class ConversationContextEngine {
         val prompt = currentPrompt.trim()
         require(prompt.isNotBlank()) { "prompt atual não pode ser vazio" }
         val prior = history.filterNot { it.role == ChatRole.USER && it.content.trim() == prompt }
-        val userText = prior.filter { it.role == ChatRole.USER }.map { it.content.trim() }.filter(String::isNotBlank)
-        val assistantText = prior.filter { it.role == ChatRole.ASSISTANT }.map { it.content.trim() }.filter(String::isNotBlank)
+        // Um novo pedido deve começar limpo. O histórico só participa quando o usuário
+        // usa uma referência explícita de continuidade ("melhore ele", "implemente isso",
+        // "agora mude...", etc.); caso contrário, requisitos/decisões de outro pedido não
+        // podem contaminar a geração atual.
+        val continuidade = REFERENCE_PATTERN.containsMatchIn(prompt.lowercase())
+        val contextoAnterior = if (continuidade) prior else emptyList()
+        val userText = contextoAnterior.filter { it.role == ChatRole.USER }.map { it.content.trim() }.filter(String::isNotBlank)
+        val assistantText = contextoAnterior.filter { it.role == ChatRole.ASSISTANT }.map { it.content.trim() }.filter(String::isNotBlank)
         val all = userText + assistantText
         val idea = all.lastOrNull { IDEA_MARKERS.any { marker -> it.lowercase().contains(marker) } }
         val discarded = compact(all.filter { DISCARDED_MARKERS.any { marker -> it.lowercase().contains(marker) } })
