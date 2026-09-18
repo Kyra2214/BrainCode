@@ -1687,8 +1687,8 @@ O item 5 deverá descrever o AccountRouter como decisão pura e testável, separ
 
 ## 26.6 Item 5 — AccountRouter como decisão pura
 
-**Status:** documentado em 2026-09-17  
-**Escopo:** contrato de roteamento; nenhuma chamada real a provider neste item.
+**Status:** implementado em 2026-09-17
+**Escopo concluído:** decisão pura de conta lógica; nenhuma chamada real a provider.
 
 O AccountRouter deverá receber uma intenção já planejada, a capability autorizável, o pool elegível, o catálogo de modelos e uma visão segura de saúde. Ele deverá devolver uma decisão imutável ou uma razão explícita de indisponibilidade. O Router não executa, não autentica, não lê segredo e não altera Policy.
 
@@ -1750,7 +1750,7 @@ A Policy continua sendo consultada antes e durante a execução. Uma decisão do
 
 ### Critério de saída
 
-O item 5 estará pronto para implementação quando a decisão puder ser testada como função sem rede, Android, filesystem ou provider e quando uma auditoria de serialização provar que nenhum segredo atravessa o contrato.
+O item 5 foi aprovado no escopo definido. `AccountRouter` foi implementado em `brain/src/main/kotlin/com/brain/account/AccountRouter.kt`; ele exige contas autorizadas explicitamente, filtra elegibilidade antes do limite de tentativas, exclui cooldown e devolve `Selected` ou `Unavailable` com códigos de razão seguros. Os testes estão em `brain/src/test/kotlin/com/brain/account/AccountRouterTest.kt`.
 
 ### Próximo item
 

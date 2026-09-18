@@ -155,10 +155,12 @@ data class AccountPool(
     fun candidates(
         now: Instant,
         idempotent: Boolean,
-        policy: SelectionPolicy = selectionPolicy
+        policy: SelectionPolicy = selectionPolicy,
+        authorizedAccountIds: Set<String>? = null
     ): List<Account> {
         val eligible = members
         .asSequence()
+        .filter { authorizedAccountIds == null || it.accountId in authorizedAccountIds }
         .filter { policy.allows(it, capability, now) }
         .sortedWith(compareByDescending<Account> { it.priority }.thenBy { it.accountId })
         .toList()
