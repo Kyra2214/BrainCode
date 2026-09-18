@@ -1666,3 +1666,75 @@ O item 4 estará pronto para implementação quando as classes de falha forem ma
 ### Próximo item
 
 O item 5 deverá descrever o AccountRouter como decisão pura e testável, separando seleção de conta da execução do provider e mantendo Policy como autoridade final.
+
+
+## 26.6 Item 5 — AccountRouter como decisão pura
+
+**Status:** documentado em 2026-09-17  
+**Escopo:** contrato de roteamento; nenhuma chamada real a provider neste item.
+
+O AccountRouter deverá receber uma intenção já planejada, a capability autorizável, o pool elegível, o catálogo de modelos e uma visão segura de saúde. Ele deverá devolver uma decisão imutável ou uma razão explícita de indisponibilidade. O Router não executa, não autentica, não lê segredo e não altera Policy.
+
+### Entrada mínima
+
+```text
+RouteRequest
+├── executionId
+├── capability
+├── papel/modelo solicitado
+├── poolId
+├── candidatos autorizados
+├── estado de saúde
+├── idempotência da operação
+└── fallback permitido
+```
+
+### Saída mínima
+
+```text
+RouteDecision
+├── accountId lógico
+├── providerId
+├── modelId
+├── attemptNumber
+├── expiresAt
+├── reasonCodes
+└── auditMetadata segura
+```
+
+A saída não deve conter credential reference materializada, token ou caminho de arquivo secreto. Quando nenhum membro for elegível, a decisão deve ser `NO_ELIGIBLE_ACCOUNT` com os motivos sanitizados: cooldown, capability ausente, modelo indisponível, policy ou autenticação.
+
+### Ordem determinística
+
+1. rejeitar capability não autorizada pela Policy;
+2. filtrar membros sem capability;
+3. filtrar membros indisponíveis ou em cooldown;
+4. filtrar modelos incompatíveis;
+5. filtrar fallback proibido por idempotência;
+6. ordenar por prioridade e saúde;
+7. desempatar por `accountId` estável;
+8. registrar a razão sem segredo;
+9. devolver somente a decisão lógica.
+
+A Policy continua sendo consultada antes e durante a execução. Uma decisão do Router nunca transforma `DENY` em `ALLOW` e nunca concede acesso a uma capability que o plano não possua.
+
+### Testes obrigatórios
+
+- seleção de maior prioridade elegível;
+- desempate determinístico;
+- conta em cooldown excluída;
+- capability incompatível excluída;
+- modelo ausente;
+- pool vazio;
+- fallback proibido para operação não idempotente;
+- policy deny preservado;
+- decisão sem campos secretos;
+- segundo attempt só após classificação recuperável.
+
+### Critério de saída
+
+O item 5 estará pronto para implementação quando a decisão puder ser testada como função sem rede, Android, filesystem ou provider e quando uma auditoria de serialização provar que nenhum segredo atravessa o contrato.
+
+### Próximo item
+
+O item 6 deverá definir a ligação do Router com o `DefaultAIRouter` e `ApiCatalog`, incluindo atualização de `LiveStats` depois de sucesso ou falha.
