@@ -15,6 +15,8 @@ import com.sandbox.agent.ResultadoPasso
 import com.sandbox.resource.SandboxResourceManager
 import com.sandbox.runtime.ExecutionLog
 import com.sandbox.runtime.ManagedSandboxRuntime
+import com.sandbox.runtime.FileExecutionLogRepository
+import com.sandbox.runtime.SandboxProcessLauncher
 import com.sandbox.sandbox.BuiltInCatalog
 import com.sandbox.sandbox.ComponentKind
 import com.sandbox.sandbox.InstallationState
@@ -181,7 +183,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             activeSessionId = sessions.maxByOrNull { it.updatedAt }?.id
             restoreChatFromActiveSession()
         }
-        autoResumeSandboxIfAlreadyPrepared()
+        if (BuildConfig.E2E_FAKE_ROOTFS) prepareSandbox() else autoResumeSandboxIfAlreadyPrepared()
     }
 
     /**
@@ -525,7 +527,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     fun prepareSandbox() {
         if (phase is SandboxPhase.Downloading || phase is SandboxPhase.Preparing) return
         viewModelScope.launch {
-            val ready = withContext(Dispatchers.IO) { factory.isRootfsReady() }
+            val ready = BuildConfig.E2E_FAKE_ROOTFS || withContext(Dispatchers.IO) { factory.isRootfsReady() }
             if (!ready) {
                 phase = SandboxPhase.Downloading(0, 0)
                 val manifests = try { ManifestLoader.loadAll(getApplication()) } catch (e: IllegalStateException) { phase = SandboxPhase.Blocked(e.message ?: "Manifesto inválido"); return@launch }
@@ -542,9 +544,19 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             phase = SandboxPhase.Preparing("Extraindo RootFS", 0, 1)
             try {
                 runtime?.shutdown()
-                val prepared = withContext(Dispatchers.IO) { factory.prepareManagedRuntime(factory.persistentSessionId()) { c, t, s -> phase = SandboxPhase.Preparing(s, c, t) } }
-                runtime = prepared
                 val dir = File(getApplication<Application>().filesDir, "sandbox")
+                val prepared = withContext(Dispatchers.IO) {
+                    if (BuildConfig.E2E_FAKE_ROOTFS) {
+                        ManagedSandboxRuntime(
+                            launcher = E2eProcessLauncher(File(dir, "e2e-workspace")),
+                            repository = FileExecutionLogRepository(File(dir, "e2e-runtime-logs")),
+                            sessionId = factory.persistentSessionId()
+                        )
+                    } else {
+                        factory.prepareManagedRuntime(factory.persistentSessionId()) { c, t, s -> phase = SandboxPhase.Preparing(s, c, t) }
+                    }
+                }
+                runtime = prepared
                 val promptLibrary = InMemoryPromptLibrary(
                     PromptLibraryLoader.fromJson(getApplication<Application>().assets.open("prompts_biblioteca.json").bufferedReader().use { it.readText() })
                 )
@@ -877,4 +889,21 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     fun refreshPluginAudit() { val p = platform ?: return; viewModelScope.launch(Dispatchers.IO) { val snapshots = p.plugins.snapshots(); val history = p.plugins.history(); withContext(Dispatchers.Main) { pluginSnapshots = snapshots; pluginHistory = history } } }
     fun rollbackPlugins(version: Long) { val p = platform ?: return; viewModelScope.launch { runCatching { withContext(Dispatchers.IO) { p.plugins.rollback(version) } }.onFailure { lastPluginError = it.message ?: "Falha ao restaurar snapshot v$version" }; refreshStatusCache(); refreshPluginAudit(); pluginListVersion++ } }
     private fun ExecutionLog.toUiResult() = com.sandbox.runtime.SandboxExecutionResult(stdout = stdout, stderr = stderr, exitCode = exitCode ?: -1, timedOut = timedOut)
+}
+
+/** Runtime mínimo somente para journeys instrumentados; não é usado em builds normais. */
+private class E2eProcessLauncher(private val workspace: File) : SandboxProcessLauncher {
+    override fun launch(command: List<String>, workingDir: String): Process = launch(command, workingDir, true)
+
+    override fun launch(command: List<String>, workingDir: String, networkAllowed: Boolean): Process {
+        workspace.mkdirs()
+        val normalized = command.mapIndexed { index, value ->
+            if (index == 0 && (value == "bash" || value == "/bin/bash")) "/system/bin/sh" else value
+        }
+        return ProcessBuilder(normalized)
+            .directory(workspace)
+            .redirectErrorStream(false)
+            .apply { environment()["HOME"] = workspace.absolutePath }
+            .start()
+    }
 }

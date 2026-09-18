@@ -6,6 +6,7 @@ plugins {
 val ciVersionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
 val configuredVersionCode = System.getenv("BRAINCODE_VERSION_CODE")?.toIntOrNull()
 val resolvedVersionCode = maxOf(7, configuredVersionCode ?: ciVersionCode ?: 7)
+val e2eFakeRootfs = providers.gradleProperty("braincode.e2e.fakeRootfs").orNull == "true"
 
 android {
     namespace = "com.sandbox.app"
@@ -17,6 +18,7 @@ android {
         targetSdk = 28
         versionCode = resolvedVersionCode
         versionName = "0.5.0-dev.$resolvedVersionCode"
+        buildConfigField("boolean", "E2E_FAKE_ROOTFS", e2eFakeRootfs.toString())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
