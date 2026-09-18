@@ -162,4 +162,16 @@ class PromptGenerationExecutorTest {
         assertTrue(recebeuPromptAnterior)
         assertTrue(execution.result.orEmpty().contains("Melhorei"))
     }
+
+    @Test fun `melhoria sem referencia pede esclarecimento e nao usa instrucao como sujeito`() {
+        val execution = executor(FakePromptLibrary(), iaIndisponivel).execute(
+            request("vamos melhorar o prompt quero que o rosto da imagem seja igual sem mudar a fisionomia"),
+            capability,
+            decision
+        )
+
+        assertTrue(execution.success)
+        assertTrue(execution.result.orEmpty().contains("prompt ou a imagem anterior"))
+        assertTrue(execution.evidence.contains("prompt-checklist:aguardando-esclarecimento"))
+    }
 }

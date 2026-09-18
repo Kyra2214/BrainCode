@@ -79,7 +79,10 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
     private fun componsIrImagem(pedido: String, textoBase: String, contexto: PromptTemplate?, contextoPesquisa: String?): String {
         val componentes = detectarComponentesImagem(textoBase)
         val (sujeitoSplit, ambienteSplit) = extrairSujeitoEAmbiente(textoBase)
-        val sujeito = sujeitoSplit ?: componentes["sujeito"] ?: extrairSujeito(textoBase) ?: textoBase.trim().removeSuffix(".")
+        // Nunca use a instrução inteira como sujeito: pedidos de melhoria/metaprompt
+        // acabariam aparecendo literalmente dentro da imagem. O executor faz o
+        // checklist e pergunta pelo sujeito quando ele não estiver identificável.
+        val sujeito = sujeitoSplit ?: componentes["sujeito"] ?: extrairSujeito(textoBase) ?: "o sujeito principal especificado pelo usuário"
         val estilo = componentes["estilo"] ?: (if ("fotorrealista" in pedido.lowercase() || "fotografia" in pedido.lowercase()) "fotografia fotorrealista" else "ilustração digital detalhada")
         val ambiente = ambienteSplit ?: componentes["ambiente"] ?: padraoImagem("ambiente")
         val composicao = componentes["composicao"] ?: padraoImagem("composicao")
@@ -216,7 +219,7 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
 
     private fun componsIrVideo(pedido: String, textoBase: String, contexto: PromptTemplate?, contextoPesquisa: String?): String {
         val componentes = detectarComponentesImagem(textoBase)
-        val sujeito = extrairSujeitoEAmbiente(textoBase).first ?: componentes["sujeito"] ?: extrairSujeito(textoBase) ?: textoBase.trim().removeSuffix(".")
+        val sujeito = extrairSujeitoEAmbiente(textoBase).first ?: componentes["sujeito"] ?: extrairSujeito(textoBase) ?: "o sujeito principal especificado pelo usuário"
         val movimento = primeiraOcorrencia(pedido.lowercase(), "travelling" to "travelling", "câmera lenta" to "câmera lenta", "zoom" to "zoom progressivo", "panorâmica" to "panorâmica") ?: "movimento de câmera suave"
         val duracao = Regex("(\\d+)\\s*(segundos|s\\b)").find(pedido)?.value ?: "duração curta (poucos segundos)"
         val iluminacao = componentes["iluminacao"] ?: padraoImagem("iluminacao")

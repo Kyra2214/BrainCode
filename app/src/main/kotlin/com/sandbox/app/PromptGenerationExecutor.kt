@@ -15,6 +15,7 @@ import com.brain.prompt.PromptQualityScore
 import com.brain.prompt.PromptQualityValidator
 import com.brain.prompt.PromptSimilarity
 import com.brain.prompt.PromptTemplate
+import com.brain.prompt.PromptRequestChecklist
 import com.brain.prompt.taxaSucessoEfetiva
 import com.brain.reasoning.ReasoningEngine
 import com.brain.reasoning.RevisionEngine
@@ -123,6 +124,18 @@ class PromptGenerationExecutor(
             return processarMelhoriaExplicita(pedidoDeMelhoria, contextoPesquisa, capability, evidenciasBase, startedAt, request.actionId, decision.authorizedAccountIds)
         }
 
+        // Antes de procurar biblioteca ou compor qualquer texto, faça o checklist do
+        // pedido. Uma melhoria sem referência não pode virar um prompt novo usando a
+        // instrução inteira como sujeito; o usuário precisa indicar o artefato anterior.
+        val preflight = PromptRequestChecklist.analisar(objetivoBruto)
+        if (!preflight.pronto) {
+            return pedirEsclarecimento(
+                preflight.perguntas,
+                evidenciasBase + preflight.elementosFaltantes.map { "checklist:faltante:$it" },
+                capability
+            )
+        }
+
         val objetivo = objetivoBruto
 
         // 2) Biblioteca como referência/contexto — nunca como bloqueio.
@@ -140,8 +153,24 @@ class PromptGenerationExecutor(
         }
 
         val criado = creator.criar(objetivo, candidato, contextoPesquisa)
-        return finalizar(objetivo, criado, candidato, contextoPesquisa, evidenciasBase, capability, startedAt, request.actionId, decision.authorizedAccountIds)
+        val checklistGerado = PromptRequestChecklist.validarGerado(objetivo, criado.texto)
+        if (!checklistGerado.coerente) {
+            return pedirEsclarecimento(
+                checklistGerado.erros.map { "O prompt gerado precisa ser revisto: $it. Você pode esclarecer o sujeito ou a alteração desejada?" },
+                evidenciasBase + checklistGerado.erros.map { "checklist:erro:$it" },
+                capability
+            )
+        }
+        return finalizar(objetivo, criado, candidato, contextoPesquisa, evidenciasBase + checklistGerado.avisos.map { "checklist:aviso:$it" }, capability, startedAt, request.actionId, decision.authorizedAccountIds)
     }
+
+    private fun pedirEsclarecimento(perguntas: List<String>, evidencias: List<String>, capability: CapabilityDefinition): ActionExecution =
+        ActionExecution(
+            success = true,
+            result = "Antes de gerar o prompt, preciso confirmar:\n\n- ${perguntas.joinToString("\n- ")}",
+            evidence = evidencias + "prompt-checklist:aguardando-esclarecimento",
+            provenance = provenance(capability)
+        )
 
     /** "melhore esse prompt" / "otimize" / "deixe mais profissional" — escala direto, sem passar pela biblioteca. */
     private fun processarMelhoriaExplicita(
