@@ -1,6 +1,7 @@
 package com.sandbox.app
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -29,7 +30,9 @@ class BrainCodeJourneyE2ETest {
     private fun waitUntilReady(timeoutMs: Long = 120_000) {
         composeRule.waitUntil(timeoutMillis = timeoutMs) {
             runCatching {
-                composeRule.onNodeWithText("Pronto").assertIsDisplayed()
+                composeRule.onNodeWithContentDescription("Enviar")
+                    .assertIsDisplayed()
+                    .assertIsEnabled()
                 true
             }.getOrDefault(false)
         }
