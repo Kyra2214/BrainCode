@@ -1,5 +1,9 @@
 package com.sandbox.agent
 
+import com.brain.account.AccountPool
+import com.brain.account.AccountRouteDecision
+import com.brain.account.AccountRouteRequest
+import com.brain.account.AccountRouter
 import com.brain.planner.AuthorizedPlan
 import com.brain.planner.PassoPlano
 import com.brain.planner.PlanoExecucao
@@ -58,7 +62,9 @@ class CicloExecucaoPlano(
     private val validador: ExecutorValidacaoProjeto = ExecutorValidacaoProjeto(),
     private val profiles: List<RoutingProfile> = emptyList(),
     private val approvalStore: ApprovalStore? = null,
-    private val dispatcher: Dispatcher? = null
+    private val dispatcher: Dispatcher? = null,
+    private val accountRouter: AccountRouter? = null,
+    private val accountPools: Map<String, AccountPool> = emptyMap()
 ) {
     private val approvedSteps = mutableSetOf<String>()
 
@@ -166,7 +172,8 @@ class CicloExecucaoPlano(
                         networkAllowed = decision?.networkAllowed ?: false,
                         filesystemRoots = decision?.filesystemRoots ?: emptyList(),
                         budget = decision?.budget ?: emptyMap()
-                    )
+                    ),
+                    accountId = decisaoRouter?.accountId
                 )
             )
             return ResultadoPasso(
@@ -194,8 +201,27 @@ class CicloExecucaoPlano(
     private fun decidirComRefresh(passo: PassoPlano): RoutingDecision? {
         val papel = passo.papel ?: return null
         val primeira = router.decidir(papel, catalog, profiles) ?: return null
-        if (catalog !is DynamicFreeApiCatalog) return primeira
-        catalog.refreshProvider(primeira.escolhido.providerId)
-        return router.decidir(papel, catalog, profiles)
+        val refreshed = if (catalog !is DynamicFreeApiCatalog) {
+            primeira
+        } else {
+            catalog.refreshProvider(primeira.escolhido.providerId)
+            router.decidir(papel, catalog, profiles) ?: return null
+        }
+        val pool = accountPools[passo.capacidade] ?: return refreshed
+        val accountDecision = accountRouter?.route(
+            AccountRouteRequest(
+                executionId = passo.id,
+                capability = passo.capacidade,
+                pool = pool,
+                authorizedAccountIds = pool.members.map { it.accountId }.toSet(),
+                idempotent = true,
+                requestedModelId = refreshed.escolhido.modeloId
+            ),
+            java.time.Instant.now()
+        )
+        return when (accountDecision) {
+            is AccountRouteDecision.Selected -> refreshed.copy(accountId = accountDecision.accountId)
+            else -> refreshed
+        }
     }
 }

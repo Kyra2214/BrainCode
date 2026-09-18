@@ -19,7 +19,8 @@ data class ActionRequest(
     val parameters: Map<String, String> = emptyMap(),
     val resource: String = "",
     val context: PolicyContext,
-    val provenance: List<String> = emptyList()
+    val provenance: List<String> = emptyList(),
+    val accountId: String? = null
 ) {
     init {
         require(actionId.isNotBlank()) { "actionId é obrigatório" }
@@ -66,7 +67,8 @@ data class ActionAuditRecord(
     val status: ActionLifecycle = if (success) ActionLifecycle.SUCCEEDED else ActionLifecycle.FAILED,
     val inputHash: String? = null,
     val outputReference: String? = null,
-    val lifecycle: List<ActionLifecycle> = emptyList()
+    val lifecycle: List<ActionLifecycle> = emptyList(),
+    val accountId: String? = null
 )
 
 fun interface ActionAuditLog {
@@ -163,7 +165,8 @@ class ActionGateway(
                 status = if (execution.success) ActionLifecycle.SUCCEEDED else if (decision.decision == Decision.DENY) ActionLifecycle.BLOCKED else ActionLifecycle.FAILED,
                 inputHash = request.parameters.entries.sortedBy { it.key }.joinToString("&") { "${it.key}=${it.value}" }.hashCode().toString(16),
                 outputReference = execution.result?.takeIf { it.length < 256 },
-                lifecycle = listOf(ActionLifecycle.CREATED, ActionLifecycle.PLANNED, ActionLifecycle.DISPATCHED, ActionLifecycle.RUNNING, if (execution.success) ActionLifecycle.SUCCEEDED else ActionLifecycle.FAILED)
+                lifecycle = listOf(ActionLifecycle.CREATED, ActionLifecycle.PLANNED, ActionLifecycle.DISPATCHED, ActionLifecycle.RUNNING, if (execution.success) ActionLifecycle.SUCCEEDED else ActionLifecycle.FAILED),
+                accountId = request.accountId
             )
         )
     }

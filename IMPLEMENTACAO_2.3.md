@@ -1821,3 +1821,14 @@ A suíte completa do `brain` permanece verde.
 ### Próximo item
 
 O item 9 deverá propagar a referência lógica de conta pelo Dispatcher/ActionGateway no caminho Android, sem transformar a referência em credencial e sem permitir que a Policy seja ignorada.
+
+
+## 26.10 Item 9 — Propagação lógica pelo Dispatcher e ActionGateway
+
+**Status:** implementado em 2026-09-17
+
+`RoutingDecision`, `DispatchTask`, `ActionRequest` e `ActionAuditRecord` agora podem carregar `accountId` lógico. O valor atravessa `CicloExecucaoPlano → Dispatcher → ActionGateway → ActionExecutor` sem carregar `CredentialRef`, token ou header.
+
+O campo é opcional para preservar compatibilidade com os caminhos locais existentes. A resolução do segredo continua restrita ao `AccountAwareProviderClient`.
+
+A suíte JVM do `brain` ficou verde. A compilação Android será validada quando o CI for reativado, pois o sandbox local não possui Android SDK configurado.

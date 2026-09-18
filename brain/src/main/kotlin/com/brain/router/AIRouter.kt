@@ -23,7 +23,8 @@ data class RoutingProfile(
 data class RoutingDecision(
     val escolhido: ProviderModel,
     val alternativas: List<ProviderModel>,
-    val motivo: String
+    val motivo: String,
+    val accountId: String? = null
 )
 
 /**

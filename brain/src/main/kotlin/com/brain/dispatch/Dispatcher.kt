@@ -13,7 +13,8 @@ data class DispatchTask(
     val taskId: String,
     val step: PassoPlano,
     val actor: String,
-    val context: com.brain.policy.PolicyContext
+    val context: com.brain.policy.PolicyContext,
+    val accountId: String? = null
 ) {
     init { require(taskId.isNotBlank()) { "taskId é obrigatório" } }
 }
@@ -59,7 +60,8 @@ class Dispatcher(
             parameters = task.step.parametros.mapIndexed { index, value -> "parameter.$index" to value }.toMap(),
             resource = task.step.parametros.firstOrNull { it.startsWith("/") || it.contains("://") }.orEmpty(),
             context = task.context,
-            provenance = listOf("plan:${task.taskId}", "discovery:${selected.capability.id}")
+            provenance = listOf("plan:${task.taskId}", "discovery:${selected.capability.id}"),
+            accountId = task.accountId
         )
         val gatewayResult = gateway.execute(request)
         return DispatchResult(
