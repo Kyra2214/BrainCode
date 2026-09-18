@@ -102,8 +102,9 @@ class BrainApiGateway(
                 eligibleAccountIds = accountPool.members.filter { account ->
                     val modelId = decision?.escolhido?.modeloId ?: return@filter true
                     val stats = catalog.statsAtuais(account.providerId, modelId)
+                    val quota = stats?.quotaRestanteEstimada
                     stats?.ultimoErro?.tipo != com.brain.router.TipoErro.CHAVE_INVALIDA &&
-                        (stats?.quotaRestanteEstimada == null || stats.quotaRestanteEstimada > 0)
+                        (quota == null || quota > 0)
                 }.map { it.accountId }.toSet()
             ),
             java.time.Instant.now()

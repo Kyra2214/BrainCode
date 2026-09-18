@@ -71,8 +71,9 @@ class BrainExecutionCoordinator(
                         eligibleAccountIds = pool.members.filter { account ->
                             val modelId = route?.escolhido?.modeloId ?: return@filter true
                             val stats = catalog.statsAtuais(account.providerId, modelId)
+                            val quota = stats?.quotaRestanteEstimada
                             stats?.ultimoErro?.tipo != TipoErro.CHAVE_INVALIDA &&
-                                (stats?.quotaRestanteEstimada == null || stats.quotaRestanteEstimada > 0)
+                                (quota == null || quota > 0)
                         }.map { it.accountId }.toSet()
                     ),
                     Instant.now()
