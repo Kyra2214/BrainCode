@@ -1554,3 +1554,54 @@ O item 2 só poderá ser marcado como implementado quando os contratos tiverem t
 ### Próximo item
 
 O item 3 deverá mapear os registries existentes e decidir se `ProviderRegistry`, `ApiCatalogRegistry` e `CapabilityDiscovery` serão estendidos ou apenas adaptados. A regra será não criar um segundo catálogo paralelo.
+
+
+## 26.4 Item 3 — Mapa dos registries existentes e fonte única de descoberta
+
+**Status:** documentado em 2026-09-17  
+**Escopo:** inventário e decisão arquitetural; nenhuma implementação de registry novo neste item.
+
+A leitura do código confirma que a 2.3 já possui pontos de extensão suficientes para evitar um segundo mecanismo paralelo:
+
+| Responsabilidade | Componente atual | Decisão para 2.3 |
+|---|---|---|
+| Catálogo de modelos e estatísticas | `ApiCatalog` | Estender somente se o pool precisar de metadados de conta ou saúde que não possam ser derivados de `LiveStats`. |
+| Ponte do catálogo para o runtime Android | `ApiCatalogRegistry` | Continuar como ponto único de instalação; o Brain não deve conhecer `SharedPreferences`, Android ou armazenamento de chave. |
+| Registro e descoberta de capabilities | `CapabilityRegistry` e `CapabilityDiscovery` | Reutilizar; o pool não será um segundo catálogo de capabilities. |
+| Policy e autorização | `PolicyBroker` | Continuar como autoridade; seleção de conta não pode conceder capability. |
+| Seleção de provider/modelo | `DefaultAIRouter` | Receber uma fonte de candidatos derivada de pool, sem permitir que o agente escolha credencial. |
+| Resultado e telemetria de provider/modelo | `LiveStats` e `registrarResultado` | Preservar; falhas de conta deverão ser normalizadas antes de atualizar estatísticas. |
+
+### Contrato de integração decidido
+
+A futura integração seguirá:
+
+```text
+ReasoningState / ExecutionPlan
+        ↓
+PolicyBroker + CapabilityDiscovery
+        ↓
+AccountPoolView
+        ↓
+DefaultAIRouter
+        ↓
+ApiCatalog
+        ↓
+ProviderModel
+```
+
+`AccountPoolView` é uma fronteira conceitual, não uma autorização nova. Ele poderá excluir candidatos em cooldown ou sem capability, mas a autorização final continuará pertencendo ao `PolicyBroker` e ao `ActionGateway`.
+
+`ApiCatalogRegistry` continuará sendo a única ponte do Android para o catálogo. `AccountRegistry` e `ProviderRegistry`, se forem necessários, deverão ser fontes internas do mesmo catálogo ou adaptadores explícitos, nunca catálogos concorrentes instalados em paralelo.
+
+### Componentes que não devem ser duplicados
+
+Não criar um segundo `CapabilityDiscovery`, um segundo `ApiCatalogRegistry`, um segundo roteador de provider ou um executor específico para AccountPool. A conta é uma dimensão de seleção e saúde; não é uma nova capability.
+
+### Critério de saída
+
+O item 3 está documentalmente concluído quando cada futuro componente de conta tiver um caller previsto no fluxo acima e nenhuma classe nova puder ser adicionada sem indicar qual registry existente ela estende.
+
+### Próximo item
+
+O item 4 deverá especificar a máquina de estados de saúde, classificação de erro, cooldown e regras de retry idempotente, incluindo os casos em que o fallback automático é proibido.
