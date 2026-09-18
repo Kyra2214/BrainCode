@@ -25,6 +25,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:label="Sandbox Mobile"
+            android:windowSoftInputMode="adjustResize" />
+
         <service
             android:name=".BrainCodeExecutionService"
             android:exported="false"
