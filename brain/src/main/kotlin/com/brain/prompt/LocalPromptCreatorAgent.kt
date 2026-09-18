@@ -209,14 +209,15 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
     private fun diretrizesDaPesquisa(contextoPesquisa: String?): String {
         val bruto = contextoPesquisa?.trim().orEmpty()
         if (bruto.isBlank()) return ""
-        val insight = bruto.lineSequence()
-            .map { it.trim() }
-            .filter { it.isNotBlank() && !it.startsWith("http", true) && !it.contains("source:", true) }
-            .joinToString(" ")
-            .replace(Regex("\\s+"), " ")
-            .replace(Regex("(?i)(title|url|query|retrievedAt)\\s*[:=]\\s*[^ ]+"), "")
-            .trim()
-            .take(420)
+        val lower = bruto.lowercase(Locale.ROOT)
+        val insights = buildList {
+            if ("ilumina" in lower || "luz" in lower || "sombra" in lower) add("use iluminação equilibrada e controle as sombras")
+            if ("fotorreal" in lower || "fotograf" in lower || "realismo" in lower) add("preserve coerência fotográfica e detalhes realistas")
+            if ("composi" in lower || "enquadr" in lower) add("organize o enquadramento com hierarquia visual clara")
+            if ("cor" in lower || "paleta" in lower) add("mantenha uma paleta de cores coerente com o objetivo")
+            if (isEmpty()) add("aplique as evidências pesquisadas de forma coerente com a intenção do pedido")
+        }
+        val insight = insights.joinToString("; ")
         if (insight.isBlank()) return ""
         return "\n\nDIRETRIZES SEMÂNTICAS DERIVADAS DA PESQUISA:\nAplique estas evidências ao resultado, preservando a intenção do pedido: $insight"
     }
