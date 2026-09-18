@@ -99,7 +99,12 @@ class BrainApiGateway(
                 authorizedAccountIds = authorizedAccountIds,
                 idempotent = true,
                 requestedModelId = decision?.escolhido?.modeloId,
-                catalog = catalog
+                eligibleAccountIds = accountPool.members.filter { account ->
+                    val modelId = decision?.escolhido?.modeloId ?: return@filter true
+                    val stats = catalog.statsAtuais(account.providerId, modelId)
+                    stats?.ultimoErro?.tipo != com.brain.router.TipoErro.CHAVE_INVALIDA &&
+                        (stats?.quotaRestanteEstimada == null || stats.quotaRestanteEstimada > 0)
+                }.map { it.accountId }.toSet()
             ),
             java.time.Instant.now()
         )
