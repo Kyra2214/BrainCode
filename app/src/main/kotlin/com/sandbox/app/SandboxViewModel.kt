@@ -604,6 +604,27 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun installRoofts06OverExistingRootfs() {
+        if (phase != SandboxPhase.Ready) return
+        viewModelScope.launch {
+            phase = SandboxPhase.Preparing("Instalando Roofts 0.6 sobre os três RootFS existentes", 0, 1)
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    runtime?.shutdown()
+                    runtime = null
+                    platform = null
+                    factory.installRoofts06OverExistingRootfs()
+                }
+            }
+            result.exceptionOrNull()?.let {
+                phase = SandboxPhase.Blocked(it.message ?: "Falha ao instalar Roofts 0.6")
+                return@launch
+            }
+            phase = SandboxPhase.NotReady
+            prepareSandbox()
+        }
+    }
+
     fun runCommand() {
         val active = runtime ?: run { appendThreadEvent(ThreadEvent.System("Comando indisponível: sandbox não está pronto.")); return }
         if (phase != SandboxPhase.Ready) { appendThreadEvent(ThreadEvent.System("Comando indisponível: sandbox ocupado.")); return }

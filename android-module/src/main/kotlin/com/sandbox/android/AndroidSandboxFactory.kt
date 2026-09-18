@@ -122,6 +122,14 @@ class AndroidSandboxFactory(private val context: Context) {
         File(extractedRootfsDir, "opt/roofts/0.6/skills").isDirectory &&
             roofts06Marker.readTextOrNull() == ROOFTS06_COMMIT
 
+    /** Installs only Roofts 0.6 over an already materialized 0.3–0.5 RootFS. */
+    fun installRoofts06OverExistingRootfs() {
+        check(rootfsExtractionValid()) {
+            "RootFS 0.3–0.5 ainda não está materializado; prepare o sandbox primeiro."
+        }
+        installRoofts06()
+    }
+
     private fun rootfsExtractionValid(): Boolean =
         extractedRootfsDir.exists() && !extractedRootfsDir.list().isNullOrEmpty() &&
             extractionMarker.readTextOrNull() == EXTRACTOR_VERSION && hasRequiredRootfsEntries()

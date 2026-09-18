@@ -109,6 +109,13 @@ private fun ToolCatalog(viewModel: SandboxViewModel) {
                 style = MaterialTheme.typography.bodySmall
             )
         }
+        item {
+            Button(
+                onClick = { viewModel.installRoofts06OverExistingRootfs() },
+                enabled = viewModel.phase == SandboxPhase.Ready,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Instalar Roofts 0.6 por cima dos três RootFS") }
+        }
         items(BuiltInToolchains.all, key = { it.id }) { profile ->
             val status = viewModel.toolchainStatuses[profile.id]
             val installed = status?.state == ToolchainState.INSTALLED
