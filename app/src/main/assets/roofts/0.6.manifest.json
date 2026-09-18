@@ -1,0 +1,30 @@
+{
+  "rooftsVersion": "0.6",
+  "upstreamRepository": "addyosmani/agent-skills",
+  "upstreamCommit": "c004a74784a08295d52749b04cda634125b9a581",
+  "upstreamTag": "0.6.10",
+  "importDate": "2026-09-18",
+  "status": "INSTALLED_NOT_INTEGRATED",
+  "content": {
+    "skills": 30,
+    "agents": 4,
+    "references": 7,
+    "docs": 16,
+    "hooks": 8,
+    "scripts": 13,
+    "commands": 9,
+    "evals": 75,
+    "allFiles": 195,
+    "topLevelEntries": 23
+  },
+  "installation": {
+    "apkAsset": "roofts/0.6",
+    "rootfsPath": "/opt/roofts/0.6",
+    "skillIntegration": "NOT_STARTED"
+  },
+  "integrity": {
+    "README.md": "0956874d6ba30f65d45ff90a9d51e615627a836e22745f43b7aece14537bb028",
+    "LICENSE": "6f202f8bd568cd730dbb2b0d1f8e243bc74c2fa1f64dbce9b2c7ea08bd5c9fd7",
+    "AGENTS.md": "a12bac68c447f8043a75c2259175b36a57a37617a5ab92900ab1e3e9afa381be"
+  }
+}

@@ -143,6 +143,7 @@ class AndroidSandboxFactory(private val context: Context) {
             extractionMarker.writeText(EXTRACTOR_VERSION)
             deleteDownloadedArchives()
         }
+        installRoofts06()
         progressListener?.invoke(1L, 1L, "Inicializando runtime")
         ensureResolvConf()
         val packagedRuntime = PackagedRuntime(context, extractedRootfsDir).also { it.prepare() }
@@ -156,6 +157,29 @@ class AndroidSandboxFactory(private val context: Context) {
         )
         ensureVenv(runtime)
         return runtime
+    }
+
+    /** Copies the complete, not-yet-integrated Roofts 0.6 payload into the guest. */
+    private fun installRoofts06() {
+        val sourceRoot = "roofts/0.6"
+        val destinationRoot = File(extractedRootfsDir, "opt/roofts/0.6")
+        destinationRoot.deleteRecursively()
+        copyAssetTree(sourceRoot, destinationRoot)
+    }
+
+    private fun copyAssetTree(assetPath: String, destination: File) {
+        destination.mkdirs()
+        for (name in context.assets.list(assetPath).orEmpty()) {
+            val childAsset = "$assetPath/$name"
+            val childDestination = File(destination, name)
+            if (context.assets.list(childAsset).orEmpty().isNotEmpty()) {
+                copyAssetTree(childAsset, childDestination)
+            } else {
+                context.assets.open(childAsset).use { input ->
+                    childDestination.outputStream().use { output -> input.copyTo(output) }
+                }
+            }
+        }
     }
 
     fun prepareManagedRuntime(
