@@ -1345,3 +1345,99 @@ Execution
 - [ ] Nenhum segredo aparece nos logs.
 
 **Conclusão:** o maior ganho para o BrainCode é transformar o RootFS de simples artefato de filesystem em um **runtime gerenciado, verificável e autorrecuperável**. Isso ataca diretamente a classe de falhas em que o RootFS foi baixado, mas ainda não estava realmente pronto para executar uma ferramenta.
+
+
+# 26. Agent Runtime Hardening — aprendizado do Fable 5.1 / Claude Code
+
+A análise do material público que circula como prompt do Fable 5.1 e da arquitetura pública do Claude Code reforça uma conclusão importante: confiabilidade de agente não pode depender somente do modelo. O sistema precisa impor contratos ao redor do ciclo modelo → capability → resultado. O BrainCode já possui Policy, CapabilityDiscovery, SkillRegistry, AgentRegistry, Sandbox, EventStore, Planner, Critic e ExecutionCoordinator; esta seção consolida esses componentes em vez de criar um segundo framework.
+
+## 26.1 Agent bounded
+
+Toda missão deve possuir objetivo, capabilities requeridas, limite de chamadas, deadline, workspace/runtime permitido e autorização de Policy. O Agent não pode inventar capability, ampliar permissões ou continuar indefinidamente.
+
+Já aplicado em BoundAgent.kt: maxCapabilityCalls, deadlineEpochMillis, parada no primeiro erro, evidência positiva obrigatória, captura de exceções e contagem de chamadas.
+Commit: 2d39c1ced8b8f8d59a14cfda83353b918f3fafd8.
+
+## 26.2 Evidência é contrato de conclusão
+
+Não usar chamada de ferramenta = sucesso. O fluxo é: Mission → Capability calls → Evidence → Evidence OK → todas as capabilities satisfeitas → SUCCESS.
+
+Uma capability que falha encerra a missão. Foram adicionados testes cobrindo falha terminal, limite de chamadas e deadline expirado.
+
+## 26.3 Preflight obrigatório
+
+Antes da execução: Mission → AgentRegistry → Capability check → Policy → Runtime health → Workspace scope → Execution.
+
+O diagnóstico deve registrar agent, mission, capabilities, runtime, workspace, policy, budget e deadline. Falha em requisito obrigatório impede execução parcial.
+
+## 26.4 Resultado tipado
+
+Evoluir AgentEvidence para um contrato equivalente a CapabilityResult com status, output, evidence, error, retryable, sideEffects e provenance. Estados esperados: SUCCESS, FAILED_RETRYABLE, FAILED_TERMINAL, DENIED, TIMEOUT e CANCELLED.
+
+## 26.5 Stop conditions
+
+Toda missão deve terminar por SUCCESS, FAILURE, DENIED, WAITING_APPROVAL, TIMEOUT, BUDGET_EXCEEDED ou CANCELLED. O Agent não decide sozinho quando continuar.
+
+## 26.6 Loop observável
+
+Registrar MissionCreated, PreflightStarted, PreflightPassed/Failed, CapabilitySelected, ToolStarted, ToolCompleted/Failed, EvidenceRecorded, CorrectionRequested, RetryScheduled e MissionCompleted/Failed. Reutilizar o EventStore existente.
+
+## 26.7 Correção diferente de repetição
+
+Failure → classify error → retryable? → correction/retry policy → bounded retry. O CorrectionRequested existente deve passar a alimentar contexto real de correção, e não somente gerar log.
+
+## 26.8 Subagents controlados
+
+Quando houver subagents reais: Parent → Subagent com session, policy, workspace, capabilities, budget e deadline próprios. Exigir limite de profundidade, fan-out, orçamento, isolamento e canal de retorno com provenance. A literatura pública sobre Claude Code destaca delegação a subagents, isolamento por worktree e múltiplas camadas de gerenciamento de contexto. citeturn0academia17turn1search2
+
+## 26.9 Contexto escopado
+
+Separar Global Context, Session Context, Mission Context, Step Context, Tool Result e Memory. Resultado grande de ferramenta deve ser normalizado e resumido em evidência antes de entrar novamente no contexto.
+
+## 26.10 Compaction preservando contrato
+
+Quando houver compactação, nunca perder objetivo, restrições, autorização, capabilities, estado do plano, passos concluídos, evidências, erros pendentes, deadline, orçamento e workspace/runtime. A análise pública do Claude Code descreve uma pipeline de compactação em múltiplas camadas; o BrainCode deve adotar o princípio com implementação própria. citeturn0academia17
+
+## 26.11 SkillDiscovery no caminho real
+
+Task → Capability Discovery → Skill Discovery → Skill validation → Policy → Execution. O SkillRegistry atual já possui manifest, capabilities, permissões, trust, hash, assinatura e revogação; o próximo passo é garantir que Planner/Agent realmente consulte esse registry antes da execução.
+
+## 26.12 Conteúdo externo é não confiável
+
+Web, arquivo, API, MCP e saída de ferramenta são dados, não autoridade. Conteúdo externo nunca pode alterar Policy, autorização, missão, capabilities ou permissões. Uma página instruindo o Agent a ignorar suas regras deve ser tratada como conteúdo não confiável.
+
+## 26.13 Hooks internos
+
+Criar pontos de controle BeforeMission, BeforeCapability, BeforeTool, AfterTool, OnFailure, BeforeRetry, AfterMission, BeforeCompaction, AfterCompaction, SubagentStart e SubagentStop. Hooks observam/validam; não substituem Policy.
+
+## 26.14 Workspace isolation
+
+Agents paralelos devem ter raiz explícita e nenhum caminho pode escapar dela. O BrainCode já protege o workspace em AgentSandboxSession; essa mesma fronteira deve ser aplicada a futuros subagents. Worktree isolation é usado para reduzir conflitos entre agentes paralelos, e registros públicos mostram que vazamentos de diretório são uma classe real de bug; portanto o isolamento deve ser garantia do runtime, não apenas instrução no prompt. citeturn1search1turn1search11
+
+## 26.15 Observabilidade por Agent
+
+Registrar agentId, missionId, parentAgentId, sessionId, runtimeId, workspace, início/fim, chamadas, retries, capabilities usadas, arquivos alterados, erros, evidências e status final. Isso permite descobrir quando o Agent afirma sucesso mas o projeto continua quebrado.
+
+## 26.16 Agent não declara sucesso sozinho
+
+CodeAgent: output → build → tests → validation evidence → SUCCESS. ResearchAgent: output → sources → provenance → evidence validation → SUCCESS. A palavra sucesso retornada pelo modelo não é autoridade.
+
+## 26.17 Capability continua sendo contrato
+
+Capability.API pode usar API externa hoje e Brain nativo amanhã. Capability.SQL pode usar SQLite/PostgreSQL hoje e Brain nativo amanhã. Capability.NETWORK pode usar HTTP/DNS hoje e Brain nativo amanhã. O Agent solicita a capability; Router/Discovery escolhe a implementação disponível.
+
+## 26.18 Ordem imediata
+
+Já aplicado: AgentExecutionGuard, limite de chamadas, deadline, parada no primeiro erro, evidência positiva e testes unitários.
+
+Próximos incrementos: 1) Preflight estruturado; 2) CapabilityResult tipado; 3) SkillDiscovery real no Planner → Agent; 4) eventos Before/After Tool; 5) taxonomy de erros + retryable; 6) context compaction preservando contrato; 7) subagent lifecycle com depth/fan-out/budget; 8) workspace isolation por subagent; 9) validator obrigatório por tipo de Agent; 10) E2E de missão completa com falha, retry, correção e sucesso.
+
+## 26.19 Regra contra classes órfãs
+
+Toda nova classe de Agent exige implementation + caller real + unit test + integration test + event trace + failure path. Criar o arquivo não conta como implementação. Isso combate diretamente o problema já encontrado no BrainCode de classes novas que existiam mas não eram chamadas pelo fluxo real.
+
+## 26.20 Arquitetura alvo
+
+User → Policy → Planner → Requirement/Context → Capability Discovery → Skill Discovery → Agent Selection → Preflight → Scoped Runtime → Tool/Capability → Evidence → Validator/Critic → Success? → Memory/EventStore → Result. Em caso de falha: classify error → correction/retry → bounded retry → failure ou success.
+
+Objetivo: tirar do modelo as responsabilidades que precisam ser determinísticas. O modelo pode planejar e raciocinar; o BrainCode controla autorização, escopo, limites, estado, evidência, retry, isolamento e conclusão.
