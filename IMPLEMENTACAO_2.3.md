@@ -1738,3 +1738,23 @@ O item 5 estará pronto para implementação quando a decisão puder ser testada
 ### Próximo item
 
 O item 6 deverá definir a ligação do Router com o `DefaultAIRouter` e `ApiCatalog`, incluindo atualização de `LiveStats` depois de sucesso ou falha.
+
+
+## 26.7 Item 6 — Integração com `ApiCatalog` e `LiveStats`
+
+**Status:** documentado em 2026-09-17  
+**Escopo:** contrato de integração; não alterar o roteador em produção neste item.
+
+A integração da 2.3 deverá aproveitar `ApiCatalog`, `ProviderModel`, `LiveStats` e `registrarResultado`. O AccountRouter pode consultar disponibilidade observada, mas não deve transformar estatística em autorização. A autorização continua no Policy/Action Gateway.
+
+Após cada tentativa, o adapter deve registrar sucesso ou falha com provider, modelo, latência e `ErroObservado`. A conta lógica será registrada apenas como metadado seguro no evento de tentativa; tokens e payloads permanecem fora do catálogo.
+
+Quando o provider não oferecer descoberta dinâmica, o catálogo estático deverá ser tratado como capacidade declarada, não como prova de saúde. O Router precisa combinar declaração estática com `statsAtuais`; ausência de estatística não equivale automaticamente a provider saudável.
+
+### Critério de saída
+
+O item 6 estará pronto para implementação quando houver uma tabela clara entre `AccountHealth` e `TipoErro`, quando `LiveStats` não puder conceder autorização e quando os testes provarem que sucesso, timeout, rate limit e chave inválida atualizam a observabilidade correta.
+
+### Próximo item
+
+O item 7 deverá especificar o teste de integração interno Agent → Policy → Pool → Router → Provider, com falha controlada na conta A e sucesso na conta B.
