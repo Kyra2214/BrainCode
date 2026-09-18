@@ -1571,8 +1571,8 @@ O item 3 deverá mapear os registries existentes e decidir se `ProviderRegistry`
 
 ## 26.4 Item 3 — Mapa dos registries existentes e fonte única de descoberta
 
-**Status:** documentado em 2026-09-17  
-**Escopo:** inventário e decisão arquitetural; nenhuma implementação de registry novo neste item.
+**Status:** implementado em 2026-09-17
+**Escopo concluído:** decisão arquitetural e `InMemoryAccountRegistry` puro, sem persistência.
 
 A leitura do código confirma que a 2.3 já possui pontos de extensão suficientes para evitar um segundo mecanismo paralelo:
 
@@ -1613,7 +1613,11 @@ Não criar um segundo `CapabilityDiscovery`, um segundo `ApiCatalogRegistry`, um
 
 ### Critério de saída
 
-O item 3 está documentalmente concluído quando cada futuro componente de conta tiver um caller previsto no fluxo acima e nenhuma classe nova puder ser adicionada sem indicar qual registry existente ela estende.
+O item 3 foi aprovado no escopo definido. O novo `AccountRegistry` foi mantido no pacote `com.brain.account`, não duplicou `ApiCatalogRegistry` nem `CapabilityDiscovery`, e tem implementação determinística em memória para testes e runtime local. A persistência e a integração ao Router continuam para itens posteriores.
+
+### Implementação realizada
+
+`brain/src/main/kotlin/com/brain/account/AccountRegistry.kt` adiciona `AccountRegistry` e `InMemoryAccountRegistry`, com registro, substituição, remoção, consulta, listagem ordenada e atualização de saúde. Os testes estão em `brain/src/test/kotlin/com/brain/account/AccountRegistryTest.kt`.
 
 ### Próximo item
 
