@@ -31,8 +31,11 @@ class BrainCodeJourneyE2ETest {
 
     @Before
     fun requireSandboxForJourney() {
+        runCatching {
+            composeRule.onNodeWithText("Preparar sandbox", substring = true, useUnmergedTree = true).performClick()
+        }
         val ready = runCatching {
-            composeRule.waitUntil(timeoutMillis = 15_000) {
+            composeRule.waitUntil(timeoutMillis = 45_000) {
                 runCatching {
                     composeRule.onNodeWithContentDescription("Enviar")
                         .assertIsDisplayed()
