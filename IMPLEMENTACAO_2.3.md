@@ -1605,3 +1605,64 @@ O item 3 está documentalmente concluído quando cada futuro componente de conta
 ### Próximo item
 
 O item 4 deverá especificar a máquina de estados de saúde, classificação de erro, cooldown e regras de retry idempotente, incluindo os casos em que o fallback automático é proibido.
+
+
+## 26.5 Item 4 — Saúde, classificação de falha e retry seguro
+
+**Status:** documentado em 2026-09-17  
+**Escopo:** contrato de decisão; não implementar retry ou cooldown neste item.
+
+O AccountPool só poderá fazer failover quando a falha tiver sido classificada e a operação puder ser repetida com segurança. Mensagens livres de provider não podem decidir fallback por substring ou por qualquer erro genérico.
+
+### Classes de falha
+
+| Classe | Recuperável | Cooldown | Retry automático |
+|---|---:|---:|---:|
+| `RATE_LIMIT` | sim | sim, até reset informado ou backoff máximo | sim, se idempotente |
+| `TIMEOUT` | sim | curto e limitado | sim, se idempotente |
+| `TEMPORARY_PROVIDER_FAILURE` | sim | curto e limitado | sim, se idempotente |
+| `AUTH_FAILURE` | não sem intervenção | bloquear conta | não |
+| `PERMANENT_PROVIDER_FAILURE` | não | bloquear capability/conta conforme escopo | não |
+| `POLICY_DENIED` | não | nenhum | não |
+| `INVALID_REQUEST` | não | nenhum | não |
+| `UNKNOWN` | não por padrão | registrar para diagnóstico | não |
+
+### Máquina de saúde
+
+```text
+AVAILABLE
+  ├─ RATE_LIMIT → COOLDOWN
+  ├─ TIMEOUT → DEGRADED ou COOLDOWN
+  ├─ TEMPORARY_PROVIDER_FAILURE → DEGRADED
+  ├─ AUTH_FAILURE → AUTHENTICATION_ERROR
+  └─ PERMANENT_PROVIDER_FAILURE → UNAVAILABLE
+
+COOLDOWN
+  ├─ janela expirou + health check → AVAILABLE
+  └─ nova falha → COOLDOWN com backoff limitado
+
+AUTHENTICATION_ERROR
+  └─ credencial renovada/verificada → AVAILABLE
+```
+
+As transições devem ser monotônicas durante uma tentativa. Um health check aprovado pode recuperar a conta, mas uma simples passagem de tempo não deve transformar automaticamente uma falha de autenticação em conta saudável.
+
+### Regras de retry
+
+Cada execução recebe `executionId` estável e cada tentativa recebe `attemptId` distinto. O limite padrão será finito e configurável; não haverá loop infinito. O atraso deve usar backoff limitado e jitter somente quando isso puder ser testado deterministicamente.
+
+Antes de tentar outra conta, o Router deve consultar idempotência. Leitura, geração local e operações sem efeito externo podem ser repetidas. Escrita externa, envio de mensagem, compra, alteração de recurso ou qualquer ação não idempotente exige chave de idempotência, confirmação ou encerramento sem fallback.
+
+O resultado parcial da primeira tentativa deve ser registrado antes de iniciar a segunda. Se a primeira tentativa pode ter produzido efeito externo e o provider não permite determinar o estado, o fluxo deve parar em estado de revisão, não duplicar a operação.
+
+### Observabilidade segura
+
+Os eventos devem registrar `executionId`, `attemptId`, conta lógica, provider, modelo, classe de falha, duração, decisão da policy e motivo do fallback. Não devem registrar tokens, cookies, headers de autorização, payloads integrais ou arquivos de configuração.
+
+### Critério de saída
+
+O item 4 estará pronto para implementação quando as classes de falha forem mapeadas para cada adapter existente, as operações do catálogo estiverem marcadas como idempotentes ou não idempotentes e os testes puderem provar que `AUTH_FAILURE`, `POLICY_DENIED` e `INVALID_REQUEST` não geram retry cego.
+
+### Próximo item
+
+O item 5 deverá descrever o AccountRouter como decisão pura e testável, separando seleção de conta da execução do provider e mantendo Policy como autoridade final.
