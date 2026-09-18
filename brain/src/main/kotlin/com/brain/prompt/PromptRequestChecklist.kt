@@ -25,11 +25,6 @@ data class PromptGeneratedChecklist(
  */
 object PromptRequestChecklist {
     private val IMPROVEMENT_WORDS = listOf("melhor", "melhora", "melhore", "otimiz", "reformul", "aperfeiç", "aperfeic")
-    private val SUBJECT_MARKERS = listOf(
-        "de um ", "de uma ", "do ", "da ", "para um ", "para uma ", "retrato de ",
-        "imagem de ", "foto de ", "fotografia de "
-    )
-
     fun analisar(pedido: String): PromptRequestAnalysis {
         val texto = pedido.trim()
         val lower = texto.lowercase(Locale.ROOT)
@@ -45,9 +40,10 @@ object PromptRequestChecklist {
         }
         if (dominio == PromptDomain.IMAGEM || dominio == PromptDomain.VIDEO) {
             val semMeta = lower
-                .replace(Regex("(?i)\b(?:crie|criar|gere|gerar|faça|fazer|faca|quero|preciso)\b"), " ")
-                .replace(Regex("\bprompt\b|\bimagem\b|\bfoto\b|\bfotografia\b|\bvídeo\b|\bvideo\b"), " ")
-            val temSujeito = SUBJECT_MARKERS.any { it in lower } ||
+                .replace(Regex("(?i)\\b(?:crie|criar|gere|gerar|faça|fazer|faca|quero|preciso)\\b"), " ")
+                .replace(Regex("\\bprompt\\b|\\bimagem\\b|\\bimagens\\b|\\bfoto\\b|\\bfotografia\\b|\\bvídeo\\b|\\bvideo\\b"), " ")
+            val semCategoriaGenerica = lower.replace(Regex("(?i)\\b(?:um|uma)\\s+(?:imagem|imagens|foto|fotografia|vídeo|video)\\b"), " ")
+            val temSujeito = Regex("(?i)\\b(?:de|para)\\s+(?:um|uma|o|a)\\s+[\\p{L}\\p{Nd}][^,.;!?]*").containsMatchIn(semCategoriaGenerica) ||
                 semMeta.split(Regex("[^\\p{L}\\p{Nd}]+" )).count { it.length >= 5 } >= 2
             if (!temSujeito) {
                 return PromptRequestAnalysis(
