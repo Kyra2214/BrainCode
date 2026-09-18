@@ -7,47 +7,41 @@ import com.brain.capability.CapabilityProvenance
 import com.brain.capability.CapabilityRegistry
 
 /**
- * Agent amarrado do BrainCode.
- *
- * Um Agent não possui LLM próprio e não decide objetivos. O Brain entrega
- * uma missão já definida e o Agent só pode operar dentro das capabilities
- * declaradas pelo seu perfil. Raciocínio, planejamento e seleção de Agent
- * continuam sendo responsabilidades do Brain.
+ * Agent amarrado do BrainCode. O Brain entrega uma missão já definida e o
+ * Agent só pode operar dentro das capabilities declaradas pelo seu perfil.
+ * A execução é bounded: limite de chamadas, deadline e parada no primeiro erro.
  */
 interface BoundAgent {
     val id: String
     val capabilities: Set<AgentCapability>
-
-    fun accepts(mission: AgentMission): Boolean =
-        mission.requiredCapabilities.all { it in capabilities }
-
+    fun accepts(mission: AgentMission): Boolean = mission.requiredCapabilities.all { it in capabilities }
     fun execute(mission: AgentMission, context: AgentExecutionContext): AgentResult
 }
 
-enum class AgentCapability {
-    TERMINAL_RESEARCH,
-    WEB_SEARCH,
-    GITHUB,
-    FILE_READ,
-    FILE_WRITE,
-    CODE_BUILD,
-    CODE_TEST,
-    WORKSPACE,
-    GIT,
-    MEDIA
-}
+enum class AgentCapability { TERMINAL_RESEARCH, WEB_SEARCH, GITHUB, FILE_READ, FILE_WRITE, CODE_BUILD, CODE_TEST, WORKSPACE, GIT, MEDIA }
 
 data class AgentMission(
     val id: String,
     val objective: String,
     val requiredCapabilities: Set<AgentCapability>,
-    val parameters: Map<String, String> = emptyMap()
-)
+    val parameters: Map<String, String> = emptyMap(),
+    val maxCapabilityCalls: Int = requiredCapabilities.size.coerceAtLeast(1),
+    val deadlineEpochMillis: Long? = null
+) {
+    init {
+        require(id.isNotBlank()) { "id da missão é obrigatório" }
+        require(objective.isNotBlank()) { "objetivo da missão é obrigatório" }
+        require(requiredCapabilities.isNotEmpty()) { "missão precisa de ao menos uma capability" }
+        require(maxCapabilityCalls > 0) { "maxCapabilityCalls deve ser positivo" }
+        require(maxCapabilityCalls >= requiredCapabilities.size) { "maxCapabilityCalls não pode ser menor que o número de capabilities requeridas" }
+    }
+}
 
 data class AgentEvidence(
     val kind: String,
     val value: String,
-    val source: String? = null
+    val source: String? = null,
+    val ok: Boolean = true
 )
 
 data class AgentResult(
@@ -55,109 +49,61 @@ data class AgentResult(
     val missionId: String,
     val success: Boolean,
     val summary: String,
-    val evidence: List<AgentEvidence> = emptyList()
+    val evidence: List<AgentEvidence> = emptyList(),
+    val calls: Int = evidence.size
 )
 
-/**
- * Context mínimo fornecido pelo Brain/host. O Agent recebe apenas as
- * capabilities que a política autorizou; nenhum comando shell arbitrário
- * é inferido pelo Agent.
- */
 interface AgentExecutionContext {
-    fun invokeCapability(
-        capability: AgentCapability,
-        parameters: Map<String, String>
-    ): AgentEvidence
+    fun invokeCapability(capability: AgentCapability, parameters: Map<String, String>): AgentEvidence
+}
+
+/** Guard determinístico compartilhado por todos os Agents. */
+internal object AgentExecutionGuard {
+    fun run(agent: BoundAgent, mission: AgentMission, context: AgentExecutionContext): AgentResult {
+        if (!agent.accepts(mission)) return AgentResult(agent.id, mission.id, false, "Missão exige capabilities não autorizadas pelo Agent.")
+        val evidence = mutableListOf<AgentEvidence>()
+        for (capability in mission.requiredCapabilities) {
+            if (evidence.size >= mission.maxCapabilityCalls) return AgentResult(agent.id, mission.id, false, "Limite de chamadas da missão atingido antes da conclusão.", evidence, evidence.size)
+            mission.deadlineEpochMillis?.let { deadline ->
+                if (System.currentTimeMillis() >= deadline) return AgentResult(agent.id, mission.id, false, "Deadline da missão atingido antes da conclusão.", evidence, evidence.size)
+            }
+            val result = runCatching { context.invokeCapability(capability, mission.parameters) }.getOrElse { error ->
+                AgentEvidence("capability-error", error.message ?: error::class.simpleName.orEmpty(), capability.name, false)
+            }
+            evidence += result
+            if (!result.ok) return AgentResult(agent.id, mission.id, false, "Capability " + capability.name + " falhou; missão interrompida.", evidence, evidence.size)
+        }
+        val complete = mission.requiredCapabilities.all { capability -> evidence.any { it.ok && (it.source == null || it.source == capability.name) } }
+        return AgentResult(agent.id, mission.id, complete, if (complete) "Missão concluída com evidência positiva para todas as capabilities." else "Missão não produziu evidência positiva suficiente.", evidence, evidence.size)
+    }
 }
 
 class AgentRegistry(agents: List<BoundAgent>) {
-    private val byId = agents.groupBy { it.id }.also { groups ->
-        require(groups.values.all { it.size == 1 }) { "ids de Agent duplicados" }
-    }.mapValues { it.value.single() }
-
+    private val byId = agents.groupBy { it.id }.also { groups -> require(groups.values.all { it.size == 1 }) { "ids de Agent duplicados" } }.mapValues { it.value.single() }
     fun get(id: String): BoundAgent? = byId[id]
-
-    fun findFor(mission: AgentMission): List<BoundAgent> =
-        byId.values.filter { it.accepts(mission) }
-
+    fun findFor(mission: AgentMission): List<BoundAgent> = byId.values.filter { it.accepts(mission) }
     fun ids(): List<String> = byId.keys.sorted()
-
-    /**
-     * Publica os agents bounded no registry universal. O mapa local continua
-     * sendo o índice de objetos executáveis; o registry universal é a fonte
-     * declarativa para descoberta e não concede autorização.
-     */
     fun publishTo(registry: CapabilityRegistry) {
-        byId.values.forEach { agent ->
-            registry.register(
-                CapabilityDefinition(
-                    id = "agent.${agent.id}",
-                    name = agent.id,
-                    description = "Agent bounded sem LLM próprio",
-                    category = CapabilityCategory.AGENT,
-                    ownerId = agent.id,
-                    origin = "agent-registry",
-                    providedCapabilities = agent.capabilities.map { it.name.lowercase() }.toSet(),
-                    availability = CapabilityAvailability.AVAILABLE,
-                    provenance = listOf(
-                        CapabilityProvenance(
-                            sourceId = agent.id,
-                            sourceType = "bounded-agent",
-                            evidence = "mission + allowed capabilities"
-                        )
-                    )
-                )
-            )
-        }
+        byId.values.forEach { agent -> registry.register(CapabilityDefinition(
+            id = "agent." + agent.id, name = agent.id, description = "Agent bounded sem LLM próprio",
+            category = CapabilityCategory.AGENT, ownerId = agent.id, origin = "agent-registry",
+            providedCapabilities = agent.capabilities.map { it.name.lowercase() }.toSet(),
+            availability = CapabilityAvailability.AVAILABLE,
+            provenance = listOf(CapabilityProvenance(agent.id, "bounded-agent", evidence = "mission + allowed capabilities"))
+        )) }
     }
 }
 
-/** Agente de pesquisa: somente capabilities de pesquisa, sem LLM. */
 class ResearchAgent : BoundAgent {
-    override val id: String = "research"
-    override val capabilities: Set<AgentCapability> = setOf(
-        AgentCapability.TERMINAL_RESEARCH,
-        AgentCapability.WEB_SEARCH,
-        AgentCapability.GITHUB
-    )
-
-    override fun execute(mission: AgentMission, context: AgentExecutionContext): AgentResult {
-        if (!accepts(mission)) {
-            return AgentResult(id, mission.id, false, "Missão exige capabilities não autorizadas.")
-        }
-        val evidence = mission.requiredCapabilities.map { capability ->
-            context.invokeCapability(capability, mission.parameters)
-        }
-        return AgentResult(id, mission.id, evidence.isNotEmpty(), "Pesquisa executada pelo Agent amarrado.", evidence)
-    }
+    override val id = "research"
+    override val capabilities = setOf(AgentCapability.TERMINAL_RESEARCH, AgentCapability.WEB_SEARCH, AgentCapability.GITHUB)
+    override fun execute(mission: AgentMission, context: AgentExecutionContext): AgentResult = AgentExecutionGuard.run(this, mission, context)
 }
 
-/** Agente de código: execução controlada, sem motor de linguagem próprio. */
 class CodeAgent : BoundAgent {
-    override val id: String = "code"
-    override val capabilities: Set<AgentCapability> = setOf(
-        AgentCapability.FILE_READ,
-        AgentCapability.FILE_WRITE,
-        AgentCapability.WORKSPACE,
-        AgentCapability.CODE_BUILD,
-        AgentCapability.CODE_TEST,
-        AgentCapability.GIT
-    )
-
-    override fun execute(mission: AgentMission, context: AgentExecutionContext): AgentResult {
-        if (!accepts(mission)) {
-            return AgentResult(id, mission.id, false, "Missão exige capabilities não autorizadas.")
-        }
-        val evidence = mission.requiredCapabilities.map { capability ->
-            context.invokeCapability(capability, mission.parameters)
-        }
-        return AgentResult(id, mission.id, evidence.isNotEmpty(), "Tarefa de código executada pelo Agent amarrado.", evidence)
-    }
+    override val id = "code"
+    override val capabilities = setOf(AgentCapability.FILE_READ, AgentCapability.FILE_WRITE, AgentCapability.WORKSPACE, AgentCapability.CODE_BUILD, AgentCapability.CODE_TEST, AgentCapability.GIT)
+    override fun execute(mission: AgentMission, context: AgentExecutionContext): AgentResult = AgentExecutionGuard.run(this, mission, context)
 }
 
-object BuiltInAgents {
-    val all: List<BoundAgent> = listOf(
-        ResearchAgent(),
-        CodeAgent()
-    )
-}
+object BuiltInAgents { val all: List<BoundAgent> = listOf(ResearchAgent(), CodeAgent()) }
