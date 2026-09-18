@@ -1499,13 +1499,13 @@ O item 1 está documentalmente concluído, mas o gate operacional permanece **PE
 
 ## 26.2 Próximo item
 
-O próximo item será a definição e implementação dos contratos mínimos de `Account`, `AccountRegistry`, `AccountHealth`, `AccountPool`, `SelectionPolicy` e `ExecutionAttempt`, sem ainda conectar o pool ao fluxo de produção. A integração só deverá ocorrer depois que os contratos tiverem testes unitários e nenhum segredo puder aparecer nos modelos ou logs.
+O item seguinte é o mapeamento dos registries existentes e da fonte única de descoberta. Os contratos de `Account`, `AccountHealth`, `AccountPool`, `SelectionPolicy` e `ExecutionAttempt` foram implementados no item 2, sem ainda conectar o pool ao fluxo de produção.
 
 
 ## 26.3 Item 2 — Contratos mínimos de identidade, saúde e tentativa
 
-**Status:** documentado em 2026-09-17  
-**Escopo:** somente contratos e critérios; nenhuma classe de produção deve ser criada neste item.
+**Status:** implementado em 2026-09-17
+**Escopo concluído:** contratos JVM puros, sem integração ao fluxo de produção.
 
 O primeiro incremento funcional da 2.3 deverá começar por modelos neutros, sem credenciais e sem dependência do Android. Os contratos precisam ser pequenos o suficiente para testes unitários e expressivos o suficiente para impedir que o agente escolha uma conta diretamente.
 
@@ -1547,9 +1547,22 @@ O primeiro incremento funcional da 2.3 deverá começar por modelos neutros, sem
 
 Não conectar `AccountPool` ao `DefaultAIRouter`, `BrainApiGateway`, `BrainExecutionCoordinator`, `DurableJobRunner` ou Android. Não criar armazenamento persistente. Não copiar código do CodexRouter. A integração e a persistência ficam para itens posteriores, depois de os contratos serem revisados e testados isoladamente.
 
+### Implementação realizada
+
+Os contratos foram criados em `brain/src/main/kotlin/com/brain/account/AccountPoolContracts.kt`:
+
+- `CredentialRef` opaco, sem token ou senha no modelo;
+- `Account` com capability, prioridade e saúde;
+- `AccountHealth` com transições de sucesso, rate limit, autenticação, falha temporária e falha permanente;
+- `SelectionPolicy` com providers permitidos e limite de tentativas;
+- `AccountPool` com ordenação determinística, exclusão de cooldown e bloqueio de fallback para operação não idempotente;
+- `ExecutionAttempt` com metadados auditáveis e sem payload secreto.
+
+Os testes estão em `brain/src/test/kotlin/com/brain/account/AccountPoolContractsTest.kt`.
+
 ### Critério de saída
 
-O item 2 só poderá ser marcado como implementado quando os contratos tiverem testes unitários determinísticos, nenhuma credencial puder ser representada diretamente e a decisão de seleção puder ser explicada sem revelar segredo.
+O item 2 foi aprovado no escopo definido: os contratos têm testes unitários determinísticos, nenhuma credencial pode ser representada diretamente e a decisão de seleção pode ser explicada sem revelar segredo. A integração com registries e Router permanece deliberadamente para os próximos itens.
 
 ### Próximo item
 
