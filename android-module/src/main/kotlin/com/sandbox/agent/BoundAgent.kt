@@ -70,10 +70,11 @@ internal object AgentExecutionGuard {
             val result = runCatching { context.invokeCapability(capability, mission.parameters) }.getOrElse { error ->
                 AgentEvidence("capability-error", error.message ?: error::class.simpleName.orEmpty(), capability.name, false)
             }
-            evidence += result
-            if (!result.ok) return AgentResult(agent.id, mission.id, false, "Capability " + capability.name + " falhou; missão interrompida.", evidence, evidence.size)
+            val normalized = if (result.source == null) result.copy(source = capability.name) else result
+            evidence += normalized
+            if (!normalized.ok) return AgentResult(agent.id, mission.id, false, "Capability " + capability.name + " falhou; missão interrompida.", evidence, evidence.size)
         }
-        val complete = mission.requiredCapabilities.all { capability -> evidence.any { it.ok && (it.source == null || it.source == capability.name) } }
+        val complete = mission.requiredCapabilities.all { capability -> evidence.any { it.ok && it.source == capability.name } }
         return AgentResult(agent.id, mission.id, complete, if (complete) "Missão concluída com evidência positiva para todas as capabilities." else "Missão não produziu evidência positiva suficiente.", evidence, evidence.size)
     }
 }
