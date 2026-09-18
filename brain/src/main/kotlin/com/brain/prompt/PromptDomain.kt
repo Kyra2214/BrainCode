@@ -42,6 +42,10 @@ enum class PromptDomain {
             }
         }
 
-        private fun String.containsAny(vararg termos: String) = termos.any { it in this }
+        private fun String.containsAny(vararg termos: String) = termos.any { termo ->
+            val palavraOuFrase = termo.trim()
+            Regex("(?<![\\p{L}\\p{N}])${Regex.escape(palavraOuFrase)}(?![\\p{L}\\p{N}])")
+                .containsMatchIn(this)
+        }
     }
 }

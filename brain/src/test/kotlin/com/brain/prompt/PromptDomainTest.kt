@@ -31,4 +31,11 @@ class PromptDomainTest {
             PromptDomain.classificar("gere um prompt para gerar uma imagem de um foguete com muitos detalhes")
         )
     }
+
+    @Test fun `texto generico nao captura ata dentro de plataforma`() {
+        assertEquals(
+            PromptDomain.IMAGEM,
+            PromptDomain.classificar("crie um prompt de um mascote para uma plataforma de software")
+        )
+    }
 }
