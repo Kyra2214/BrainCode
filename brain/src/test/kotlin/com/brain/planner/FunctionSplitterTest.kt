@@ -17,6 +17,15 @@ class FunctionSplitterTest {
     }
 
     @Test
+    fun `pedido de prompt sobre codigo nao adiciona passo de execucao de codigo`() {
+        val functions = KeywordFunctionSplitter().split(
+            "crie um prompt para um código de uma interface de um chatbox com login senha e email"
+        )
+
+        assertEquals(listOf("prompt.library.write"), functions.map { it.capacidade })
+    }
+
+    @Test
     fun `planner usa splitter injetado sem executar`() = suspendPlan {
         var called = false
         val planner = KeywordPlanner(FunctionSplitter { objective ->

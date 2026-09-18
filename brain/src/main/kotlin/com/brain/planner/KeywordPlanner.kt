@@ -50,7 +50,7 @@ class KeywordFunctionSplitter : FunctionSplitter {
                 riskClass = RiskClass.MEDIUM
             )
         }
-        if (TermMatcher.containsAnyStem(normalizado, "códig", "codig", "program", "implement", "compil", "test")) {
+        if (!pedidoDePrompt && TermMatcher.containsAnyStem(normalizado, "códig", "codig", "program", "implement", "compil", "test")) {
             passos += PassoPlano(
                 "executar", "sandbox.code", "execução e testes concluídos",
                 dependeDe = passos.map { it.id }, papel = PapelPipeline.EXECUCAO_CODIGO,

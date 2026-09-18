@@ -15,6 +15,11 @@ class KeywordPlannerTest {
         assertTrue(plano.passos.any { it.capacidade == "sandbox.code" })
     }
 
+    @Test fun `prompt sobre codigo nao gera passo sandbox code`() = suspendTest {
+        val plano = KeywordPlanner().planejar("crie um prompt para um código de uma interface de um chatbox com login senha e email")
+        assertEquals(listOf("prompt.library.write"), plano.passos.map { it.capacidade })
+    }
+
     @Test fun `conjugacoes de criar aplicativo geram producao`() = suspendTest {
         val plano = KeywordPlanner().planejar("crie um aplicativo de IPTV")
         val produzir = plano.passos.first { it.id == "produzir" }
