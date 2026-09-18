@@ -1441,3 +1441,62 @@ Toda nova classe de Agent exige implementation + caller real + unit test + integ
 User → Policy → Planner → Requirement/Context → Capability Discovery → Skill Discovery → Agent Selection → Preflight → Scoped Runtime → Tool/Capability → Evidence → Validator/Critic → Success? → Memory/EventStore → Result. Em caso de falha: classify error → correction/retry → bounded retry → failure ou success.
 
 Objetivo: tirar do modelo as responsabilidades que precisam ser determinísticas. O modelo pode planejar e raciocinar; o BrainCode controla autorização, escopo, limites, estado, evidência, retry, isolamento e conclusão.
+
+
+---
+
+# 26. Execução incremental da implementação 2.3
+
+Esta seção substitui a regra operacional anterior de apenas planejar a 2.3. A execução será feita em itens pequenos e verificáveis. Cada item deverá:
+
+1. alterar somente o escopo declarado;
+2. possuir teste ou evidência correspondente;
+3. ser commitado isoladamente;
+4. ser publicado antes do item seguinte;
+5. registrar dependências e limitações conhecidas.
+
+O CI e o UI E2E permanecem temporariamente desativados por decisão operacional do mantenedor. Nenhum item será considerado validado por build remoto enquanto os workflows não forem reativados.
+
+## 26.1 Item 1 — Gate e baseline pós-auditoria
+
+**Status:** concluído em 2026-09-17  
+**Commit de documentação:** `137f87d`  
+**Commit da primeira rodada de correções:** `c70b464`
+
+O baseline foi reavaliado diretamente pelo caminho real do código, sem tratar README ou comentários como prova de integração. A comparação entre as duas auditorias confirmou os seguintes problemas materiais antes da 2.3:
+
+- o chat podia desviar do ciclo Brain e chamar o gateway de IA diretamente quando o sandbox não estava pronto;
+- `RequirementDiscovery` e `AssumptionManager` eram executados, mas o resultado não alimentava efetivamente o Planner;
+- a classificação visual do domínio e a decisão de pesquisa usavam listas independentes;
+- o contexto entre mensagens dependia de uma regex estreita;
+- a pesquisa web podia ser colada como texto cru no prompt final;
+- o back do sistema não fechava Configurações, busca ou sidebar;
+- o composer reservava altura fixa e podia cobrir mensagens em entradas longas;
+- havia lacunas de semântica nos cards, citações e feedback;
+- o lifecycle não desligava explicitamente o runtime ao descartar o ViewModel;
+- os journeys funcionais Android podiam virar `SKIPPED` quando o RootFS não estava disponível.
+
+A primeira rodada corrigiu os desvios de fluxo e as lacunas de UI que eram seguras de resolver sem alterar a arquitetura da 2.3. Também criou `TermMatcher` como utilitário compartilhado, fez o Planner receber `ReasoningState`, bloqueou o fallback direto de IA, separou evidência de pesquisa do texto do prompt e registrou shutdown do runtime.
+
+O gate ainda não está totalmente aprovado para release porque o CI/E2E estão desativados e a execução local deste sandbox não possui a toolchain Android/JDK exigida. A reativação dos workflows será obrigatória antes de marcar a validação final como PASS.
+
+### Evidências do item
+
+- Auditoria consolidada: `RELATORIO_AUDITORIA_FLUXO_REAL.md`.
+- Auditoria externa comparada: `AUDITORIA_BRAINCODE.md`.
+- Código corrigido: commit `c70b464`.
+- Validação local: `git diff --check` passou; Gradle local bloqueado por ausência de toolchain JDK/Android SDK configurada.
+
+### Critério de saída
+
+O item 1 está documentalmente concluído, mas o gate operacional permanece **PENDENTE** até que os workflows sejam reativados e executem:
+
+- todos os testes JVM;
+- build Android e lint;
+- smoke UI;
+- journeys sem `SKIPPED` silencioso;
+- pelo menos um fluxo real de envio e resultado.
+
+## 26.2 Próximo item
+
+O próximo item será a definição e implementação dos contratos mínimos de `Account`, `AccountRegistry`, `AccountHealth`, `AccountPool`, `SelectionPolicy` e `ExecutionAttempt`, sem ainda conectar o pool ao fluxo de produção. A integração só deverá ocorrer depois que os contratos tiverem testes unitários e nenhum segredo puder aparecer nos modelos ou logs.
