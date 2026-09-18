@@ -36,7 +36,9 @@ class BrainExecutionCoordinator(
     private val memory: ExperienceMemory? = null,
     private val accountRouter: AccountRouter? = null,
     private val accountPools: Map<String, AccountPool> = emptyMap(),
-    private val accountRegistry: AccountRegistry? = null
+    private val accountRegistry: AccountRegistry? = null,
+    private val retryBackoffMs: (Int) -> Long = { retry -> (100L * (1L shl (retry - 1).coerceAtMost(4))).coerceAtMost(1600L) },
+    private val sleeper: (Long) -> Unit = Thread::sleep
 ) {
     fun execute(plano: PlanoExecucao, runId: String, actor: String, executor: StepExecutor): CoordinatorResult {
         val attempts = linkedMapOf<String, Int>(); val errors = mutableListOf<String>()
@@ -61,8 +63,9 @@ class BrainExecutionCoordinator(
                         capability = step.capacidade,
                         pool = pool,
                         authorizedAccountIds = pool.members.map { it.accountId }.toSet(),
-                        idempotent = true,
-                        requestedModelId = route?.escolhido?.modeloId
+                        idempotent = step.idempotent,
+                        requestedModelId = route?.escolhido?.modeloId,
+                        catalog = catalog
                     ),
                     Instant.now()
                 )
@@ -87,7 +90,7 @@ class BrainExecutionCoordinator(
 
             if (candidates.isEmpty()) {
                 emit(runId, step.id, "AgentDispatched", mapOf("provider" to "local"))
-                for (retry in 0..maxRetries) {
+                for (retry in 0..retryLimit(step)) {
                     attempts[step.id] = (attempts[step.id] ?: 0) + 1
                     val attempt = executor.execute(step, null, accountId)
                     result = attempt
@@ -97,24 +100,27 @@ class BrainExecutionCoordinator(
                         step.id,
                         if (retry < maxRetries) "Retry" else "ProviderFailed",
                         mapOf(
+                            "attemptId" to attemptId(runId, step.id, attempts.getValue(step.id)),
                             "attempt" to (attempts[step.id] ?: 1).toString(),
                             "provider" to "local",
-                            "error" to (attempt.error ?: "failed")
+                            "accountId" to (accountId ?: "local"),
+                            "error" to safeError(attempt.error)
                         )
                     )
-                    if (retry < maxRetries) {
-                        emit(runId, step.id, "CorrectionRequested", mapOf("reason" to (attempt.error ?: "failed")))
+                        if (retry < retryLimit(step)) {
+                            sleepBeforeRetry(retry + 1)
+                            emit(runId, step.id, "CorrectionRequested", mapOf("reason" to safeError(attempt.error)))
                     }
                 }
             } else {
                 for ((candidateIndex, candidate) in candidates.withIndex()) {
-                    if (candidateIndex > 0) {
-                        emit(runId, step.id, "ProviderFallback", mapOf("provider" to candidate.providerId, "model" to candidate.modeloId))
-                    } else {
-                        emit(runId, step.id, "AgentDispatched", mapOf("provider" to candidate.providerId, "model" to candidate.modeloId))
-                    }
+                        if (candidateIndex > 0) {
+                            emit(runId, step.id, "ProviderFallback", mapOf("provider" to candidate.providerId, "model" to candidate.modeloId))
+                        } else {
+                            emit(runId, step.id, "AgentDispatched", mapOf("provider" to candidate.providerId, "model" to candidate.modeloId))
+                        }
 
-                    for (retry in 0..maxRetries) {
+                    for (retry in 0..retryLimit(step)) {
                         attempts[step.id] = (attempts[step.id] ?: 0) + 1
                         val candidateAccountId = accountByProvider[candidate.providerId]?.accountId ?: accountId
                         val attempt = executor.execute(step, candidate, candidateAccountId)
@@ -138,15 +144,20 @@ class BrainExecutionCoordinator(
                         emit(
                             runId,
                             step.id,
-                            if (retry < maxRetries) "Retry" else "ProviderFailed",
+                            if (retry < retryLimit(step)) "Retry" else "ProviderFailed",
                             mapOf(
+                                "attemptId" to attemptId(runId, step.id, attempts.getValue(step.id)),
                                 "attempt" to (attempts[step.id] ?: 1).toString(),
                                 "provider" to candidate.providerId,
-                                "error" to (attempt.error ?: "failed")
+                                "model" to candidate.modeloId,
+                                "accountId" to (candidateAccountId ?: "unknown"),
+                                "failureClass" to errorType.name,
+                                "error" to safeError(attempt.error)
                             )
                         )
-                        if (retry < maxRetries && errorType !in setOf(TipoErro.CHAVE_INVALIDA, TipoErro.LIMITE_ATINGIDO)) {
-                            emit(runId, step.id, "CorrectionRequested", mapOf("reason" to (attempt.error ?: "failed")))
+                        if (retry < retryLimit(step) && errorType !in setOf(TipoErro.CHAVE_INVALIDA, TipoErro.LIMITE_ATINGIDO)) {
+                            sleepBeforeRetry(retry + 1)
+                            emit(runId, step.id, "CorrectionRequested", mapOf("reason" to safeError(attempt.error)))
                         }
                         if (errorType in setOf(TipoErro.CHAVE_INVALIDA, TipoErro.LIMITE_ATINGIDO)) break
                     }
@@ -156,14 +167,15 @@ class BrainExecutionCoordinator(
                 if (result?.success != true) {
                     emit(runId, step.id, "LocalFallback", mapOf("reason" to "todos os provedores gratuitos falharam ou atingiram o limite"))
                     var localAttempt: StepAttempt? = null
-                    for (retry in 0..maxRetries) {
+                    for (retry in 0..retryLimit(step)) {
                         attempts[step.id] = (attempts[step.id] ?: 0) + 1
                         localAttempt = executor.execute(step, null, accountId)
                         result = localAttempt
                         if (localAttempt.success) break
-                        if (retry < maxRetries) {
-                            emit(runId, step.id, "Retry", mapOf("attempt" to (attempts[step.id] ?: 1).toString(), "provider" to "local", "error" to (localAttempt.error ?: "failed")))
-                            emit(runId, step.id, "CorrectionRequested", mapOf("reason" to (localAttempt.error ?: "failed")))
+                        if (retry < retryLimit(step)) {
+                            sleepBeforeRetry(retry + 1)
+                            emit(runId, step.id, "Retry", mapOf("attemptId" to attemptId(runId, step.id, attempts.getValue(step.id)), "attempt" to (attempts[step.id] ?: 1).toString(), "provider" to "local", "error" to safeError(localAttempt.error)))
+                            emit(runId, step.id, "CorrectionRequested", mapOf("reason" to safeError(localAttempt.error)))
                         }
                     }
                     if (localAttempt?.success == true) selectedProvider = null
@@ -173,7 +185,7 @@ class BrainExecutionCoordinator(
             val finalResult = result ?: StepAttempt(false, error = "failed")
             recordExperience(runId, plano, step, selectedProvider, finalResult, attempts.getValue(step.id), System.currentTimeMillis() - startedAt)
             if (!finalResult.success) {
-                errors += "${step.id}: ${finalResult.error ?: "failed"}"
+                errors += "${step.id}: ${safeError(finalResult.error)}"
                 return CoordinatorResult(runId, CoordinatorStatus.FAILED, attempts, errors)
             }
             emit(runId, step.id, "ValidationPassed", mapOf("provider" to (selectedProvider?.providerId ?: "local")))
@@ -181,6 +193,19 @@ class BrainExecutionCoordinator(
         emit(runId, "plan", "Delivered", emptyMap())
         return CoordinatorResult(runId, CoordinatorStatus.COMPLETED, attempts, errors)
     }
+
+    private fun retryLimit(step: com.brain.planner.PassoPlano): Int = if (step.idempotent) maxRetries else 0
+
+    private fun sleepBeforeRetry(retry: Int) {
+        retryBackoffMs(retry).coerceIn(0L, 1600L).let { if (it > 0) sleeper(it) }
+    }
+
+    private fun attemptId(runId: String, taskId: String, attempt: Int): String = "$runId:$taskId:$attempt"
+
+    private fun safeError(error: String?): String = error.orEmpty()
+        .replace(Regex("(?i)(bearer\\s+|api[_-]?key|token|password|secret)[=: ]+[^,; ]+"), "[REDACTED]")
+        .take(512)
+        .ifBlank { "failed" }
 
     private fun updateAccountHealth(accountId: String?, success: Boolean, failure: TipoErro?) {
         val registry = accountRegistry ?: return
@@ -239,7 +264,7 @@ class BrainExecutionCoordinator(
             resultado = outcome,
             custoEstimado = 0.0,
             tempoTotalMs = elapsedMs,
-            erros = result.error?.let { listOf(it) } ?: emptyList(),
+            erros = result.error?.let { listOf(safeError(it)) } ?: emptyList(),
             registradoEm = Instant.now()
         )
         runCatching { await { target.registrar(experience) } }

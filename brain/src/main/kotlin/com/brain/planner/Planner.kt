@@ -26,13 +26,16 @@ data class PassoPlano(
     val parametros: List<String> = emptyList(),
     val dependeDe: List<String> = emptyList(),
     val papel: PapelPipeline? = null,
-    val riskClass: RiskClass = RiskClass.LOW
+    val riskClass: RiskClass = RiskClass.LOW,
+    val idempotent: Boolean = true,
+    val idempotencyKey: String? = null
 ) {
     init {
         require(id.isNotBlank()) { "id do passo não pode ser vazio" }
         require(capacidade.isNotBlank()) { "capacidade do passo não pode ser vazia" }
         require(criterioSucesso.isNotBlank()) { "criterioSucesso do passo não pode ser vazio" }
         require(id !in dependeDe) { "passo '$id' não pode depender de si mesmo" }
+        if (!idempotent) require(!idempotencyKey.isNullOrBlank()) { "operação não idempotente exige idempotencyKey" }
     }
 }
 
