@@ -51,13 +51,13 @@ app/src/main/assets/roofts/0.6/
 app/src/main/assets/roofts/0.6.manifest.json
 ```
 
-Durante `AndroidSandboxFactory.prepareRuntime`, depois que as três camadas RootFS existentes são validadas e materializadas, o app copia o asset completo para:
+Durante `AndroidSandboxFactory.prepareRuntime`, depois que as três camadas RootFS existentes são validadas e materializadas, o app verifica o marcador do Roofts 0.6 e, se necessário, copia o asset completo para:
 
 ```text
 /opt/roofts/0.6
 ```
 
-A cópia é recriada a cada preparação do runtime, garantindo que o conteúdo do APK seja o conteúdo disponibilizado ao RootFS. O procedimento não modifica nenhum arquivo das camadas 0.3, 0.4 ou 0.5; apenas acrescenta o namespace independente `/opt/roofts/0.6`.
+Quando o RootFS 0.3–0.5 já está instalado, a atualização é incremental: não baixa novamente as três camadas nem apaga o RootFS existente. O app apresenta a fase `Atualizando Roofts 0.6 sobre o RootFS existente`, copia somente o novo namespace, valida os diretórios principais e grava o commit importado em `.roofts-0.6-commit`. Execuções seguintes detectam esse marcador e não repetem a cópia. O procedimento não modifica nenhum arquivo das camadas 0.3, 0.4 ou 0.5; apenas acrescenta o namespace independente `/opt/roofts/0.6`.
 
 O APK empacota o conteúdo por meio do mecanismo normal de `app/src/main/assets`. O runtime convidado acessa os arquivos pelo caminho absoluto acima, sem que as Skills sejam carregadas ou executadas pelos agentes.
 

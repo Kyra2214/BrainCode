@@ -541,7 +541,14 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 }
                 results.filterIsInstance<SandboxResourceManager.DownloadResult.Failure>().firstOrNull()?.let { phase = SandboxPhase.Blocked(it.reason); return@launch }
             }
-            phase = SandboxPhase.Preparing("Extraindo RootFS", 0, 1)
+            val roofts06Installed = BuildConfig.E2E_FAKE_ROOTFS || withContext(Dispatchers.IO) {
+                factory.isRoofts06Installed()
+            }
+            phase = SandboxPhase.Preparing(
+                if (roofts06Installed) "Inicializando RootFS" else "Atualizando Roofts 0.6 sobre o RootFS existente",
+                0,
+                1
+            )
             try {
                 runtime?.shutdown()
                 val dir = File(getApplication<Application>().filesDir, "sandbox")

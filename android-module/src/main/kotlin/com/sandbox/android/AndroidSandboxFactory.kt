@@ -19,6 +19,7 @@ import java.util.zip.ZipFile
 class AndroidSandboxFactory(private val context: Context) {
     private companion object {
         private const val EXTRACTOR_VERSION = "5"
+        private const val ROOFTS06_COMMIT = "c004a74784a08295d52749b04cda634125b9a581"
         private const val SESSION_PREFS = "sandbox_runtime"
         private const val SESSION_ID = "session_id"
     }
@@ -32,6 +33,7 @@ class AndroidSandboxFactory(private val context: Context) {
     private val modelDir = File(sandboxBaseDir, "models")
     private val extractedRootfsDir = File(sandboxBaseDir, "rootfs")
     private val extractionMarker = File(sandboxBaseDir, ".extractor-version")
+    private val roofts06Marker = File(sandboxBaseDir, ".roofts-0.6-commit")
     private val prootTmpDir = File(context.cacheDir, "sandbox-tmp")
 
     private val rootfsVerifier by lazy {
@@ -115,6 +117,11 @@ class AndroidSandboxFactory(private val context: Context) {
 
     fun isRootfsReady(): Boolean = rootfsExtractionValid()
 
+    /** True when the incremental 0.6 payload has been installed over the layers. */
+    fun isRoofts06Installed(): Boolean =
+        File(extractedRootfsDir, "opt/roofts/0.6/skills").isDirectory &&
+            roofts06Marker.readTextOrNull() == ROOFTS06_COMMIT
+
     private fun rootfsExtractionValid(): Boolean =
         extractedRootfsDir.exists() && !extractedRootfsDir.list().isNullOrEmpty() &&
             extractionMarker.readTextOrNull() == EXTRACTOR_VERSION && hasRequiredRootfsEntries()
@@ -161,11 +168,19 @@ class AndroidSandboxFactory(private val context: Context) {
 
     /** Copies the complete, not-yet-integrated Roofts 0.6 payload into the guest. */
     private fun installRoofts06() {
+        if (isRoofts06Installed()) return
         val sourceRoot = "roofts/0.6"
         val destinationRoot = File(extractedRootfsDir, "opt/roofts/0.6")
         destinationRoot.deleteRecursively()
         copyAssetTree(sourceRoot, destinationRoot)
+        check(isRoofts06InstalledPayload(destinationRoot)) { "Roofts 0.6 incompleto após a cópia" }
+        roofts06Marker.writeText(ROOFTS06_COMMIT)
     }
+
+    private fun isRoofts06InstalledPayload(root: File): Boolean =
+        File(root, "skills").isDirectory && File(root, "agents").isDirectory &&
+            File(root, "references").isDirectory && File(root, "docs").isDirectory &&
+            File(root, "LICENSE").isFile
 
     private fun copyAssetTree(assetPath: String, destination: File) {
         destination.mkdirs()
