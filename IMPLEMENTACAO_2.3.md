@@ -958,3 +958,390 @@ A regra é simples: **não adicionar complexidade antes de provar que a base fun
 2. `cesarfavero/codexrouter` — README, arquitetura de gateway, contas isoladas, catálogo, usage/cooldown, failover, E2E, segurança e licença MIT. fileciteturn8file0L2-L10
 
 **Observação de licenciamento:** a implementação do BrainCode deve preferir reprodução de conceitos/contratos. Se algum trecho de código do projeto fonte for reutilizado futuramente, revisar e preservar integralmente as obrigações da licença e os notices de terceiros aplicáveis.
+
+---
+
+# 25. Novo aprendizado — Locally Uncensored: Runtime sem Docker
+
+**Fonte:** `PurpleDoubleD/locally-uncensored`.
+
+A análise do projeto mostrou um padrão diretamente relevante para o BrainCode: o aplicativo desktop não depende de Docker para executar seus runtimes locais. Em vez de colocar a execução em uma cadeia obrigatória de containers, ele pode instalar/gerenciar runtimes e processos locais. Docker fica como opção para infraestrutura externa/remota quando necessário.
+
+O aprendizado não é copiar o aplicativo. É tratar o **RootFS como runtime gerenciado**.
+
+## 25.1 Ciclo de vida do RootFS
+
+O RootFS não deve ser considerado apenas um arquivo baixado e extraído:
+
+```text
+DISCOVERED → DOWNLOADING → VERIFIED → PROVISIONING
+                         ↓
+                 DEPENDENCIES_CHECK
+                         ↓
+                    HEALTH_CHECK
+                         ↓
+                       READY
+```
+
+Estados de falha devem ser explícitos:
+
+```text
+DOWNLOAD_FAILED
+CHECKSUM_FAILED
+PROVISION_FAILED
+DEPENDENCY_MISSING
+HEALTHCHECK_FAILED
+RUNTIME_CRASHED
+REPAIR_REQUIRED
+```
+
+**Regra:** arquivo existente não significa runtime pronto.
+
+## 25.2 Manifesto de runtime
+
+Cada RootFS deve possuir manifesto verificável:
+
+```text
+RootFSManifest
+├── rootfsId
+├── version
+├── architecture
+├── source
+├── sha256
+├── size
+├── entrypoint
+├── environment
+├── requiredBinaries
+├── requiredVersions
+├── capabilities
+└── healthChecks
+```
+
+Exemplo:
+
+```text
+required:
+  bash
+  java
+  python
+  node
+
+health:
+  /bin/bash --version
+  java --version
+  python --version
+  node --version
+```
+
+Isso é especialmente importante para o problema já encontrado no BrainCode em que os RootFS foram baixados, mas uma dependência necessária não estava disponível.
+
+## 25.3 DependencyVerifier
+
+Adicionar/verificar um contrato explícito para:
+
+```text
+RootFS
+ ↓
+DependencyVerifier
+ ├── binary exists
+ ├── executable
+ ├── version valid
+ ├── PATH valid
+ ├── permissions valid
+ ├── runtime callable
+ └── architecture compatible
+```
+
+Resultado esperado:
+
+```text
+PASS bash
+PASS java
+PASS python
+PASS node
+FAIL gradle
+```
+
+O erro deve identificar a dependência, RootFS e caminhos pesquisados, em vez de apenas retornar `command not found`.
+
+## 25.4 ProcessSupervisor
+
+O runtime deve possuir supervisão de processo, reutilizando os mecanismos de execução existentes quando possível:
+
+```text
+Runtime
+ ↓
+ProcessSupervisor
+ ├── spawn
+ ├── stdout
+ ├── stderr
+ ├── exit code
+ ├── timeout
+ ├── termination reason
+ └── lifecycle state
+```
+
+Estados:
+
+```text
+STARTING / RUNNING / STOPPING / STOPPED / FAILED / CRASHED / RESTARTING
+```
+
+Não criar um segundo executor paralelo ao `TaskEngine`/executor já existente.
+
+## 25.5 Health check real
+
+`process alive` não basta. O health check deve validar a capacidade real:
+
+```text
+runtime alive
++ filesystem accessible
++ required binaries available
++ executable
++ expected version
++ basic command succeeds
+```
+
+O teste deve ocorrer **dentro do RootFS**, pelo mesmo mecanismo que o agente utilizará posteriormente.
+
+## 25.6 Restart, Repair e Reinstall
+
+Separar claramente as operações:
+
+```text
+restart  = processo morreu, instalação íntegra
+repair   = instalação existente inconsistente
+reinstall = instalação não recuperável
+```
+
+Fluxo de recuperação:
+
+```text
+CRASH → RESTART → HEALTH CHECK → READY
+
+DEPENDENCY_MISSING → REPAIR → VERIFY → READY
+
+CORRUPTED → REINSTALL → VERIFY → PROVISION → HEALTH → READY
+```
+
+Nenhum restart deve virar loop infinito.
+
+## 25.7 Retry com limite e backoff
+
+```text
+attempt 1 → failure → backoff
+attempt 2 → failure → backoff
+attempt 3 → failure → FAILED / REPAIR_REQUIRED
+```
+
+Número de tentativas e backoff devem ser configuráveis. Não usar `while true: restart()`.
+
+## 25.8 Managed Runtime vs External Runtime
+
+O BrainCode deve distinguir:
+
+```text
+Managed Runtime
+  instala / configura / inicia / monitora / repara
+
+External Runtime
+  já existe fora do BrainCode
+  BrainCode descobre / verifica / utiliza
+```
+
+Exemplos:
+
+```text
+RootFS local → managed
+Ollama local externo → external
+Provider remoto → external
+```
+
+Isso evita assumir controle de processos que pertencem a outra camada.
+
+## 25.9 Install State Machine e instalação atômica
+
+A instalação precisa ser persistente e recuperável:
+
+```text
+NOT_INSTALLED
+ → DOWNLOAD_REQUESTED
+ → DOWNLOADING
+ → DOWNLOADED
+ → CHECKSUM_VERIFIED
+ → EXTRACTING
+ → PROVISIONED
+ → DEPENDENCIES_VERIFIED
+ → HEALTHCHECK
+ → READY
+```
+
+Artefatos temporários não devem substituir uma versão funcional:
+
+```text
+download.tmp → verify → promote → active version
+```
+
+Quando houver versões múltiplas, a troca de `current` só ocorre depois de checksum + provisionamento + dependências + health check. Isso permite rollback.
+
+## 25.10 Doctor / diagnóstico
+
+Adicionar ao plano um diagnóstico de runtime:
+
+```text
+RuntimeDoctor
+├── installation
+├── manifest
+├── checksum
+├── filesystem
+├── permissions
+├── PATH
+├── dependencies
+├── process
+├── health
+└── last failure
+```
+
+Exemplo:
+
+```text
+PASS RootFS downloaded
+PASS SHA-256
+PASS filesystem
+PASS bash
+FAIL java
+PASS python
+WARN node optional
+```
+
+O diagnóstico deve mostrar a camada exata da falha e nunca exibir segredos.
+
+## 25.11 Portas e processos
+
+Para runtimes que expõem servidor local:
+
+```text
+Runtime Manager → PortAllocator → start → health endpoint → READY
+```
+
+A instância deve registrar `runtimeId`, `pid`, `port`, `startedAt`, `state` e `health`. Não assumir porta fixa disponível.
+
+## 25.12 Os 3 RootFS devem ter estados independentes
+
+Aplicar o ciclo individualmente:
+
+```text
+RootFS A → Verify → Dependencies → Health → READY
+RootFS B → Verify → Dependencies → Health → READY
+RootFS C → Verify → Dependencies → Health → READY
+```
+
+Um RootFS saudável não pode mascarar a falha de outro. O estado global deve ser derivado:
+
+```text
+ALL_READY / PARTIAL_READY / DEGRADED / FAILED
+```
+
+## 25.13 Integração com CapabilityDiscovery
+
+Capacidade efetiva deve vir do estado real do runtime, não somente da configuração:
+
+```text
+RootFS Health
+      ↓
+DependencyVerifier
+      ↓
+CapabilityDiscovery
+      ↓
+Planner / Router
+```
+
+Se `java` falhar, `JAVA` deve deixar de ser uma capacidade efetiva daquele RootFS, sem necessariamente invalidar Python, Node etc.
+
+## 25.14 Integração com Agent Registry
+
+O agente só pode selecionar runtime `READY` para a capacidade exigida:
+
+```text
+Agent
+ ↓
+required capability = JAVA
+ ↓
+CapabilityDiscovery
+ ↓
+READY candidates
+ ↓
+Execution
+```
+
+Se nenhum runtime for capaz, retornar um erro semântico como `NO_CAPABLE_RUNTIME`, e não apenas `command not found`.
+
+## 25.15 Regra de arquitetura
+
+Não criar uma camada específica para copiar o Locally Uncensored. Estender apenas os contratos necessários:
+
+```text
+RootFSManager
+RuntimeManager
+Manifest
+DependencyVerifier
+ProcessSupervisor
+HealthChecker
+RuntimeDoctor
+```
+
+Reutilizar, quando já existentes:
+
+```text
+CapabilityDiscovery
+TaskEngine
+Sandbox
+DurableJobRunner
+AgentRegistry
+Policy
+```
+
+Objetivo final:
+
+```text
+BrainCode
+   ↓
+RootFS Manager
+   ↓
+Runtime Manager
+   ↓
+Provision / Verify / Health
+   ↓
+READY
+   ↓
+CapabilityDiscovery
+   ↓
+Agent / TaskEngine
+   ↓
+Sandbox
+   ↓
+Execution
+```
+
+## 25.16 Critérios adicionais de aceite
+
+- [ ] RootFS possui ciclo de vida explícito.
+- [ ] Manifesto e SHA-256 são verificados.
+- [ ] Dependências obrigatórias são verificadas dentro do RootFS.
+- [ ] PATH, permissões e executabilidade são validados.
+- [ ] Health check testa a capacidade real.
+- [ ] Processos são supervisionados.
+- [ ] Crash não gera loop infinito.
+- [ ] Retry possui limite/backoff.
+- [ ] Restart, repair e reinstall são operações distintas.
+- [ ] Instalação interrompida é recuperável.
+- [ ] Versão funcional não é substituída antes da validação da nova.
+- [ ] Rollback é possível quando aplicável.
+- [ ] Managed e External Runtime são distinguidos.
+- [ ] Cada um dos 3 RootFS possui estado próprio.
+- [ ] CapabilityDiscovery usa o estado real do runtime.
+- [ ] Agent Registry nunca seleciona runtime não saudável.
+- [ ] Doctor identifica a camada exata da falha.
+- [ ] Nenhum segredo aparece nos logs.
+
+**Conclusão:** o maior ganho para o BrainCode é transformar o RootFS de simples artefato de filesystem em um **runtime gerenciado, verificável e autorrecuperável**. Isso ataca diretamente a classe de falhas em que o RootFS foi baixado, mas ainda não estava realmente pronto para executar uma ferramenta.
