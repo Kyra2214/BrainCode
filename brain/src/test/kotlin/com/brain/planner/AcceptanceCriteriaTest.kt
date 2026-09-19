@@ -8,7 +8,7 @@ import org.junit.Test
 class AcceptanceCriteriaTest {
     @Test fun `passo preserva criterios padrao e customizados no task`() {
         val criteria = listOf(
-            AcceptanceCriteria("build", "build passa", verification = "gradle"),
+            AcceptanceCriteria("build", "build passa", verification = "gradle:check"),
             AcceptanceCriteria("regression", "testes anteriores passam", verification = "test:regression")
         )
         val step = PassoPlano("build", "build", "build passa", acceptanceCriteria = criteria)

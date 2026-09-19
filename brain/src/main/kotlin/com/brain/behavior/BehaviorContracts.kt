@@ -41,6 +41,20 @@ data class AcceptanceCriteria(
         require(id.isNotBlank()) { "id do critério não pode ser vazio" }
         require(description.isNotBlank()) { "descrição do critério não pode ser vazia" }
     }
+
+    /** Método verificável no formato `tipo:alvo` (ex.: `test:regression`). */
+    fun verificationMethod(): VerificationMethod? {
+        val raw = verification?.trim().orEmpty()
+        val separator = raw.indexOf(':')
+        if (separator <= 0 || separator == raw.lastIndex) return null
+        val kind = raw.substring(0, separator).trim()
+        val target = raw.substring(separator + 1).trim()
+        return VerificationMethod(kind, target).takeIf { it.isValid }
+    }
+}
+
+data class VerificationMethod(val kind: String, val target: String) {
+    val isValid: Boolean get() = kind.isNotBlank() && target.isNotBlank()
 }
 
 data class VerificationResult(

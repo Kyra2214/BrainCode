@@ -20,8 +20,8 @@ class PlanningGate : BehaviorGate<PlanoExecucao, PlanoExecucao> {
             when {
                 step.acceptanceCriteria.isEmpty() -> listOf(GateIssue("missing.acceptance", "passo ${step.id} não possui critérios", true))
                 else -> step.acceptanceCriteria.flatMap { criterion ->
-                    if (criterion.verification.isNullOrBlank()) {
-                        listOf(GateIssue("missing.verification", "critério ${criterion.id} do passo ${step.id} não possui método de verificação", true))
+                    if (criterion.verificationMethod() == null) {
+                        listOf(GateIssue("invalid.verification", "critério ${criterion.id} do passo ${step.id} precisa de método verificável no formato tipo:alvo", true))
                     } else emptyList()
                 }
             }

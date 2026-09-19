@@ -22,6 +22,14 @@ class BehaviorGatesTest {
         assertEquals(GateStatus.PASSED, PlanningGate().evaluate(plan).status)
     }
 
+    @Test fun `planning gate bloqueia metodo de verificacao sem alvo`() {
+        val criteria = listOf(AcceptanceCriteria("x", "sucesso", verification = "exists"))
+        val plan = PlanoExecucao("objetivo", listOf(PassoPlano("x", "capability", "sucesso", acceptanceCriteria = criteria)))
+        val result = PlanningGate().evaluate(plan)
+        assertEquals(GateStatus.BLOCKED, result.status)
+        assertTrue(result.issues.any { it.code == "invalid.verification" })
+    }
+
     @Test fun `verification gate bloqueia check falho`() {
         val verification = VerificationResult(VerificationStatus.FAILED, listOf(VerificationCheck("x", false, "falhou")))
         assertEquals(GateStatus.FAILED, VerificationGate().evaluate(verification).status)
