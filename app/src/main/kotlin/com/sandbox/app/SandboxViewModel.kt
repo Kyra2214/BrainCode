@@ -222,6 +222,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         sessions = sessions + session
         activeSessionId = session.id
         chatMessages.clear()
+        brainUiStage = BrainUiStage.IDLE
+        chatRunning = false
         persistSessions()
     }
 
@@ -238,6 +240,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         val id = activeSessionId ?: return
         sessions = sessions.map { session -> if (session.id != id) session else session.copy(title = "Nova tarefa", events = emptyList(), conversationContext = ConversationContext(), updatedAt = System.currentTimeMillis()) }
         chatMessages.clear()
+        brainUiStage = BrainUiStage.IDLE
+        chatRunning = false
         diagnosticsReport = null
         lastBrainCycle = null
         selfCheckReport = null
@@ -260,8 +264,9 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     private fun statusForCurrentState(): SessionStatus = when {
         pendingApprovalId != null -> SessionStatus.AWAITING_APPROVAL
         phase == SandboxPhase.Running -> SessionStatus.RUNNING
-        phase is SandboxPhase.Blocked -> SessionStatus.BLOCKED
+        phase is SandboxPhase.Blocked || brainUiStage == BrainUiStage.BLOCKED -> SessionStatus.BLOCKED
         chatMessages.lastOrNull()?.role == ChatRole.ERROR -> SessionStatus.FAILED
+        chatMessages.isEmpty() && activeThreadEvents.isEmpty() -> SessionStatus.IDLE
         else -> SessionStatus.DONE
     }
 
@@ -831,6 +836,31 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             stage(BrainUiStage.CORRIGINDO, "CORRIGINDO — ${post.revision.targetCriteria.joinToString().ifBlank { "critérios do Brain" }}")
             if (post.revisionAttempts.isNotEmpty()) stage(BrainUiStage.REEXECUTANDO, "REEXECUTANDO — ${post.revisionAttempts.size} tentativa(s)")
         }
+        val evidence = cycle.passos.flatMap { passo ->
+            passo.executionEvidence.map { "${passo.passoId}: $it" } + passo.evidencias.map { "${passo.passoId}: ${it}" }
+        }.distinct()
+        val report = buildString {
+            appendLine("Resultado / revisão / readiness")
+            appendLine("status=${when {
+                post.aprovado -> "PASS"
+                post.revision.action == com.brain.behavior.RevisionAction.REVISE -> "REVISE"
+                post.readiness.status == com.brain.behavior.ReadinessStatus.BLOCKED -> "BLOCKED"
+                else -> "FAILED"
+            }}")
+            appendLine("verification=${post.verification.status}")
+            post.verification.checks.forEach { check -> appendLine("check ${check.criterionId}: ${if (check.passed) "PASS" else "FAIL"} — ${check.detail}${check.evidenceId?.let { " [$it]" } ?: ""}") }
+            appendLine("critique=${post.critique.status}")
+            post.critique.findings.forEach { finding -> appendLine("finding ${finding.code} (${finding.severity}): ${finding.message}") }
+            appendLine("revision=${post.revision.action} — ${post.revision.reason}")
+            post.revisionAttempts.forEach { attempt -> appendLine("attempt ${attempt.attempt}: ${attempt.outcome} — ${attempt.evidence}") }
+            appendLine("readiness=${post.readiness.status}")
+            post.readiness.stages.forEach { stage -> appendLine("readiness ${stage.name}: ${if (stage.passed) "PASS" else "FAIL"}${stage.detail.takeIf { it.isNotBlank() }?.let { " — $it" } ?: ""}${stage.evidenceIds.takeIf { it.isNotEmpty() }?.let { " [${it.joinToString()}]" } ?: ""}") }
+            if (post.readiness.blockers.isNotEmpty()) appendLine("blockers=${post.readiness.blockers.joinToString("; ")}")
+            appendLine("learningRecorded=${post.learningRecorded}")
+            appendLine("evidences=${(post.verification.evidenceIds + evidence).distinct().joinToString().ifBlank { "nenhuma" }}")
+            appendLine("artefatos=${cycle.passos.count { it.resultado != null }} resultado(s), ${cycle.passos.sumOf { it.evidencias.size }} evidência(s) de execução")
+        }
+        appendThreadEvent(ThreadEvent.Report("Resultado / evidências", report))
         stage(if (post.aprovado) BrainUiStage.READY else BrainUiStage.FAILED, if (post.aprovado) "READY" else "FAILED")
     }
     fun clearChat() { chatMessages.clear() }

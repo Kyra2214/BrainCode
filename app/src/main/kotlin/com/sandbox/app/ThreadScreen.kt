@@ -26,6 +26,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowUpward
@@ -66,6 +68,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.layout.onSizeChanged
@@ -267,7 +270,7 @@ private fun TaskSidebar(viewModel: SandboxViewModel, onClose: () -> Unit) {
     }
 }
 
-private fun brainStageLabel(stage: BrainUiStage): String = when (stage) {
+internal fun brainStageLabel(stage: BrainUiStage): String = when (stage) {
     BrainUiStage.IDLE -> "Aguardando"
     BrainUiStage.PLANEJANDO -> "PLANEJANDO"
     BrainUiStage.EXECUTANDO -> "EXECUTANDO"
@@ -395,7 +398,17 @@ private fun ThreadComposer(viewModel: SandboxViewModel) {
             Row(modifier = Modifier.padding(start = 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Box(modifier = Modifier.weight(1f).heightIn(min = 40.dp).padding(vertical = 8.dp).semantics { contentDescription = if (viewModel.chatInput.isEmpty()) "Campo de mensagem vazio" else "Campo de mensagem" }) {
                     if (viewModel.chatInput.isEmpty()) Text(if (viewModel.chatRunning) "Executando…" else "Descreva a tarefa ou use /comando", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    BasicTextField(value = viewModel.chatInput, onValueChange = { viewModel.chatInput = it }, enabled = enabled, modifier = Modifier.fillMaxWidth(), textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface), cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), maxLines = 6)
+                    BasicTextField(
+                        value = viewModel.chatInput,
+                        onValueChange = { viewModel.chatInput = it },
+                        enabled = enabled,
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        maxLines = 6,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = { if (canSend) viewModel.submitThreadInput() })
+                    )
                 }
                 if (viewModel.chatRunning) FilledIconButton(onClick = { viewModel.cancelCommand() }, shape = CircleShape, colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.error)) { Icon(Icons.Filled.Stop, contentDescription = "Parar") }
                 else FilledIconButton(onClick = { viewModel.submitThreadInput() }, enabled = canSend, shape = CircleShape) { Icon(Icons.Filled.ArrowUpward, contentDescription = "Enviar") }
