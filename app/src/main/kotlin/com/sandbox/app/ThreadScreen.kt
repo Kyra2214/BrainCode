@@ -258,10 +258,14 @@ private fun TaskSidebar(viewModel: SandboxViewModel, onClose: () -> Unit) {
             Text("Tarefas", style = MaterialTheme.typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Button(onClick = { viewModel.createSession() }) { Text("+ Nova") }; TextButton(onClick = onClose) { Text("Thread") } }
         }
+        if (viewModel.sessionSummaries.isEmpty()) {
+            Card(modifier = Modifier.fillMaxWidth()) { Text("Nenhuma sessão ainda. Crie uma nova tarefa para começar.", modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall) }
+        }
         viewModel.sessionSummaries.forEach { session ->
-            Card(onClick = { viewModel.switchSession(session.id); onClose() }, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Abrir sessão ${session.title}" }) {
+            val active = session.id == viewModel.activeSessionId
+            Card(onClick = { viewModel.switchSession(session.id); onClose() }, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Abrir sessão ${session.title}" }, colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = if (active) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer)) {
                 Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(session.title, style = MaterialTheme.typography.titleSmall)
+                    Text(if (active) "● ${session.title}" else session.title, style = MaterialTheme.typography.titleSmall)
                     Text("${session.status.name} · ${session.workspaceProjectName ?: "sem workspace"}", style = MaterialTheme.typography.labelSmall)
                     Text(session.lastEventPreview, style = MaterialTheme.typography.bodySmall, maxLines = 2)
                 }
