@@ -27,6 +27,20 @@ interface StepExecutor {
 enum class CoordinatorStatus { COMPLETED, FAILED, WAITING_APPROVAL }
 data class CoordinatorResult(val runId: String, val status: CoordinatorStatus, val attempts: Map<String, Int>, val errors: List<String> = emptyList())
 
+/**
+ * Coordenador legado de infraestrutura compartilhada.
+ *
+ * O caminho Android de produção é exclusivamente
+ * `BrainSandboxController -> BrainSandboxExecutionBridge -> CicloExecucaoPlano`.
+ * Este coordenador permanece apenas para consumidores JVM legados e testes de
+ * routing/account/memory; não deve ser instanciado por UI, Android ou gateway.
+ * Novos fluxos devem usar o ciclo autorizado do módulo Android e seu pós-
+ * execução obrigatório.
+ */
+@Deprecated(
+    message = "Use CicloExecucaoPlano no caminho Android; mantido somente para infraestrutura JVM legada",
+    level = DeprecationLevel.WARNING
+)
 class BrainExecutionCoordinator(
     private val policy: PolicyBroker,
     private val events: EventStore,
