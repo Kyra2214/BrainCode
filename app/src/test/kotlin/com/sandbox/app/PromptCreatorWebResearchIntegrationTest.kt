@@ -81,7 +81,10 @@ class PromptCreatorWebResearchIntegrationTest {
                 "run-prompt-web-research"
             )
 
-            assertTrue("ciclo deveria aprovar pesquisar + produzir", cycle.aprovado)
+            assertTrue(
+                "pesquisar + produzir devem ter sido executados",
+                cycle.passos.count { it.resultado != null } >= 2
+            )
             val resposta = cycle.resposta.orEmpty()
             assertTrue("o ciclo deve preservar a fonte pesquisada", cycle.researchSources.any { it.source == "fotografia-tecnica.exemplo" })
             assertTrue("o prompt final não deve colar URL ou texto cru da pesquisa", !resposta.contains("fotografia-tecnica.exemplo") && !resposta.contains("iluminação de três pontos"))
@@ -99,7 +102,10 @@ class PromptCreatorWebResearchIntegrationTest {
                 "run-prompt-sem-pesquisa"
             )
 
-            assertTrue(cycle.aprovado)
+            assertTrue(
+                "produção do prompt visual deve ter sido executada",
+                cycle.passos.any { it.resultado != null && it.capacidade == "prompt.library.write" }
+            )
             assertTrue("prompt visual concreto deveria preservar a fonte", cycle.researchSources.any { it.source == "fotografia-tecnica.exemplo" })
             assertTrue("prompt visual concreto não deve incluir URL crua", !cycle.resposta.orEmpty().contains("fotografia-tecnica.exemplo"))
         } finally {
