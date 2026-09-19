@@ -82,7 +82,11 @@ class PostExecutionGate(private val memory: LayeredMemory) {
             ReadinessStageName.RELEASE to (verification.passed && critique.status == com.brain.behavior.CritiqueStatus.PASS)
         )
         fun ownEvidence(stage: ReadinessStageName, ids: List<String>, enabled: Boolean): List<String> =
-            if (enabled) ids.map { id -> "${cycle.runId}:readiness:${stage.name.lowercase()}:$id" } else emptyList()
+            if (enabled) ids.distinct().mapIndexed { index, id ->
+                // O prefixo do estágio separa as categorias; o índice torna o ID
+                // estável e único mesmo se um plano repetir uma etapa/critério.
+                "${cycle.runId}:readiness:${stage.name.lowercase()}:$index:$id"
+            } else emptyList()
         val evidenceByStage = mapOf(
             ReadinessStageName.IMPLEMENTATION to ownEvidence(ReadinessStageName.IMPLEMENTATION, cycle.passos.map { "step:${it.passoId}" }, completed.getValue(ReadinessStageName.IMPLEMENTATION)),
             ReadinessStageName.TESTS to ownEvidence(ReadinessStageName.TESTS, verification.checks.filter { it.passed }.map { "criterion:${it.criterionId}" }, completed.getValue(ReadinessStageName.TESTS)),
