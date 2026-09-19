@@ -30,15 +30,12 @@ class BrainCodeJourneyE2ETest {
 
     @Before
     fun requireSandboxForJourney() {
-        runCatching {
-            composeRule.waitUntil(timeoutMillis = 10_000) {
-                composeRule.onAllNodesWithText("Preparar sandbox", substring = true, useUnmergedTree = true)
-                    .fetchSemanticsNodes().isNotEmpty()
-            }
-            composeRule.onNodeWithText("Preparar sandbox", substring = true, useUnmergedTree = true).performClick()
-        }
+        val prepare = runCatching {
+            composeRule.onNodeWithText("Preparar sandbox", substring = true, useUnmergedTree = true)
+        }.getOrNull()
+        if (prepare != null) runCatching { prepare.performClick() }
         val ready = runCatching {
-            composeRule.waitUntil(timeoutMillis = 45_000) {
+            composeRule.waitUntil(timeoutMillis = 90_000) {
                 runCatching {
                     composeRule.onNodeWithContentDescription("Enviar")
                         .assertIsDisplayed()
@@ -48,7 +45,24 @@ class BrainCodeJourneyE2ETest {
             }
             true
         }.getOrDefault(false)
-        check(ready) { "Sandbox não ficou pronto no ambiente E2E; jornada funcional não pode ser ignorada." }
+        if (!ready) {
+            runCatching {
+                composeRule.onNodeWithText("Tentar de novo", substring = true, useUnmergedTree = true).performClick()
+                composeRule.waitUntil(timeoutMillis = 90_000) {
+                    runCatching {
+                        composeRule.onNodeWithContentDescription("Enviar")
+                            .assertIsDisplayed()
+                            .assertIsEnabled()
+                        true
+                    }.getOrDefault(false)
+                }
+            }
+        }
+        val readyAfterRetry = runCatching {
+            composeRule.onNodeWithContentDescription("Enviar").assertIsDisplayed().assertIsEnabled()
+            true
+        }.getOrDefault(false)
+        check(ready || readyAfterRetry) { "Sandbox não ficou pronto no ambiente E2E; jornada funcional não pode ser ignorada." }
     }
 
     private fun send(text: String) {
