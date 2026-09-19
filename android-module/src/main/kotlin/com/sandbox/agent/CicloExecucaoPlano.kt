@@ -54,7 +54,10 @@ data class ResultadoCiclo(
     val passos: List<ResultadoPasso>,
     val posExecucao: ResultadoPosExecucao? = null
 ) {
-    val aprovado: Boolean get() = passos.isNotEmpty() && passos.all { it.status == StatusPasso.APROVADO } && (posExecucao?.aprovado ?: true)
+    /** Conclusão somente após todos os gates pós-execução aprovarem. */
+    val concluido: Boolean
+        get() = passos.isNotEmpty() && passos.all { it.status == StatusPasso.APROVADO } && posExecucao?.aprovado == true
+    val aprovado: Boolean get() = concluido
     val resposta: String? get() = passos.asSequence().mapNotNull { it.resultado }.lastOrNull()
     val researchSources: List<ResearchResult> get() = passos.flatMap { it.researchSources }.distinctBy { it.url }
 }
@@ -68,7 +71,8 @@ data class ResultadoPosExecucao(
     val issues: List<String> = emptyList(),
     val revisionAttempts: List<RevisionAttemptTrace> = emptyList()
 ) {
-    val aprovado: Boolean get() = verification.passed && critique.status.name == "PASS" && readiness.status.name == "READY" && learningRecorded
+    /** Learning é um efeito posterior; não pode transformar PASS+READY em falha de conclusão. */
+    val aprovado: Boolean get() = verification.passed && critique.status.name == "PASS" && readiness.status.name == "READY"
 }
 
 data class RevisionAttemptTrace(
