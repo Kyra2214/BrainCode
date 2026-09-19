@@ -58,11 +58,15 @@ open class MainActivity : ComponentActivity() {
 @Composable
 fun SandboxMobileApp(viewModel: SandboxViewModel) {
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    var terminalOpen by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = settingsOpen) { settingsOpen = false }
-    if (settingsOpen) {
+    BackHandler(enabled = terminalOpen) { terminalOpen = false }
+    if (terminalOpen) {
+        TerminalScreen(viewModel, onBack = { terminalOpen = false })
+    } else if (settingsOpen) {
         SettingsScreen(viewModel, onBack = { settingsOpen = false })
     } else {
-        ThreadScreen(viewModel, onOpenSettings = { settingsOpen = true })
+        ThreadScreen(viewModel, onOpenSettings = { settingsOpen = true }, onOpenTerminal = { terminalOpen = true })
     }
 }
 

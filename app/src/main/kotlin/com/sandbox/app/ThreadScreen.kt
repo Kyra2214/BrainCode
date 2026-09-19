@@ -97,7 +97,7 @@ private fun extractCodeBlocks(text: String): List<CodeBlock> {
 }
 
 @Composable
-fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
+fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}, onOpenTerminal: () -> Unit = {}) {
     var sidebarOpen by rememberSaveable { mutableStateOf(false) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -130,6 +130,7 @@ fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}) {
                 searchOpen = !searchOpen
                 if (!searchOpen) query = ""
             },
+            onOpenTerminal = onOpenTerminal,
             onClearChat = { confirmClear = true }
         )
         if (sidebarOpen) {
@@ -225,7 +226,7 @@ private fun eventText(event: ThreadEvent): String = when (event) {
 }
 
 @Composable
-private fun ThreadTopBar(viewModel: SandboxViewModel, searchOpen: Boolean, onToggleSidebar: () -> Unit, onOpenSettings: () -> Unit, onSearch: () -> Unit, onClearChat: () -> Unit) {
+private fun ThreadTopBar(viewModel: SandboxViewModel, searchOpen: Boolean, onToggleSidebar: () -> Unit, onOpenSettings: () -> Unit, onSearch: () -> Unit, onOpenTerminal: () -> Unit, onClearChat: () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onToggleSidebar) { Icon(Icons.Default.Menu, contentDescription = "Tarefas") }
@@ -236,6 +237,7 @@ private fun ThreadTopBar(viewModel: SandboxViewModel, searchOpen: Boolean, onTog
             val phaseColor = if (viewModel.phase is SandboxPhase.Blocked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
             Surface(color = MaterialTheme.colorScheme.surfaceVariant, contentColor = phaseColor, shape = MaterialTheme.shapes.small) { Text(phaseLabel(viewModel.phase), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)) }
             IconButton(onClick = onSearch) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, contentDescription = if (searchOpen) "Fechar busca" else "Buscar") }
+            TextButton(onClick = onOpenTerminal) { Text("Terminal") }
             IconButton(onClick = onClearChat) { Icon(Icons.Default.Delete, contentDescription = "Limpar chat") }
             IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, contentDescription = "Configurações") }
         }
