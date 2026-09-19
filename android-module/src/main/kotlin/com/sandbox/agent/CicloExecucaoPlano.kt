@@ -65,10 +65,18 @@ data class ResultadoPosExecucao(
     val revision: RevisionDecision,
     val readiness: ReadinessReport,
     val learningRecorded: Boolean,
-    val issues: List<String> = emptyList()
+    val issues: List<String> = emptyList(),
+    val revisionAttempts: List<RevisionAttemptTrace> = emptyList()
 ) {
     val aprovado: Boolean get() = verification.passed && critique.status.name == "PASS" && readiness.status.name == "READY" && learningRecorded
 }
+
+data class RevisionAttemptTrace(
+    val runId: String,
+    val attempt: Int,
+    val outcome: String,
+    val evidence: String
+)
 
 /** Executa somente planos que já carregam autorizações por passo emitidas pelo Brain. */
 class CicloExecucaoPlano(

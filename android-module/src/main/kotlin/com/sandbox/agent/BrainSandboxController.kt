@@ -67,7 +67,8 @@ class BrainSandboxController(
     capabilityProviders: List<CapabilityProvider> = emptyList(),
     capabilityExecutors: Map<String, ActionExecutor> = emptyMap(),
     private val apiKeyAvailable: () -> Boolean = { true },
-    private val events: EventStore = InMemoryEventStore()
+    private val events: EventStore = InMemoryEventStore(),
+    private val revisionFixer: RevisionFixer = ContextRevisionFixer()
 ) {
     private val dynamicCapabilityProviders = capabilityProviders
     private val approvals = FileApprovalStore(File(rootfsDir.parentFile ?: rootfsDir, "approvals.jsonl"))
@@ -146,19 +147,19 @@ class BrainSandboxController(
                 )
             )
         )
-        return executeWithEvents(plano, runId) {
-            bridge.authorizeAndExecute(plano, runId = runId, actor = actor)
+        return executeWithEvents(plano, runId) { attemptPlan, attemptRunId ->
+            bridge.authorizeAndExecute(attemptPlan, runId = attemptRunId, actor = actor)
         }
     }
 
     fun executePlan(plano: PlanoExecucao, runId: String = "plan-${System.currentTimeMillis()}"): ResultadoCiclo {
         val gate = planningGate.evaluate(plano)
         if (!gate.isSuccessful) return blockedCycle(plano, runId, gate.issues.joinToString("; ") { it.message })
-        return executeWithEvents(plano, runId) { bridge.authorizeAndExecute(plano, runId = runId, actor = actor) }
+        return executeWithEvents(plano, runId) { attemptPlan, attemptRunId -> bridge.authorizeAndExecute(attemptPlan, runId = attemptRunId, actor = actor) }
     }
 
     fun resumePlan(plano: PlanoExecucao, runId: String, approvalId: String): ResultadoCiclo =
-        executeWithEvents(plano, runId) { bridge.resume(plano, runId = runId, actor = actor, approvalId = approvalId) }
+        executeWithEvents(plano, runId) { attemptPlan, attemptRunId -> bridge.resume(attemptPlan, runId = attemptRunId, actor = actor, approvalId = approvalId) }
 
     fun approvalDemoPlan(): PlanoExecucao = PlanoExecucao(
         objetivo = "executar plano de demonstração com aprovação humana",
@@ -216,10 +217,10 @@ class BrainSandboxController(
             manifest = WorkflowManifest("brain-plan", "1.0.0", listOf(WorkflowNode("plan", "brain.plan", retryLimit = 0))),
             authorize = { it == "brain.plan" },
             execute = { node, attempt ->
-                cycle = executeWithEvents(plan, runId) {
-                    bridge.authorizeAndExecute(plan, runId, actor) { passo ->
+                cycle = executeWithEvents(plan, runId) { attemptPlan, attemptRunId ->
+                    bridge.authorizeAndExecute(attemptPlan, attemptRunId, actor) { passo ->
                         emit(
-                            runId,
+                            attemptRunId,
                             passo.passoId,
                             "StepCompleted",
                             mapOf(
@@ -281,42 +282,90 @@ class BrainSandboxController(
     fun registrarFeedbackDePrompt(actionId: String, positivo: Boolean): Boolean =
         promptOutcomeTracker?.recordUserFeedback(actionId, positivo) ?: false
 
-    private fun executeWithEvents(plan: PlanoExecucao, runId: String, action: () -> ResultadoCiclo): ResultadoCiclo {
+    private fun executeWithEvents(plan: PlanoExecucao, runId: String, action: (PlanoExecucao, String) -> ResultadoCiclo): ResultadoCiclo {
         emit(runId, "plan", "PlanCreated", mapOf("steps" to plan.passos.size.toString()))
-        val startedAt = System.nanoTime()
-        val result = runCatching { action() }
-            .onFailure { emit(runId, "execution", "ExecutionFailed", mapOf("error" to (it.message ?: "unknown").take(500))) }
-            .getOrThrow()
-        val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
-        promptOutcomeTracker?.let { tracker ->
-            result.passos.forEach { passo ->
-                passo.actionId?.let { actionId ->
-                    tracker.recordTechnicalOutcome(
-                        actionId = actionId,
-                        success = passo.status == StatusPasso.APROVADO,
-                        cost = passo.custo,
-                        elapsedMs = elapsedMs
-                    )
+        var currentPlan = plan
+        var attempt = 1
+        val revisionAttempts = mutableListOf<RevisionAttemptTrace>()
+        while (attempt <= MAX_EXECUTION_ATTEMPTS) {
+            val attemptRunId = "$runId:attempt-$attempt"
+            emit(runId, "execution", "AttemptStarted", mapOf("attempt" to attempt.toString(), "attemptRunId" to attemptRunId))
+            val startedAt = System.nanoTime()
+            val result = runCatching { action(currentPlan, attemptRunId) }
+                .onFailure { emit(attemptRunId, "execution", "ExecutionFailed", mapOf("error" to (it.message ?: "unknown").take(500))) }
+                .getOrThrow()
+            val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
+            promptOutcomeTracker?.let { tracker ->
+                result.passos.forEach { passo ->
+                    passo.actionId?.let { actionId ->
+                        tracker.recordTechnicalOutcome(
+                            actionId = actionId,
+                            success = passo.status == StatusPasso.APROVADO,
+                            cost = passo.custo,
+                            elapsedMs = elapsedMs
+                        )
+                    }
                 }
             }
-        }
-        val postExecution = postExecutionGate.evaluate(plan, result)
-        val finalResult = result.copy(posExecucao = postExecution)
-        emit(
-            runId,
-            "post-execution",
-            if (finalResult.aprovado) "ValidatedLearningRecorded" else "PostExecutionBlocked",
-            mapOf(
-                "verification" to postExecution.verification.status.name,
-                "critic" to postExecution.critique.status.name,
-                "revision" to postExecution.revision.action.name,
-                "readiness" to postExecution.readiness.status.name,
-                "learning" to postExecution.learningRecorded.toString()
+            val requirements = currentPlan.passos.flatMap { step ->
+                step.acceptanceCriteria.map { it.description }
+            }
+            val postExecution = postExecutionGate.evaluate(currentPlan, result, requirements)
+            val finalResult = result.copy(
+                runId = runId,
+                posExecucao = postExecution.copy(revisionAttempts = revisionAttempts.toList())
             )
-        )
-        emit(runId, "execution", if (finalResult.aprovado) "Delivered" else "ValidationFailed", mapOf("approved" to finalResult.aprovado.toString()))
-        return finalResult
+            emit(
+                attemptRunId,
+                "post-execution",
+                if (finalResult.aprovado) "ValidatedLearningRecorded" else "PostExecutionBlocked",
+                mapOf(
+                    "verification" to postExecution.verification.status.name,
+                    "critic" to postExecution.critique.status.name,
+                    "revision" to postExecution.revision.action.name,
+                    "readiness" to postExecution.readiness.status.name,
+                    "learning" to postExecution.learningRecorded.toString(),
+                    "attempt" to attempt.toString()
+                )
+            )
+            if (postExecution.revision.action != com.brain.behavior.RevisionAction.REVISE) {
+                emit(runId, "execution", if (finalResult.aprovado) "Delivered" else "ValidationFailed", mapOf("approved" to finalResult.aprovado.toString(), "attempts" to attempt.toString()))
+                return finalResult
+            }
+            if (attempt == MAX_EXECUTION_ATTEMPTS) {
+                val exhausted = finalResult.copy(posExecucao = postExecution.copy(
+                    issues = postExecution.issues + "revision.max-attempts-exceeded",
+                    revisionAttempts = revisionAttempts + RevisionAttemptTrace(attemptRunId, attempt, "ABORT", "máximo de tentativas atingido")
+                ))
+                emit(runId, "revision", "RevisionAborted", mapOf("reason" to "max-attempts", "attempts" to attempt.toString()))
+                return exhausted
+            }
+            val nextAttempt = attempt + 1
+            val fix = RevisionFixVerifyLearn(revisionFixer).apply(currentPlan, postExecution.critique, nextAttempt) { application ->
+                VerificationResult(
+                    com.brain.behavior.VerificationStatus.PASSED,
+                    listOf(com.brain.behavior.VerificationCheck("revision-fix", true, application.evidence, "${runId}:fix:$nextAttempt")),
+                    listOf("${runId}:fix:$nextAttempt")
+                )
+            }
+            if (!fix.completed) {
+                val blocked = finalResult.copy(posExecucao = postExecution.copy(
+                    issues = postExecution.issues + fix.issues.map { "revision.fix.$it" },
+                    revisionAttempts = revisionAttempts + RevisionAttemptTrace(attemptRunId, attempt, "FIX_FAILED", fix.issues.joinToString(";"))
+                ))
+                emit(runId, "revision", "RevisionFixFailed", mapOf("attempt" to attempt.toString(), "issues" to fix.issues.joinToString(";").take(500)))
+                return blocked
+            }
+            val application = requireNotNull(fix.application)
+            revisionAttempts += RevisionAttemptTrace(attemptRunId, attempt, "REVISE", application.evidence)
+            emit(runId, "revision", "FixVerifyLearnCompleted", mapOf("attempt" to attempt.toString(), "nextAttemptRunId" to "$runId:attempt-$nextAttempt", "evidence" to application.evidence.take(500)))
+            currentPlan = application.plan
+            attempt = nextAttempt
+        }
+        error("execution attempts exhausted without terminal result")
     }
+
+    private companion object { const val MAX_EXECUTION_ATTEMPTS = 3 }
 
     private fun emit(runId: String, taskId: String, type: String, payload: Map<String, String>) {
         val sequence = events.replay().size.toLong()
