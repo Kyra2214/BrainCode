@@ -68,3 +68,19 @@ Por decisão de produto registrada no commit `8b4137e`, `sandbox.code` no `Keywo
 **Não criar mais arquitetura antes de fechar as conexões existentes.**
 
 A prioridade é reduzir duplicação, aumentar wiring real, testar caminhos completos e somente depois adicionar novas abstrações.
+
+
+## Marco 2.4 — Context Engineering
+
+- [x] repository agent rules;
+- [x] INITIAL task-context template;
+- [x] PRP implementation blueprint;
+- [x] Context Engineering runtime contract;
+- [x] ContextPack propagated as typed planner input;
+- [x] external PRP/context security boundary documented;
+- [x] progressive validation model documented;
+- [ ] final focused tests;
+- [ ] full CI;
+- [ ] complete E2E journey.
+
+Validation is intentionally performed after implementation of the phase so the final verification exercises the complete change set.
