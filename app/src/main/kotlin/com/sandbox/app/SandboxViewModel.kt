@@ -631,6 +631,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     capabilityExecutors = mapOf(
                         "workspace.generate" to codeGenerationExecutor,
                         "prompt.library.generate" to promptGenerationExecutor,
+                        "prompt.library.write" to promptGenerationExecutor,
                         "sandbox.info" to webResearchExecutor,
                         "network.research" to webResearchExecutor
                     ),
