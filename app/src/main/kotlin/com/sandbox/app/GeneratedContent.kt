@@ -1,5 +1,7 @@
 package com.sandbox.app
 
+import java.util.Locale
+
 /** Tipo semântico do conteúdo produzido por um agente, independente da sua apresentação visual. */
 enum class GeneratedContentType { TEXT, CLARIFICATION, PROMPT, CODE, MARKDOWN, SCRIPT, JSON, YAML }
 
@@ -21,8 +23,23 @@ fun copyPayloadFor(content: String, type: GeneratedContentType): String = when (
         .substringBefore("\n\nTécnicas consideradas a partir da pesquisa:")
         .substringBefore("\n\nReferência da biblioteca considerada")
         .substringBefore("\n\n(Melhoria por IA não está disponível")
+        .deduplicateTechnicalBlocks()
         .trim()
     else -> content
+}
+
+/** Remove repetições do mesmo bloco técnico quando fontes antigas são concatenadas. */
+private fun String.deduplicateTechnicalBlocks(): String {
+    val labels = listOf("estilo:", "composição:", "composicao:", "iluminação:", "iluminacao:", "câmera:", "camera:", "realismo:")
+    val seen = mutableSetOf<String>()
+    return lineSequence()
+        .filter { line ->
+            val normalized = line.trim().lowercase(Locale.ROOT)
+            val isTechnical = labels.any { normalized.startsWith(it) }
+            !isTechnical || seen.add(normalized)
+        }
+        .joinToString("\n")
+        .replace(Regex("\n{3,}"), "\n\n")
 }
 
 fun detectGeneratedContentType(content: String, capability: String? = null, evidence: Iterable<String> = emptyList()): GeneratedContentType {
