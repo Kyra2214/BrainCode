@@ -1,6 +1,7 @@
 package com.brain.planner
 
 import com.brain.execution.RiskClass
+import com.brain.behavior.AcceptanceCriteria
 import com.brain.reasoning.ReasoningState
 import com.brain.router.PapelPipeline
 
@@ -28,7 +29,8 @@ data class PassoPlano(
     val papel: PapelPipeline? = null,
     val riskClass: RiskClass = RiskClass.LOW,
     val idempotent: Boolean = true,
-    val idempotencyKey: String? = null
+    val idempotencyKey: String? = null,
+    val acceptanceCriteria: List<AcceptanceCriteria> = listOf(AcceptanceCriteria("success", criterioSucesso))
 ) {
     init {
         require(id.isNotBlank()) { "id do passo não pode ser vazio" }
@@ -36,6 +38,8 @@ data class PassoPlano(
         require(criterioSucesso.isNotBlank()) { "criterioSucesso do passo não pode ser vazio" }
         require(id !in dependeDe) { "passo '$id' não pode depender de si mesmo" }
         if (!idempotent) require(!idempotencyKey.isNullOrBlank()) { "operação não idempotente exige idempotencyKey" }
+        require(acceptanceCriteria.isNotEmpty()) { "passo precisa de ao menos um acceptance criterion" }
+        require(acceptanceCriteria.map { it.id }.distinct().size == acceptanceCriteria.size) { "acceptance criteria duplicados" }
     }
 }
 
@@ -88,7 +92,8 @@ data class PlanoExecucao(
                 dependencies = passo.dependeDe.toSet(),
                 capabilities = setOf(passo.capacidade),
                 retryLimit = 0,
-                validation = passo.criterioSucesso
+                validation = passo.criterioSucesso,
+                acceptanceCriteria = passo.acceptanceCriteria
             )
         }
     }

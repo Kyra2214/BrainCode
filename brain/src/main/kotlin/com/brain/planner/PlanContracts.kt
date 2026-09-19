@@ -25,7 +25,8 @@ data class Task(
     val capabilities: Set<String> = emptySet(),
     val agent: String? = null,
     val retryLimit: Int = 0,
-    val validation: String = "success"
+    val validation: String = "success",
+    val acceptanceCriteria: List<com.brain.behavior.AcceptanceCriteria> = emptyList()
 ) {
     init {
         require(id.isNotBlank() && objective.isNotBlank()) { "Task exige id e objetivo" }
