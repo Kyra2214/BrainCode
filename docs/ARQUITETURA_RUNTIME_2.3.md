@@ -16,7 +16,7 @@ UI/ViewModel
   -> Sandbox/provider
 ```
 
-`BrainExecutionCoordinator` não possui caller de produção identificado no Android. Ele permanece apenas como infraestrutura experimental/testada até uma decisão explícita de consolidação. Não deve ser instanciado pelo app nem evoluir como um segundo pipeline.
+`BrainExecutionCoordinator` não possui caller de produção identificado no Android. Ele foi classificado como infraestrutura JVM legada, preservada somente para testes e consumidores JVM existentes. Não deve ser instanciado pelo app nem evoluir como um segundo pipeline; o código está marcado com `@Deprecated` para impedir novos usos acidentais.
 
 A regra de manutenção é: **qualquer comportamento novo do runtime Android entra no `CicloExecucaoPlano` ou em uma etapa chamada por ele; não se cria outro orquestrador.**
 
@@ -101,4 +101,4 @@ O `PlanningGate` rejeita critérios sem método de verificação. O resultado pa
 
 ## Status de implementação
 
-A documentação não declara a 2.3 pronta enquanto o CI, as jornadas E2E obrigatórias e a integração completa de revisão/correção/readiness não estiverem verdes. O Roofts 0.6 está fora deste escopo: foi validado e não deve ser modificado nesta fase.
+A documentação não declara a 2.3 pronta enquanto o CI, as jornadas E2E obrigatórias e a integração completa de revisão/correção/readiness não estiverem verdes. O CI JVM/Android está verde no HEAD; o workflow UI E2E continua pendente por falha do harness de prontidão do sandbox, com smoke tests aprovados. O Roofts 0.6 está fora deste escopo: foi validado e não deve ser modificado nesta fase.

@@ -56,6 +56,15 @@
 - [ ] preflight de release;
 - [ ] validação ARM64/emulador.
 
+### Ordem de recuperação 2.3
+
+- [x] corrigir e publicar o caminho Android de pós-execução;
+- [x] eliminar o bypass de `healthCheck` e classificar `BrainExecutionCoordinator` como legado;
+- [x] exigir método estruturado no `PlanningGate`;
+- [x] confirmar CI JVM/Android verde;
+- [ ] corrigir o harness UI E2E: as jornadas funcionais ainda falham antes do composer ficar pronto, embora os três smoke tests passem;
+- [ ] somente depois fechar as jornadas E2E e declarar readiness 2.3.
+
 ## Fora do escopo Android offline atual
 
 - servidor distribuído;
