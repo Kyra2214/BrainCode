@@ -1,5 +1,7 @@
 package com.brain.planner
 
+import com.brain.reasoning.ContextPack
+
 /** Intenção normalizada antes da decomposição; não contém executor. */
 data class Intent(
     val objective: String,
@@ -26,7 +28,9 @@ data class Task(
     val agent: String? = null,
     val retryLimit: Int = 0,
     val validation: String = "success",
-    val acceptanceCriteria: List<com.brain.behavior.AcceptanceCriteria> = emptyList()
+    val acceptanceCriteria: List<com.brain.behavior.AcceptanceCriteria> = emptyList(),
+    /** Contexto estruturado produzido pelo Brain antes da execução. */
+    val contextPack: ContextPack? = null
 ) {
     init {
         require(id.isNotBlank() && objective.isNotBlank()) { "Task exige id e objetivo" }
