@@ -51,10 +51,30 @@ data class AcceptanceCriteria(
         val target = raw.substring(separator + 1).trim()
         return VerificationMethod(kind, target).takeIf { it.isValid }
     }
+
+    fun structured(): AcceptanceCriterionContract = AcceptanceCriterionContract(
+        id = id,
+        description = description,
+        required = required,
+        verification = verificationMethod()
+            ?: error("Acceptance Criteria '$id' precisa de verification no formato tipo:alvo")
+    )
 }
 
 data class VerificationMethod(val kind: String, val target: String) {
     val isValid: Boolean get() = kind.isNotBlank() && target.isNotBlank()
+}
+
+data class AcceptanceCriterionContract(
+    val id: String,
+    val description: String,
+    val required: Boolean,
+    val verification: VerificationMethod
+) {
+    init {
+        require(id.isNotBlank() && description.isNotBlank()) { "contrato de acceptance criterion incompleto" }
+        require(verification.isValid) { "método de verificação inválido" }
+    }
 }
 
 data class VerificationResult(

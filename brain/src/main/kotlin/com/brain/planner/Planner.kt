@@ -2,6 +2,7 @@ package com.brain.planner
 
 import com.brain.execution.RiskClass
 import com.brain.behavior.AcceptanceCriteria
+import com.brain.behavior.AcceptanceCriterionContract
 import com.brain.reasoning.ReasoningState
 import com.brain.router.PapelPipeline
 
@@ -34,6 +35,9 @@ data class PassoPlano(
         AcceptanceCriteria("success", criterioSucesso, verification = "evidence:step-result")
     )
 ) {
+    val structuredAcceptanceCriteria: List<AcceptanceCriterionContract>
+        get() = acceptanceCriteria.map { it.structured() }
+
     init {
         require(id.isNotBlank()) { "id do passo não pode ser vazio" }
         require(capacidade.isNotBlank()) { "capacidade do passo não pode ser vazia" }

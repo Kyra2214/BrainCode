@@ -15,11 +15,18 @@ class AcceptanceCriteriaTest {
         val plan = PlanoExecucao("corrigir", listOf(step))
         assertEquals(criteria, plan.tasks.single().acceptanceCriteria)
         assertTrue(plan.tasks.single().acceptanceCriteria.all { it.description.isNotBlank() })
+        assertEquals("gradle", step.structuredAcceptanceCriteria.first().verification.kind)
+        assertEquals("check", step.structuredAcceptanceCriteria.first().verification.target)
     }
 
     @Test fun `criterios duplicados sao rejeitados`() {
         val criteria = listOf(AcceptanceCriteria("same", "um", verification = "test:a"), AcceptanceCriteria("same", "dois", verification = "test:b"))
         runCatching { PassoPlano("x", "cap", "sucesso", acceptanceCriteria = criteria) }
             .onSuccess { error("deveria rejeitar ids de critério duplicados") }
+    }
+
+    @Test fun `criterio sem metodo estruturado nao pode virar contrato`() {
+        val criterion = AcceptanceCriteria("build", "build passa", verification = "sem formato")
+        assertTrue(runCatching { criterion.structured() }.isFailure)
     }
 }
