@@ -66,7 +66,9 @@ data class PlanoExecucao(
     val assumptions: Set<String> = emptySet(),
     val policies: Set<String> = emptySet(),
     val fallback: String? = null,
-    val missingRequirements: List<String> = emptyList()
+    val missingRequirements: List<String> = emptyList(),
+    /** Contexto estruturado produzido antes da execução. */
+    val contextPack: com.brain.reasoning.ContextPack? = null
 ) {
     val ordemDeExecucao: List<PassoPlano>
     val requiredCapabilities: Set<String>
@@ -99,7 +101,8 @@ data class PlanoExecucao(
                 capabilities = setOf(passo.capacidade),
                 retryLimit = 0,
                 validation = passo.criterioSucesso,
-                acceptanceCriteria = passo.acceptanceCriteria
+                acceptanceCriteria = passo.acceptanceCriteria,
+                contextPack = contextPack
             )
         }
     }
