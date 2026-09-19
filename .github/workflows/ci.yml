@@ -59,7 +59,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Run all JVM/unit tests
-        run: ./gradlew test --no-daemon --stacktrace
+        run: ./gradlew :brain:test :app:testDebugUnitTest --no-daemon --stacktrace
 
       - name: Assemble Android debug APK
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
