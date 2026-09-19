@@ -48,8 +48,8 @@ jobs:
             chmod 600 "$BRAINCODE_KEYSTORE_FILE"
             echo "Using configured CI development signing key"
           else
-            rm -f "$BRAINCODE_KEYSTORE_FILE"
-            echo "Signing secrets are not configured; Android debug build will use the ephemeral default debug keystore"
+            echo "Signing secrets are not configured; refusing to publish an APK with an ephemeral debug keystore" >&2
+            exit 1
           fi
 
       - name: Validate Gradle wrapper
