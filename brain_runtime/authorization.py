@@ -5,6 +5,8 @@ from typing import Any
 
 from .modes import RuntimeMode
 
+_RUNTIME_ISSUER = object()
+
 
 class ExecutionAuthorization:
     """Capability opaca vinculada a uma instância específica de BrainPipeline.
@@ -19,7 +21,9 @@ class ExecutionAuthorization:
         raise TypeError("ExecutionAuthorization só pode ser emitida pelo runtime")
 
     @classmethod
-    def _issue(cls, pipeline: Any, mode: RuntimeMode) -> "ExecutionAuthorization":
+    def _issue(cls, pipeline: Any, mode: RuntimeMode, *, issuer: Any = None) -> "ExecutionAuthorization":
+        if issuer is not _RUNTIME_ISSUER:
+            raise ExecutionAuthorizationError("somente o RuntimeCoordinator pode emitir autorização")
         obj = object.__new__(cls)
         obj.__pipeline_identity = id(pipeline)
         obj.__mode = mode

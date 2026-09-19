@@ -12,7 +12,7 @@ from .recovery import StateReconstructor, RunState
 from .project_intelligence import ProjectScanner, ProjectSnapshot
 from .readiness import ReadinessGate, ReadinessReport
 from .modes import RuntimeMode, requirements
-from .authorization import ExecutionAuthorization
+from .authorization import ExecutionAuthorization, _RUNTIME_ISSUER
 from .api_discovery import ApiCandidate, ApiDiscovery
 
 class FaultInjected(RuntimeError): pass
@@ -39,7 +39,7 @@ class RuntimeCoordinator:
         if self.discovered_providers:
             self.events.append("runtime", "runtime", "runtime", "ProvidersDiscovered", {"count": len(self.discovered_providers), "providers": [f"{item.provider}/{item.model}" for item in self.discovered_providers]})
         self.enforce_readiness = self.requirements.require_readiness if enforce_readiness is None else enforce_readiness
-        self.execution_authorization = ExecutionAuthorization._issue(pipeline, self.mode)
+        self.execution_authorization = ExecutionAuthorization._issue(pipeline, self.mode, issuer=_RUNTIME_ISSUER)
     def _fault(self, stage: str) -> None:
         if self.fault_injector: self.fault_injector(stage)
     def run(self, objective: str, session_id: str, actor: str = "brain", cancel_event: Event | None = None, timeout_seconds: float | None = None) -> RuntimeRunResult:
