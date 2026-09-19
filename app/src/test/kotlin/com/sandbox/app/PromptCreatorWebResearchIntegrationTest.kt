@@ -65,7 +65,8 @@ class PromptCreatorWebResearchIntegrationTest {
             capabilityExecutors = mapOf(
                 "sandbox.info" to WebResearchExecutor(providerComResultado),
                 "network.research" to WebResearchExecutor(providerComResultado),
-                "prompt.library.generate" to PromptGenerationExecutor(promptLibrary = library, improver = iaIndisponivel)
+                "prompt.library.generate" to PromptGenerationExecutor(promptLibrary = library, improver = iaIndisponivel),
+                "prompt.library.write" to PromptGenerationExecutor(promptLibrary = library, improver = iaIndisponivel)
             )
         )
     }
