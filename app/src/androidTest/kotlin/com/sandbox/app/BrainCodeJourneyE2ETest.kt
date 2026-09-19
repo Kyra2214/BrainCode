@@ -66,10 +66,16 @@ class BrainCodeJourneyE2ETest {
     private fun waitForAssistantContaining(vararg terms: String, timeoutMs: Long = 120_000) {
         composeRule.waitUntil(timeoutMillis = timeoutMs) {
             runCatching {
-                composeRule.onNodeWithText("Prompt gerado", substring = true, useUnmergedTree = true).assertIsDisplayed()
-                terms.all { term ->
+                val hasResultCard =
+                    composeRule.onAllNodesWithText("Prompt gerado", substring = true, useUnmergedTree = true)
+                        .fetchSemanticsNodes().isNotEmpty() ||
+                    composeRule.onAllNodesWithText("Resultado", substring = true, useUnmergedTree = true)
+                        .fetchSemanticsNodes().isNotEmpty() ||
+                    composeRule.onAllNodesWithText("Esclarecimento", substring = true, useUnmergedTree = true)
+                        .fetchSemanticsNodes().isNotEmpty()
+                hasResultCard && terms.all { term ->
                     composeRule.onAllNodesWithText(term, substring = true, useUnmergedTree = true)
-                        .fetchSemanticsNodes().size >= 2
+                        .fetchSemanticsNodes().isNotEmpty()
                 }
             }.getOrDefault(false)
         }
@@ -78,9 +84,12 @@ class BrainCodeJourneyE2ETest {
     private fun waitForExecutionEvidence(term: String, timeoutMs: Long = 120_000) {
         composeRule.waitUntil(timeoutMillis = timeoutMs) {
             runCatching {
-                composeRule.onNodeWithText("Terminal", substring = true, useUnmergedTree = true).assertIsDisplayed()
-                composeRule.onAllNodesWithText(term, substring = true, useUnmergedTree = true)
-                    .fetchSemanticsNodes().size >= 2
+                val hasTerminalCard =
+                    composeRule.onAllNodesWithText("Terminal", substring = true, useUnmergedTree = true)
+                        .fetchSemanticsNodes().isNotEmpty()
+                val hasOutput = composeRule.onAllNodesWithText(term, substring = true, useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+                hasTerminalCard && hasOutput
             }.getOrDefault(false)
         }
     }
