@@ -41,6 +41,9 @@ fun interface PromptImprover {
      * (fakes de teste, por exemplo) que não sabem/não têm custo real a reportar.
      */
     fun custoDaUltimaMelhoria(): CostClass = CostClass.FREE
+
+    /** Implementações que fazem rede devem exigir conta autorizada; fakes/local podem rodar sem ela. */
+    fun requerContaAutorizada(): Boolean = false
 }
 
 /** Implementação padrão: delega ao BrainApiGateway (mesmo caminho de IA já usado pelo resto do app). */
@@ -80,6 +83,8 @@ class GatewayPromptImprover(private val gateway: BrainApiGateway) : PromptImprov
     }
 
     override fun custoDaUltimaMelhoria(): CostClass = ultimoCusto
+
+    override fun requerContaAutorizada(): Boolean = true
 }
 
 /** Conversão determinística de tier qualitativo para um número comparável/agregável na biblioteca. */
@@ -261,10 +266,9 @@ class PromptGenerationExecutor(
         if (!scoreInicial.abaixoDoPadrao) return EscalonamentoResultado(criado.texto, criado.origem, scoreInicial, false)
 
         // Escalonamento para IA é condicionado a uma conta explicitamente autorizada.
-        // Sem conta autorizada, o caminho permanece local e determinístico:
-        // o Brain não pode ficar bloqueado esperando rede/provedor quando o Prompt Creator
-        // local + RevisionEngine já conseguem produzir uma resposta válida.
-        val viaIa = if (authorizedAccountIds.isNotEmpty()) {
+        // Implementações de rede só podem escalar quando existe uma conta autorizada.
+        // Fakes/local continuam podendo ser usados nos testes e em integrações determinísticas.
+        val viaIa = if (!improver.requerContaAutorizada() || authorizedAccountIds.isNotEmpty()) {
             runCatching { improver.melhorar(criado.texto, pedido, scoreInicial.pontosFracos, authorizedAccountIds) }
                 .getOrNull()
                 ?.takeIf { it.isNotBlank() }
