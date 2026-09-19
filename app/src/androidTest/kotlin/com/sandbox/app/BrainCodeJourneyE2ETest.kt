@@ -42,19 +42,22 @@ class BrainCodeJourneyE2ETest {
             }
         }
 
+        // Do not wait for "Enviar" here: that button is intentionally disabled
+        // while the composer is empty. Sandbox readiness is represented by the
+        // message field becoming enabled; the test fills it only after this gate.
         composeRule.waitUntil(timeoutMillis = 120_000) {
             runCatching {
-                composeRule.onNodeWithContentDescription("Enviar")
+                composeRule.onNode(hasSetTextAction(), useUnmergedTree = true)
                     .assertIsDisplayed()
                     .assertIsEnabled()
                 true
             }.getOrDefault(false)
         }
         check(runCatching {
-            composeRule.onNodeWithContentDescription("Enviar").assertIsEnabled()
+            composeRule.onNode(hasSetTextAction(), useUnmergedTree = true).assertIsEnabled()
             true
         }.getOrDefault(false)) {
-            "Sandbox não ficou pronto no ambiente E2E; o composer permaneceu desabilitado."
+            "Sandbox não ficou pronto no ambiente E2E; o campo de mensagem permaneceu desabilitado."
         }
     }
 
