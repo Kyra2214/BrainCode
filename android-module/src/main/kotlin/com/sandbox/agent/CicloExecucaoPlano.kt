@@ -21,9 +21,13 @@ import com.brain.router.RoutingDecision
 import com.brain.router.RoutingProfile
 import com.brain.research.ResearchResult
 import com.brain.behavior.CritiqueResult
+import com.brain.behavior.CritiqueStatus
 import com.brain.behavior.ReadinessReport
+import com.brain.behavior.ReadinessStatus
 import com.brain.behavior.RevisionDecision
+import com.brain.behavior.RevisionAction
 import com.brain.behavior.VerificationResult
+import com.brain.behavior.VerificationStatus
 
 
 enum class StatusPasso { APROVADO, REPROVADO, NEGADO_PELA_POLICY, AGUARDANDO_APROVACAO, BLOQUEADO_POR_DEPENDENCIA }
@@ -71,8 +75,15 @@ data class ResultadoPosExecucao(
     val issues: List<String> = emptyList(),
     val revisionAttempts: List<RevisionAttemptTrace> = emptyList()
 ) {
-    /** Learning é um efeito posterior; não pode transformar PASS+READY em falha de conclusão. */
-    val aprovado: Boolean get() = verification.passed && critique.status.name == "PASS" && readiness.status.name == "READY"
+    /**
+     * Conclusão semântica: nenhum resultado técnico parcial pode promover a UI
+     * para READY. Learning é efeito posterior e não é requisito de aprovação,
+     * mas verification, critic, revisão e readiness precisam estar aprovados.
+     */
+    val aprovado: Boolean
+        get() = verification.status == VerificationStatus.PASSED && verification.checks.all { it.passed } &&
+            critique.status == CritiqueStatus.PASS && revision.action == RevisionAction.ACCEPT &&
+            readiness.status == ReadinessStatus.READY && readiness.stages.all { it.passed }
 }
 
 data class RevisionAttemptTrace(
