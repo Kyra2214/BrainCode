@@ -30,7 +30,9 @@ data class PassoPlano(
     val riskClass: RiskClass = RiskClass.LOW,
     val idempotent: Boolean = true,
     val idempotencyKey: String? = null,
-    val acceptanceCriteria: List<AcceptanceCriteria> = listOf(AcceptanceCriteria("success", criterioSucesso))
+    val acceptanceCriteria: List<AcceptanceCriteria> = listOf(
+        AcceptanceCriteria("success", criterioSucesso, verification = "evidence:step-result")
+    )
 ) {
     init {
         require(id.isNotBlank()) { "id do passo não pode ser vazio" }

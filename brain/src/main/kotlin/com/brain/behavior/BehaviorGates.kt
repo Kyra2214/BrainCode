@@ -19,7 +19,11 @@ class PlanningGate : BehaviorGate<PlanoExecucao, PlanoExecucao> {
         val issues = input.passos.flatMap { step ->
             when {
                 step.acceptanceCriteria.isEmpty() -> listOf(GateIssue("missing.acceptance", "passo ${step.id} não possui critérios", true))
-                else -> emptyList()
+                else -> step.acceptanceCriteria.flatMap { criterion ->
+                    if (criterion.verification.isNullOrBlank()) {
+                        listOf(GateIssue("missing.verification", "critério ${criterion.id} do passo ${step.id} não possui método de verificação", true))
+                    } else emptyList()
+                }
             }
         }
         return if (issues.isEmpty()) GateResult(GateStatus.PASSED, input)

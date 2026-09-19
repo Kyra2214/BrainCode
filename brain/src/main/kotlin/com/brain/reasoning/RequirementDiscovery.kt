@@ -68,7 +68,9 @@ class RequirementDiscovery {
     }
 
     private fun extractSubject(text: String): String? {
-        val match = Regex("(?i)\\b(?:de|sobre|com)\\s+(?:um|uma|o|a)?\\s*([^,.;]+)").find(text)
+        // “crie um prompt para um foguete...” declara o sujeito depois de
+        // “para”; sem esse marcador o RequirementGate bloqueia a jornada.
+        val match = Regex("(?i)\\b(?:de|sobre|com|para)\\s+(?:um|uma|o|a)?\\s*([^,.;]+)").find(text)
         return match?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.length >= 3 }
     }
 

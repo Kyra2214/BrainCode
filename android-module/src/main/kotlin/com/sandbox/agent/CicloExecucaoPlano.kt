@@ -20,6 +20,10 @@ import com.brain.router.DynamicFreeApiCatalog
 import com.brain.router.RoutingDecision
 import com.brain.router.RoutingProfile
 import com.brain.research.ResearchResult
+import com.brain.behavior.CritiqueResult
+import com.brain.behavior.ReadinessReport
+import com.brain.behavior.RevisionDecision
+import com.brain.behavior.VerificationResult
 
 
 enum class StatusPasso { APROVADO, REPROVADO, NEGADO_PELA_POLICY, AGUARDANDO_APROVACAO, BLOQUEADO_POR_DEPENDENCIA }
@@ -47,11 +51,23 @@ data class ResultadoPasso(
 data class ResultadoCiclo(
     val objetivo: String,
     val runId: String,
-    val passos: List<ResultadoPasso>
+    val passos: List<ResultadoPasso>,
+    val posExecucao: ResultadoPosExecucao? = null
 ) {
-    val aprovado: Boolean get() = passos.isNotEmpty() && passos.all { it.status == StatusPasso.APROVADO }
+    val aprovado: Boolean get() = passos.isNotEmpty() && passos.all { it.status == StatusPasso.APROVADO } && (posExecucao?.aprovado ?: true)
     val resposta: String? get() = passos.asSequence().mapNotNull { it.resultado }.lastOrNull()
     val researchSources: List<ResearchResult> get() = passos.flatMap { it.researchSources }.distinctBy { it.url }
+}
+
+data class ResultadoPosExecucao(
+    val verification: VerificationResult,
+    val critique: CritiqueResult,
+    val revision: RevisionDecision,
+    val readiness: ReadinessReport,
+    val learningRecorded: Boolean,
+    val issues: List<String> = emptyList()
+) {
+    val aprovado: Boolean get() = verification.passed && critique.status.name == "PASS" && readiness.status.name == "READY" && learningRecorded
 }
 
 /** Executa somente planos que já carregam autorizações por passo emitidas pelo Brain. */

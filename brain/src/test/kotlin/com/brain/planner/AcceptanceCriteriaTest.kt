@@ -9,7 +9,7 @@ class AcceptanceCriteriaTest {
     @Test fun `passo preserva criterios padrao e customizados no task`() {
         val criteria = listOf(
             AcceptanceCriteria("build", "build passa", verification = "gradle"),
-            AcceptanceCriteria("regression", "testes anteriores passam")
+            AcceptanceCriteria("regression", "testes anteriores passam", verification = "test:regression")
         )
         val step = PassoPlano("build", "build", "build passa", acceptanceCriteria = criteria)
         val plan = PlanoExecucao("corrigir", listOf(step))
@@ -18,7 +18,7 @@ class AcceptanceCriteriaTest {
     }
 
     @Test fun `criterios duplicados sao rejeitados`() {
-        val criteria = listOf(AcceptanceCriteria("same", "um"), AcceptanceCriteria("same", "dois"))
+        val criteria = listOf(AcceptanceCriteria("same", "um", verification = "test:a"), AcceptanceCriteria("same", "dois", verification = "test:b"))
         runCatching { PassoPlano("x", "cap", "sucesso", acceptanceCriteria = criteria) }
             .onSuccess { error("deveria rejeitar ids de critério duplicados") }
     }

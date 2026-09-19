@@ -18,4 +18,15 @@ class RequirementDiscoveryTest {
         assertTrue(result.dependencies.any { it.requirement == "elementos" && it.dependsOn == "sujeito" })
         assertEquals(emptyList<String>(), result.missing)
     }
+
+    @Test
+    fun `descoberta reconhece sujeito depois de para`() {
+        val result = RequirementDiscovery().discover(
+            "Crie um prompt para um foguete espacial decolando.",
+            PromptDomain.IMAGEM
+        )
+
+        assertTrue(result.slots.any { it.kind == RequirementKind.SUBJECT && it.value.contains("foguete") })
+        assertEquals(emptyList<String>(), result.missing)
+    }
 }
