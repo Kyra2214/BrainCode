@@ -54,7 +54,11 @@ class BrainApiGateway(
         val costClass: CostClass = CostClass.FREE
     )
 
-    fun complete(
+    /**
+     * API interna dos ActionExecutors. O chat/UI não pode chamar o gateway
+     * diretamente: deve despachar uma capability pelo CicloExecucaoPlano.
+     */
+    internal fun complete(
         prompt: String,
         papel: PapelPipeline = PapelPipeline.ESCRITA_DE_PROMPT,
         authorizedAccountIds: Set<String> = emptySet()
