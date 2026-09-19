@@ -133,15 +133,9 @@ O status das toolchains mostra o espaço de instalação alocado por ferramenta 
 
 ## Validação atual
 
-O CI final no commit `8188d927a4d27e467174e9e8eb942263dcf3c507` passou com:
+O baseline anterior da 2.3 no commit 8188d927a4d27e467174e9e8eb942263dcf3c507 passou por JVM/unit tests, assemble do APK debug, Android lint e upload de artefatos.
 
-- JVM/unit tests;
-- assemble do APK debug;
-- Android lint;
-- upload do APK;
-- upload dos relatórios.
-
-Artefato APK: `BrainCode-debug-apk-8188d927a4d27e467174e9e8eb942263dcf3c507`.
+Após as alterações da Fase 2.4, a validação final ainda precisa ser executada no conjunto completo: testes focados, CI e E2E. Não considerar o baseline anterior como prova das mudanças da 2.4.
 
 ## Documentação canônica
 
