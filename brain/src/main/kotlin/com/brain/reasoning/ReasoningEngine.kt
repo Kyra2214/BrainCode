@@ -28,6 +28,7 @@ data class ReasoningState(
     val dependencies: List<RequirementDependency> = emptyList()
 ) {
     val canProceedLocally: Boolean get() = missing.isEmpty()
+    val contextPack: ContextPack get() = ContextPackBuilder.from(this)
 }
 
 /** Interpretação determinística: não executa ações, não usa LLM e não inventa requisitos críticos. */
