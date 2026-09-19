@@ -2,6 +2,7 @@ package com.sandbox.app
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.fetchSemanticsNodes
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -30,39 +31,45 @@ class BrainCodeJourneyE2ETest {
 
     @Before
     fun requireSandboxForJourney() {
-        val prepare = runCatching {
-            composeRule.onNodeWithText("Preparar sandbox", substring = true, useUnmergedTree = true)
-        }.getOrNull()
-        if (prepare != null) runCatching { prepare.performClick() }
-        val ready = runCatching {
-            composeRule.waitUntil(timeoutMillis = 90_000) {
-                runCatching {
-                    composeRule.onNodeWithContentDescription("Enviar")
-                        .assertIsDisplayed()
-                        .assertIsEnabled()
-                    true
-                }.getOrDefault(false)
-            }
-            true
-        }.getOrDefault(false)
-        if (!ready) {
-            runCatching {
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            composeRule.onAllNodesWithText("Preparar sandbox", substring = true, useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty() ||
+                composeRule.onAllNodesWithText("Tentar de novo", substring = true, useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty() ||
+                composeRule.onAllNodesWithText("Sandbox pronto", substring = true, useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+        }
+
+        val prepare = composeRule.onAllNodesWithText("Preparar sandbox", substring = true, useUnmergedTree = true)
+            .fetchSemanticsNodes()
+        if (prepare.isNotEmpty()) {
+            composeRule.onNodeWithText("Preparar sandbox", substring = true, useUnmergedTree = true).performClick()
+        } else {
+            val retry = composeRule.onAllNodesWithText("Tentar de novo", substring = true, useUnmergedTree = true)
+                .fetchSemanticsNodes()
+            if (retry.isNotEmpty()) {
                 composeRule.onNodeWithText("Tentar de novo", substring = true, useUnmergedTree = true).performClick()
-                composeRule.waitUntil(timeoutMillis = 90_000) {
-                    runCatching {
-                        composeRule.onNodeWithContentDescription("Enviar")
-                            .assertIsDisplayed()
-                            .assertIsEnabled()
-                        true
-                    }.getOrDefault(false)
-                }
             }
         }
-        val readyAfterRetry = runCatching {
-            composeRule.onNodeWithContentDescription("Enviar").assertIsDisplayed().assertIsEnabled()
-            true
-        }.getOrDefault(false)
-        check(ready || readyAfterRetry) { "Sandbox não ficou pronto no ambiente E2E; jornada funcional não pode ser ignorada." }
+
+        composeRule.waitUntil(timeoutMillis = 120_000) {
+            composeRule.onAllNodesWithText("Sandbox pronto", substring = true, useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty() ||
+                composeRule.onAllNodesWithText("Bloqueado:", substring = true, useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+        }
+        check(composeRule.onAllNodesWithText("Sandbox pronto", substring = true, useUnmergedTree = true)
+            .fetchSemanticsNodes().isNotEmpty()) {
+            "Sandbox não ficou pronto no ambiente E2E; a UI exibiu um estado bloqueado."
+        }
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            runCatching {
+                composeRule.onNodeWithContentDescription("Enviar")
+                    .assertIsDisplayed()
+                    .assertIsEnabled()
+                true
+            }.getOrDefault(false)
+        }
     }
 
     private fun send(text: String) {
