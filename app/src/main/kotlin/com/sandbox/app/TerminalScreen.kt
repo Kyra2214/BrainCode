@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -18,25 +19,52 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 
 @Composable
 fun TerminalScreen(viewModel: SandboxViewModel, onBack: () -> Unit) {
     val listState = rememberLazyListState()
     val history = viewModel.terminalHistory
     val tailLength = history.lastOrNull()?.output?.length ?: 0
+    val clipboard = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
+    var unseenOutput by remember { mutableStateOf(false) }
+    val nearBottom by remember {
+        derivedStateOf {
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.maxOfOrNull { it.index } ?: -1
+            history.isEmpty() || lastVisible >= history.lastIndex - 1
+        }
+    }
 
     LaunchedEffect(history.size, tailLength) {
         if (history.isNotEmpty()) {
-            val visible = listState.layoutInfo.visibleItemsInfo
-            val lastVisible = visible.maxOfOrNull { it.index } ?: -1
-            if (lastVisible >= history.lastIndex - 1 || visible.isEmpty()) {
+            if (nearBottom || listState.layoutInfo.visibleItemsInfo.isEmpty()) {
                 listState.animateScrollToItem(history.lastIndex)
+                unseenOutput = false
+            } else {
+                unseenOutput = true
             }
         }
     }
+
+    fun copy(text: String) {
+        clipboard.setText(AnnotatedString(text))
+    }
+
+    fun copyCommand(entry: TerminalEntry) = copy(entry.command)
+    fun copyOutput(entry: TerminalEntry) = copy(entry.output)
+    fun copyEntry(entry: TerminalEntry) = copy("$ ${entry.command}\n${entry.output}")
 
     Column(modifier = Modifier.fillMaxSize().imePadding().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -44,6 +72,14 @@ fun TerminalScreen(viewModel: SandboxViewModel, onBack: () -> Unit) {
             OutlinedButton(onClick = onBack) { Text("Voltar") }
         }
         Text("Console do RootFS · /home/sandbox", style = MaterialTheme.typography.bodySmall)
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = { if (history.isNotEmpty()) scope.launch { listState.animateScrollToItem(0); unseenOutput = false } }) { Text("Início") }
+            TextButton(onClick = { if (history.isNotEmpty()) scope.launch { listState.animateScrollToItem(history.lastIndex); unseenOutput = false } }) { Text("Fim") }
+            if (unseenOutput) {
+                Button(onClick = { unseenOutput = false }) { Text("↓ Nova saída") }
+            }
+        }
 
         LazyColumn(
             state = listState,
@@ -53,9 +89,18 @@ fun TerminalScreen(viewModel: SandboxViewModel, onBack: () -> Unit) {
             items(history, key = { entry -> "${entry.command}:${entry.hashCode()}" }) { entry ->
                 SelectionContainer {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        Text("sandbox:~$ ${entry.command}", fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.primary)
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            Text("sandbox:~$ ${entry.command}", fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                            TextButton(onClick = { copyCommand(entry) }) { Text("Comando") }
+                        }
                         if (entry.output.isNotEmpty()) {
-                            Text(entry.output, fontFamily = FontFamily.Monospace)
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                Text(entry.output, fontFamily = FontFamily.Monospace, modifier = Modifier.weight(1f))
+                                Column {
+                                    TextButton(onClick = { copyOutput(entry) }) { Text("Saída") }
+                                    TextButton(onClick = { copyEntry(entry) }) { Text("Tudo") }
+                                }
+                            }
                         } else if (entry.running) {
                             Text("▌", fontFamily = FontFamily.Monospace)
                         }

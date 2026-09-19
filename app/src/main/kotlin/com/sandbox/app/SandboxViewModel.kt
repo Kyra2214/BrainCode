@@ -428,7 +428,9 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     fun clearTerminal() { commandInput = ""; lastResult = null; lastExecution = null; liveTerminalOutput = ""; terminalHistory = emptyList(); commandHistory = emptyList(); commandHistoryCursor = 0 }
     private fun appendTerminalOutput(chunk: String) {
         terminalHistory.lastOrNull()?.let { entry ->
-            terminalHistory = terminalHistory.dropLast(1) + entry.copy(output = (entry.output + chunk).takeLast(12000))
+            // O scrollback é a evidência da execução. A UI controla a janela
+            // visível, mas nunca deve descartar o começo de uma saída longa.
+            terminalHistory = terminalHistory.dropLast(1) + entry.copy(output = entry.output + chunk)
         }
     }
     fun recallPreviousCommand() {
@@ -662,7 +664,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     active.execute(listOf("/bin/bash", "-c", command), 60, "/home/sandbox", onOutput = { line, stderr ->
                         viewModelScope.launch {
                             val chunk = if (stderr) "[stderr] $line\n" else "$line\n"
-                            liveTerminalOutput = (liveTerminalOutput + chunk).takeLast(12000)
+                            liveTerminalOutput += chunk
                             appendTerminalOutput(chunk)
                         }
                     })
@@ -673,7 +675,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 val finalOutput = buildString {
                     if (e.stdout.isNotBlank()) append(e.stdout)
                     if (e.stderr.isNotBlank()) { if (isNotEmpty()) append('\n'); append("[stderr] "); append(e.stderr) }
-                }.takeLast(12000)
+                }
                 terminalHistory.lastOrNull()?.let { entry -> terminalHistory = terminalHistory.dropLast(1) + entry.copy(output = finalOutput, exitCode = e.exitCode, running = false) }
             } else {
                 terminalHistory.lastOrNull()?.let { entry -> terminalHistory = terminalHistory.dropLast(1) + entry.copy(output = "Comando falhou ao executar.\n", running = false) }
