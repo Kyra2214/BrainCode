@@ -235,8 +235,11 @@ private fun ThreadTopBar(viewModel: SandboxViewModel, searchOpen: Boolean, onTog
                 Text("BrainCode", style = MaterialTheme.typography.titleLarge, maxLines = 1)
                 Text("Converse. Execute. Comprove.", style = MaterialTheme.typography.bodySmall, maxLines = 1)
             }
-            val phaseColor = if (viewModel.phase is SandboxPhase.Blocked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-            Surface(color = MaterialTheme.colorScheme.surfaceVariant, contentColor = phaseColor, shape = MaterialTheme.shapes.small) { Text(phaseLabel(viewModel.phase), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)) }
+            val phaseColor = if (viewModel.phase is SandboxPhase.Blocked || viewModel.brainUiStage in setOf(BrainUiStage.BLOCKED, BrainUiStage.FAILED)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+            Column(horizontalAlignment = Alignment.End) {
+                Surface(color = MaterialTheme.colorScheme.surfaceVariant, contentColor = phaseColor, shape = MaterialTheme.shapes.small) { Text(phaseLabel(viewModel.phase), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)) }
+                Text(brainStageLabel(viewModel.brainUiStage), style = MaterialTheme.typography.labelSmall, color = phaseColor)
+            }
             IconButton(onClick = onSearch) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, contentDescription = if (searchOpen) "Fechar busca" else "Buscar") }
             TextButton(onClick = onOpenTerminal) { Text("Terminal") }
             IconButton(onClick = onClearChat) { Icon(Icons.Default.Delete, contentDescription = "Limpar chat") }
@@ -262,6 +265,21 @@ private fun TaskSidebar(viewModel: SandboxViewModel, onClose: () -> Unit) {
             }
         }
     }
+}
+
+private fun brainStageLabel(stage: BrainUiStage): String = when (stage) {
+    BrainUiStage.IDLE -> "Aguardando"
+    BrainUiStage.PLANEJANDO -> "PLANEJANDO"
+    BrainUiStage.EXECUTANDO -> "EXECUTANDO"
+    BrainUiStage.VERIFICANDO -> "VERIFICANDO"
+    BrainUiStage.CRITICANDO -> "CRITICANDO"
+    BrainUiStage.REVISE -> "REVISE"
+    BrainUiStage.CORRIGINDO -> "CORRIGINDO"
+    BrainUiStage.REEXECUTANDO -> "REEXECUTANDO"
+    BrainUiStage.PASS -> "PASS"
+    BrainUiStage.BLOCKED -> "BLOCKED"
+    BrainUiStage.FAILED -> "FAILED"
+    BrainUiStage.READY -> "READY"
 }
 
 private fun phaseLabel(phase: SandboxPhase): String = when (phase) {

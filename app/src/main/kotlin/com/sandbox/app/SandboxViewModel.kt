@@ -43,6 +43,7 @@ import com.sandbox.sandbox.BuiltInServices
 import java.io.File
 import com.sandbox.runtime.NamespaceSupport
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.brain.research.ResearchResult
@@ -78,6 +79,11 @@ data class ChatMessage(
 )
 
 enum class SessionStatus { IDLE, RUNNING, AWAITING_APPROVAL, DONE, FAILED, BLOCKED }
+
+enum class BrainUiStage {
+    IDLE, PLANEJANDO, EXECUTANDO, VERIFICANDO, CRITICANDO, REVISE,
+    CORRIGINDO, REEXECUTANDO, PASS, BLOCKED, FAILED, READY
+}
 
 data class ThreadSession(
     val id: String,
@@ -166,6 +172,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     private val conversationContextEngine = ConversationContextEngine()
     var chatInput by mutableStateOf("")
     var chatRunning by mutableStateOf(false); private set
+    var brainUiStage by mutableStateOf(BrainUiStage.IDLE); private set
+    private var chatJob: Job? = null
 
     private val apiKeyStore = ApiKeyStore(application)
     val apiProviders: List<ApiProvider> = runCatching { ApiKeyCatalogLoader.load(application) }.getOrElse { emptyList() }
@@ -700,17 +708,19 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     /** Regra estrutural: a conversa Android entra no Brain; nenhum executor local é chamado pelo chat. */
     fun sendChatMessage() {
         val prompt = chatInput.trim(); if (prompt.isEmpty() || chatRunning) return
-        chatMessages.add(ChatMessage(ChatRole.USER, prompt)); chatInput = ""; chatRunning = true
+        chatMessages.add(ChatMessage(ChatRole.USER, prompt)); chatInput = ""; chatRunning = true; brainUiStage = BrainUiStage.PLANEJANDO
         appendThreadEvent(ThreadEvent.User(prompt))
-        viewModelScope.launch {
+        chatJob = viewModelScope.launch {
             val response = withContext(Dispatchers.IO) {
                 runCatching {
                     val controller = brainController
                     if (controller != null && phase == SandboxPhase.Ready) {
                         val resolved = resolveConversation(prompt)
+                        brainUiStage = BrainUiStage.EXECUTANDO
                         val cycle = controller.executeObjective(resolved.toBrainObjective(), "chat-${System.currentTimeMillis()}") { passo ->
                             viewModelScope.launch(Dispatchers.Main.immediate) { publishStep(passo) }
                         }
+                        withContext(Dispatchers.Main.immediate) { publishCycleStages(cycle) }
                         val promptActionId = cycle.passos.firstOrNull { it.capacidade == "prompt.library.write" }?.actionId
                         val content = cycle.resposta ?: "Plano concluído: ${cycle.aprovado}"
                         val capability = cycle.passos.lastOrNull { it.resultado != null }?.capacidade
@@ -723,6 +733,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     .getOrElse { ChatMessage(ChatRole.ERROR, "Brain não conseguiu responder: ${it.message ?: it.javaClass.simpleName}") }
             }
             chatMessages.add(response); chatRunning = false
+            if (response.role == ChatRole.ERROR) brainUiStage = BrainUiStage.FAILED
+            else if (brainUiStage !in setOf(BrainUiStage.REVISE, BrainUiStage.CORRIGINDO, BrainUiStage.REEXECUTANDO)) brainUiStage = BrainUiStage.READY
             appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content, response.promptActionId, response.contentType, response.researchSources, response.validationWarning) else ThreadEvent.System(response.content))
         }
     }
@@ -794,8 +806,32 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     private fun com.brain.research.ResearchResult.toUiSource() = ResearchSourceUi(title, source, url, relevantContent.take(240))
 
     private fun publishStep(passo: ResultadoPasso) {
+        brainUiStage = when (passo.status) {
+            com.sandbox.agent.StatusPasso.AGUARDANDO_APROVACAO, com.sandbox.agent.StatusPasso.NEGADO_PELA_POLICY, com.sandbox.agent.StatusPasso.BLOQUEADO_POR_DEPENDENCIA -> BrainUiStage.BLOCKED
+            com.sandbox.agent.StatusPasso.REPROVADO -> BrainUiStage.FAILED
+            com.sandbox.agent.StatusPasso.APROVADO -> BrainUiStage.EXECUTANDO
+        }
         val message = "${passo.passoId}: ${passo.status.name}${passo.motivo?.let { " — $it" } ?: ""}"
         chatMessages.add(ChatMessage(ChatRole.STEP, message))
+    }
+    private fun publishCycleStages(cycle: ResultadoCiclo) {
+        val post = cycle.posExecucao ?: run {
+            if (!cycle.aprovado && brainUiStage != BrainUiStage.BLOCKED) brainUiStage = BrainUiStage.FAILED
+            return
+        }
+        fun stage(stage: BrainUiStage, text: String) {
+            brainUiStage = stage
+            chatMessages.add(ChatMessage(ChatRole.STEP, text))
+            appendThreadEvent(ThreadEvent.System(text))
+        }
+        stage(BrainUiStage.VERIFICANDO, "VERIFICANDO — ${post.verification.status.name}")
+        stage(BrainUiStage.CRITICANDO, "CRITICANDO — ${post.critique.status.name}")
+        if (post.revision.action == com.brain.behavior.RevisionAction.REVISE) {
+            stage(BrainUiStage.REVISE, "REVISE — ${post.revision.reason}")
+            stage(BrainUiStage.CORRIGINDO, "CORRIGINDO — ${post.revision.targetCriteria.joinToString().ifBlank { "critérios do Brain" }}")
+            if (post.revisionAttempts.isNotEmpty()) stage(BrainUiStage.REEXECUTANDO, "REEXECUTANDO — ${post.revisionAttempts.size} tentativa(s)")
+        }
+        stage(if (post.aprovado) BrainUiStage.READY else BrainUiStage.FAILED, if (post.aprovado) "READY" else "FAILED")
     }
     fun clearChat() { chatMessages.clear() }
 
@@ -808,7 +844,11 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         apiKeyTestState[providerId] = ApiKeyTestUiState.Testing
         viewModelScope.launch { val o = withContext(Dispatchers.IO) { ApiKeyTester.test(model.endpoint, model.id, key) }; apiKeyTestState[providerId] = when (o) { is ApiKeyTestOutcome.Success -> ApiKeyTestUiState.Success("Chave OK — HTTP ${o.statusCode} em ${o.latencyMs} ms"); is ApiKeyTestOutcome.Failure -> ApiKeyTestUiState.Failure(o.message) } }
     }
-    fun cancelCommand() { viewModelScope.launch(Dispatchers.IO) { runtime?.cancel() } }
+    fun cancelCommand() {
+        chatJob?.cancel(); chatJob = null
+        if (chatRunning) { chatRunning = false; brainUiStage = BrainUiStage.FAILED; appendThreadEvent(ThreadEvent.System("Execução cancelada pelo usuário.")) }
+        viewModelScope.launch(Dispatchers.IO) { runtime?.cancel() }
+    }
     fun runBrainHealthCheck() {
         val c = brainController ?: run { appendThreadEvent(ThreadEvent.System("Verificação indisponível: Brain ainda não inicializado.")); return }
         if (phase != SandboxPhase.Ready) { appendThreadEvent(ThreadEvent.System("Verificação indisponível: sandbox ocupado.")); return }
