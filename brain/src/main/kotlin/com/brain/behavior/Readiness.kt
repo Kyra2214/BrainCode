@@ -26,7 +26,15 @@ data class ReadinessInput(
     val kind: WorkKind,
     val completed: Map<ReadinessStageName, Boolean>,
     val evidence: Map<ReadinessStageName, List<String>> = emptyMap()
-)
+) {
+    init {
+        val ids = evidence.values.flatten()
+        require(ids.all { it.isNotBlank() }) { "evidência de readiness não pode ter ID vazio" }
+        require(ids.size == ids.distinct().size) {
+            "cada estágio de readiness precisa de evidência própria; IDs não podem ser reutilizados"
+        }
+    }
+}
 
 class ReadinessEvaluator {
     fun evaluate(input: ReadinessInput): ReadinessReport {

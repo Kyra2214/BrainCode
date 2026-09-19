@@ -72,19 +72,26 @@ class PostExecutionGate(private val memory: LayeredMemory) {
         )
         val critique: CritiqueResult = critic.evaluate(critiqueInput)
         val revision: RevisionDecision = review.review(critiqueInput, critique)
-        val completedEvidence = evidence.map { it.id }
         val completed = mapOf(
-            ReadinessStageName.IMPLEMENTATION to cycle.aprovado,
+            ReadinessStageName.IMPLEMENTATION to cycle.passos.isNotEmpty() && cycle.passos.all { it.status == StatusPasso.APROVADO },
             ReadinessStageName.TESTS to verification.passed,
             ReadinessStageName.QA to (critique.status == com.brain.behavior.CritiqueStatus.PASS),
-            ReadinessStageName.SECURITY to cycle.passos.all { it.decisaoPolicy != null },
-            ReadinessStageName.ARCHITECTURE to true,
-            ReadinessStageName.REGRESSION to true,
-            ReadinessStageName.RELEASE to true
+            ReadinessStageName.SECURITY to cycle.passos.isNotEmpty() && cycle.passos.all { it.decisaoPolicy?.decision?.name == "ALLOW" },
+            ReadinessStageName.ARCHITECTURE to plan.passos.isNotEmpty() && plan.passos.all { it.id.isNotBlank() && it.capacidade.isNotBlank() },
+            ReadinessStageName.REGRESSION to verification.passed && cycle.passos.isNotEmpty() && cycle.passos.all { it.status == StatusPasso.APROVADO },
+            ReadinessStageName.RELEASE to verification.passed && critique.status == com.brain.behavior.CritiqueStatus.PASS
         )
-        val evidenceByStage = ReadinessStageName.entries.associateWith { stage ->
-            completedEvidence.map { "$it:${stage.name.lowercase()}" }
-        }
+        fun ownEvidence(stage: ReadinessStageName, ids: List<String>, enabled: Boolean): List<String> =
+            if (enabled) ids.map { id -> "${cycle.runId}:readiness:${stage.name.lowercase()}:$id" } else emptyList()
+        val evidenceByStage = mapOf(
+            ReadinessStageName.IMPLEMENTATION to ownEvidence(ReadinessStageName.IMPLEMENTATION, cycle.passos.map { "step:${it.passoId}" }, completed.getValue(ReadinessStageName.IMPLEMENTATION)),
+            ReadinessStageName.TESTS to ownEvidence(ReadinessStageName.TESTS, verification.checks.filter { it.passed }.map { "criterion:${it.criterionId}" }, completed.getValue(ReadinessStageName.TESTS)),
+            ReadinessStageName.QA to ownEvidence(ReadinessStageName.QA, listOf("critic:pass"), completed.getValue(ReadinessStageName.QA)),
+            ReadinessStageName.SECURITY to ownEvidence(ReadinessStageName.SECURITY, cycle.passos.map { "policy:${it.passoId}" }, completed.getValue(ReadinessStageName.SECURITY)),
+            ReadinessStageName.ARCHITECTURE to ownEvidence(ReadinessStageName.ARCHITECTURE, listOf("plan:${plan.passos.joinToString(",") { it.id }}"), completed.getValue(ReadinessStageName.ARCHITECTURE)),
+            ReadinessStageName.REGRESSION to ownEvidence(ReadinessStageName.REGRESSION, listOf("verification:${verification.status.name.lowercase()}"), completed.getValue(ReadinessStageName.REGRESSION)),
+            ReadinessStageName.RELEASE to ownEvidence(ReadinessStageName.RELEASE, listOf("gate:${verification.status.name.lowercase()}:${critique.status.name.lowercase()}"), completed.getValue(ReadinessStageName.RELEASE))
+        )
         val readinessReport = readiness.evaluate(ReadinessInput(com.brain.behavior.WorkKind.EXECUTION, completed, evidenceByStage))
         val learningRecorded = if (verification.passed && critique.status == com.brain.behavior.CritiqueStatus.PASS && readinessReport.status == com.brain.behavior.ReadinessStatus.READY) {
             learning.record(

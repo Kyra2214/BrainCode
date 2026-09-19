@@ -27,4 +27,11 @@ class ReadinessTest {
         assertEquals(ReadinessStatus.READY, report.status)
         assertTrue(report.blockers.isEmpty())
     }
+
+    @Test fun `readiness rejeita evidencia compartilhada entre estagios`() {
+        val completed = ReadinessStageName.entries.associateWith { true }
+        val evidence = ReadinessStageName.entries.associateWith { listOf("evidence:shared") }
+        val failure = runCatching { ReadinessInput(WorkKind.EXECUTION, completed, evidence) }
+        assertTrue(failure.isFailure)
+    }
 }
