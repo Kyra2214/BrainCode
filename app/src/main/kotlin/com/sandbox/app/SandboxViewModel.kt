@@ -638,8 +638,19 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     events = FileEventStore(File(dir, "brain/chat-events.jsonl"))
                 )
                 brainIntegration = BrainIntegrationFacade(getApplication(), File(dir, "brain"))
-                pluginListVersion++; refreshStatusCache(); refreshPluginAudit(); phase = SandboxPhase.Ready; refreshToolchains()
-            } catch (e: Exception) { runtime = null; phase = SandboxPhase.Blocked(e.message ?: "Falha ao preparar o runtime") }
+                pluginListVersion++
+                // O modo E2E usa um runtime determinístico e não deve depender de
+                // toolchains/plugins/estado persistente para habilitar o composer.
+                if (!BuildConfig.E2E_FAKE_ROOTFS) {
+                    refreshStatusCache()
+                    refreshPluginAudit()
+                    refreshToolchains()
+                }
+                phase = SandboxPhase.Ready
+            } catch (e: Exception) {
+                runtime = null
+                phase = SandboxPhase.Blocked(e.message ?: "Falha ao preparar o runtime")
+            }
         }
     }
 
