@@ -1,60 +1,40 @@
 # BrainCode — Legado e Decisões
 
-## Objetivo
+## Decisões atuais
 
-Impedir que documentação histórica seja confundida com arquitetura atual.
+BrainCode não depende de LLM local baixado para o Chat.
+Agents são bounded.
+Capability é a unidade autorizável.
+Discovery não autoriza.
+Policy não executa.
+ActionGateway é a fronteira de execução.
+Android usa BrainSandboxController → BrainSandboxExecutionBridge → CicloExecucaoPlano.
+ResultadoCiclo.aprovado depende do pós-ciclo completo.
+ContextPack é dado tipado; contexto externo não possui autoridade.
+Roofts 0.3–0.5 são preservados; Roofts 0.6 está instalado mas não é runtime de Skills.
+Projetos externos não viram dependências automaticamente.
 
-## Removido nesta limpeza
+## Legado
 
-### Referência IaBrain
+BrainExecutionCoordinator existe no JVM, é deprecated e não deve virar segundo pipeline Android.
 
-Foram removidos os snapshots copiados do IaBrain em `reference/iabrain/skills-tools/`, incluindo:
+Documentos FASE_*, auditorias 2.3, mapas de integração e relatórios datados são históricos. Eles explicam a evolução e podem conter estados anteriores; não definem o estado atual quando divergirem.
 
-- catálogos JSON;
-- schemas Room;
-- AppDatabase/Entities/DAOs;
-- resolvers e parser de comandos;
-- IACapabilityRegistry original;
-- ExecutionSecurityPolicy original;
-- testes e validador específico.
+brain_runtime/ e reference/braincode-python/ são implementação/referência Python existente, não o caminho Android automático.
 
-Motivo: os conceitos úteis já foram adaptados para os contratos nativos do BrainCode. Manter o código original aumentava duplicação e dava aparência de integração que não existe.
+## Não adotado
 
-### Arquitetura local LLM
+Snapshots IaBrain como segundo banco/arquitetura.
+LLM local como cérebro obrigatório.
+Agents autônomos com objetivo próprio.
+Execução fora de Policy/Gateway/Sandbox.
+Segundo Registry/Router/Memory/Gateway para a mesma responsabilidade.
+Importação de código externo apenas por existir em reference/.
 
-O produto não usa um engine/LLM local baixado como cérebro do Chat. A documentação antiga que descrevia esse caminho não é válida para o estado atual.
+## Regra de remoção
 
-### Agent autônomo
-
-O modelo atual é Agent bounded. Um Agent não possui objetivo próprio nem LLM obrigatório. Ele executa uma missão delimitada pelas capabilities e pela policy.
-
-## Preservado
-
-Nenhum código atual do runtime foi removido nesta limpeza por estar simplesmente "órfão" ou por não aparecer no fluxo principal.
-
-Componentes atuais somente devem ser removidos com confirmação específica ou quando forem claramente identificados como legado de uma arquitetura já descartada.
-
-## Conceitos externos adotados
-
-Projetos externos serviram como inspiração para:
-
-- capability registry/discovery;
-- policy e governança;
-- agentes reutilizáveis e bounded;
-- skills;
-- conhecimento persistente/proveniência;
-- workflows e jobs.
-
-Nenhum projeto externo é dependência arquitetural do BrainCode.
-
-## Regra para futuras auditorias
-
-Classificar cada componente como:
-
-- **ATUAL** — usado ou parte explícita do contrato atual;
-- **PARCIAL** — existe, mas falta wiring/evidência;
-- **LEGADO** — pertence a uma arquitetura descartada;
-- **REFERÊNCIA** — documentação externa sem papel no runtime;
-- **DÚVIDA** — não remover sem confirmação.
-
-Somente **LEGADO** pode ser removido automaticamente nesta classe de limpeza. **DÚVIDA** exige confirmação.
+ATUAL = preservar.
+PARCIAL = integrar ou registrar backlog.
+LEGADO = remoção somente em mudança explícita.
+REFERÊNCIA = preservar como referência.
+DÚVIDA = não remover sem confirmação.
