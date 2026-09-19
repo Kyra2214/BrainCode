@@ -39,6 +39,7 @@ import com.brain.retrieval.RetrievalQuery
 import com.brain.reasoning.ReasoningEngine
 import com.brain.behavior.PlanningGate
 import com.brain.behavior.RequirementGate
+import com.brain.behavior.VerificationResult
 import com.brain.reasoning.TaskState
 import com.brain.execution.OperationalState
 import com.brain.execution.Observation
