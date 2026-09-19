@@ -132,7 +132,8 @@ class AndroidSandboxFactory(private val context: Context) {
 
     private fun rootfsExtractionValid(): Boolean =
         extractedRootfsDir.exists() && !extractedRootfsDir.list().isNullOrEmpty() &&
-            extractionMarker.readTextOrNull() == EXTRACTOR_VERSION && hasRequiredRootfsEntries()
+            hasRequiredRootfsEntries() &&
+            (extractionMarker.readTextOrNull()?.isNotBlank() == true || downloadedArchives.none { it.exists() })
 
     private fun deleteDownloadedArchives() = downloadedArchives.forEach { SandboxResourceManager(it).purge() }
 
