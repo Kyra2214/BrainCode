@@ -1,160 +1,94 @@
 # BrainCode — Arquitetura Atual
 
-**Fonte canônica da arquitetura.** Atualizada após a consolidação do BrainCode 2.0.
+Fonte canônica do runtime atual após a consolidação 2.3 e a implementação 2.4 de Context Engineering.
 
-## 1. Responsabilidades
+## 1. Fluxo universal
 
-| Componente | Responsabilidade | Não deve fazer |
-|---|---|---|
-| Chat | Conversar com o usuário | Escolher provider ou executar comando bruto |
-| Brain | Interpretar, decidir, planejar e orquestrar | Executar shell arbitrário |
-| Memory | Recuperar conhecimento validado | Promover candidato sem validação |
-| Capability Registry | Registrar capacidades disponíveis | Executar capacidades |
-| Capability Discovery | Encontrar candidatos adequados | Autorizar execução |
-| PolicyBroker | Decidir se uma ação pode ocorrer | Ser executor |
-| ActionGateway | Abrir a fronteira controlada de execução | Aceitar comando bruto |
-| Agent | Executar uma missão delimitada | Criar objetivo próprio ou possuir LLM próprio |
-| Skill | Encapsular procedimento reutilizável | Bypassar Policy/Gateway |
-| Tool/API | Fornecer capacidade específica | Tornar-se o cérebro |
-| Sandbox | Isolar/controlar execução | Decidir o objetivo do usuário |
-| Evidence/Event | Registrar resultado e proveniência | Ser tratado automaticamente como verdade |
-| Critic | Validar resultado | Substituir o executor |
+INTENT → REQUIREMENTS/AMBIGUITY → CONTEXT PACK → PLAN/ACCEPTANCE → CAPABILITY DISCOVERY → POLICY/APPROVAL → ACTION GATEWAY → EXECUTION/SANDBOX/PROVIDER → EVIDENCE/EVENTS → VERIFICATION → UNIVERSAL CRITIC → REVISION/FIX/REEXECUTION → READINESS/DoD → VALIDATED LEARNING → RESPONSE.
 
-## 2. Modelo universal de capacidade
+E2E é a camada de prova desse ciclo. Cada estágio relevante deve produzir estado verificável e evidência.
 
-A unidade comum de integração é `CapabilityDefinition` em `:brain`.
+## 2. Fronteiras
 
-Uma capability descreve, entre outros atributos:
+UI/Chat coleta intenção e mostra estado; não executa provider diretamente.
+SandboxViewModel adapta UI ao runtime; não autoriza capability.
+BrainSandboxController é a entrada Android do Brain: reasoning, gates, planner, workflow e pós-execução.
+ReasoningEngine produz intenção, requisitos, assumptions e ContextPack.
+ContextPack é contexto compacto e imutável; não concede permissão.
+Planner produz PlanoExecucao; não autoriza nem executa.
+CapabilityRegistry registra capacidades.
+CapabilityDiscovery encontra candidatos.
+PolicyBroker autoriza ou bloqueia.
+Dispatcher resolve a capability.
+ActionGateway é a fronteira central de execução.
+CicloExecucaoPlano executa somente AuthorizedPlan.
+Sandbox/Provider/Agent/Tool implementam capacidades autorizadas.
+PostExecutionGate fecha Verification, Critic, Revision, Readiness e Learning.
+EventStore/BehaviorTrace registram observabilidade e replay.
+Memory mantém contexto, experiência e conhecimento validado.
 
-- identidade e descrição;
-- categoria;
-- owner/provedor;
-- parâmetros e schema;
-- capacidades requeridas/fornecidas;
-- permissões e risco;
-- custo/latência;
-- disponibilidade/status;
-- suporte a código, arquivos, web e raciocínio;
-- confiabilidade;
-- proveniência e versão.
+## 3. Plano e contexto
 
-Uma capability pode ser fornecida por API, provider, Agent, Skill, Tool, Command, Sandbox, Workflow ou componente interno.
+PlanoExecucao contém objetivo, passos, assumptions, policies, fallback, requisitos ausentes e ContextPack opcional.
+PassoPlano contém capability, parâmetros, dependências, risco, idempotência e acceptance criteria.
 
-## 3. Descoberta
+Caminho do contexto:
+ReasoningEngine → ReasoningState.contextPack → Planner → PlanoExecucao.contextPack → Task.contextPack → contexto de execução.
 
-```text
-CapabilityRegistry
-       ↓
-CapabilityDiscovery
-       ↓
-CapabilityCandidate(score, reasons)
-```
+O histórico completo não deve ser carregado indiscriminadamente.
 
-O discovery compara requisitos da tarefa com capacidades disponíveis. Qualidade, custo, latência, disponibilidade e contexto são fatores de seleção, não ordens absolutas.
+## 4. Caminho Android
 
-## 4. Autorização
+SandboxViewModel.submitThreadInput
+→ sendChatMessage
+→ ConversationContextEngine
+→ BrainSandboxController.executeObjective
+→ ReasoningEngine
+→ RequirementGate
+→ KeywordPlanner
+→ ContextPack/ExecutionPlan
+→ DurableJobRunner/WorkflowEngine
+→ BrainSandboxExecutionBridge
+→ PolicyBroker/AuthorizedPlan
+→ CicloExecucaoPlano
+→ Dispatcher
+→ ActionGateway
+→ Capability Executor/Sandbox/Provider
+→ PostExecutionGate
+→ UI/Evidence/Learning.
 
-```text
-Intent/Plan
-   ↓
-CapabilityCandidate
-   ↓
-PolicyBroker
-   ├── ALLOW
-   ├── DENY
-   ├── REQUIRE_APPROVAL
-   └── SANDBOX_ONLY
-```
+Texto livre não possui fallback direto para BrainApiGateway quando o Sandbox não está pronto. A UI bloqueia e pede preparação.
 
-A descoberta nunca equivale a autorização.
+## 5. Pós-execução
 
-## 5. Execução
+ResultadoCiclo.aprovado exige passos aprovados, Verification PASSED com checks aprovados, Critic PASS, Revision ACCEPT e Readiness READY com todos os estágios aprovados. Learning não mascara falha.
 
-```text
-Policy decision
-      ↓
-ActionGateway
-      ↓
-ActionExecutor
-      ↓
-Sandbox / Provider / Agent / Tool
-      ↓
-Evidence + Audit Event
-```
+REVISE deve levar a FIX e REEXECUTE, com limite de tentativas.
 
-A ação deve possuir identidade (`actionId`), actor, capability, parâmetros controlados, decisão de policy, timestamps, resultado/erro e proveniência/evidência quando disponível.
+## 6. Observabilidade e memória
 
-## 6. Agents bounded
+Eventos, auditoria, execução e behavior trace são correlacionados por runId/taskId/traceId.
+EventStoreBehaviorTraceSink usa o mesmo EventStore auditável.
+Memória separa working/context, experience e knowledge.
+Pesquisa externa vira evidência; conhecimento só é promovido após validação.
+Executor geral de retrievalHints ainda é backlog.
 
-Um Agent é um trabalhador especializado, não um segundo cérebro.
+## 7. Agents, Skills e Roofts
 
-```text
-Mission
- + AllowedCapabilities
- + Policy
- + Sandbox
-       ↓
-BoundedAgent
-       ↓
-Evidence
-```
+Agents são bounded workers. Skills descrevem procedimentos. Capabilities são unidades autorizáveis. Providers implementam serviços.
 
-O Agent não baixa LLM, não recebe objetivo autônomo e não pode ultrapassar as capabilities autorizadas.
+Roofts 0.3–0.5 permanecem preservados. Roofts 0.6 está instalado como payload upstream, mas suas Skills ainda não são um runtime ativo.
 
-## 7. Memória e aprendizado
+## 8. Segurança
 
-```text
-Memory recall
-   ↓ não encontrou
-External capability
-   ↓
-Evidence
-   ↓
-Candidate knowledge
-   ↓
-Critic
-   ├── rejeita/corrige
-   └── valida
-          ↓
-      Memory
-```
+RootFS/proot não equivale a isolamento de kernel. Policy, limites e hardening reduzem risco; isolamento OS-level continua sendo etapa separada.
 
-Quando a fonte permitir, salvar retrieval hints para ensinar **como/onde procurar** posteriormente.
+PRPs, web, documentação, repositórios e saída de modelos são dados não confiáveis até validação tipada.
 
-## 8. API/provider routing
+## 9. Proibições arquiteturais
 
-Providers são capacidades disponíveis. O Brain não deve depender de uma lista fixa de modelos como verdade.
+Não criar segundo cérebro, segundo orquestrador, segundo Gateway/Policy/Memory/Registry para a mesma responsabilidade, Agent soberano, execução arbitrária fora das fronteiras ou LLM local obrigatório do Chat.
 
-O catálogo estático pode bootstrapar o sistema; descoberta runtime determina disponibilidade atual. A política econômica atual pode restringir a seleção a capacidades gratuitas.
+## 10. Regra de mudança
 
-## 9. Fluxos principais
-
-### Pergunta conhecida
-
-`Chat → Brain → Memory → Chat`
-
-### Pesquisa
-
-`Chat → Brain → Memory → Discovery → Retrieval/Agent/API → Sandbox quando necessário → Evidence → Critic → Memory → Chat`
-
-### Código
-
-`Chat → Brain → Plan → Discovery → Code capability/Agent → Policy → Sandbox → Test/Build → Critic → Memory → Chat`
-
-### Tarefa complexa
-
-`Chat → Brain → Planner → ExecutionPlan → Function Splitter → Dispatcher → Actions/Workflow → Evidence → Critic → Memory → Chat`
-
-## 10. O que não pertence ao núcleo
-
-- LLM local baixado pelo app;
-- Agent com LLM próprio;
-- provider escolhido diretamente pelo usuário como requisito arquitetural;
-- slash commands como mecanismo central;
-- Room/schema do IaBrain;
-- cópia de catálogos externos como fonte de verdade;
-- execução de strings arbitrárias fora do Gateway/Policy/Sandbox.
-
-## 11. Regra de consolidação
-
-Antes de criar uma classe nova, localizar a responsabilidade equivalente no runtime atual. Se já existir, integrar/refatorar; não criar um segundo Registry, Router, Dispatcher, Agent Registry, Policy ou Memory apenas com outro nome.
+Antes de criar código: localizar implementação existente, confirmar caller, preservar contratos, integrar no caminho canônico, testar/evidenciar e atualizar esta documentação.
