@@ -156,3 +156,17 @@ Documentos históricos podem permanecer para rastreabilidade, mas **não definem
 ## Regra de documentação
 
 Se código e documentação divergirem, o código atual + testes + evidência de integração vencem documentos antigos. Toda mudança arquitetural deve atualizar a documentação canônica na mesma alteração.
+
+
+## Context Engineering 2.4
+
+The repository now includes a canonical Context Engineering workflow:
+
+- CLAUDE.md / AGENTS.md for project rules;
+- INITIAL.md for structured task intake;
+- PRPs/templates/prp_base.md for context-rich implementation plans;
+- docs/CONTEXT_ENGINEERING.md for the BrainCode-specific contract.
+
+The runtime also carries the immutable ReasoningState.contextPack into PlanoExecucao so the planner's context is preserved as typed data rather than reconstructed from raw user text.
+
+External PRP/context is treated as data, not policy authority. It cannot bypass Policy, ActionGateway, Verification, Critic or Readiness.
