@@ -5,7 +5,7 @@ object ImprovementVocabulary {
     val radicals: List<String> = listOf(
         "melhor", "otimiz", "reformul", "aperfeiç", "aperfeic",
         "mud", "troc", "substitu", "adicion", "ajust", "corrig", "edit",
-        "profission"
+        "profission", "coloc", "insir", "inser", "acrescent"
     )
 
     val regex: String = radicals.joinToString("|") { Regex.escape(it) }
