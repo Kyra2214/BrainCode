@@ -80,7 +80,8 @@ sealed interface ThreadEvent {
         val text: String,
         val promptActionId: String? = null,
         val contentType: GeneratedContentType = detectGeneratedContentType(text),
-        val researchSources: List<ResearchSourceUi> = emptyList()
+        val researchSources: List<ResearchSourceUi> = emptyList(),
+        val validationWarning: String? = null
     ) : ThreadEvent
     data class Terminal(val result: SandboxExecutionResult, val execution: com.sandbox.runtime.ExecutionLog?) : ThreadEvent
     data class Approval(val id: String) : ThreadEvent
@@ -283,12 +284,15 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
         is ThreadEvent.Agent -> Column(modifier = Modifier.fillMaxWidth().combinedClickable(onClickLabel = "Citar resposta", onLongClickLabel = "Citar resposta", onClick = { viewModel.quoteEvent(event) }, onLongClick = { viewModel.quoteEvent(event) }), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             GeneratedContentCard(event = event, onCopy = ::copy)
             if (event.researchSources.isNotEmpty()) ResearchSourcesCard(event.researchSources)
-            event.promptActionId?.let { actionId ->
+            event.promptActionId?.takeIf { event.contentType == GeneratedContentType.PROMPT }?.let { actionId ->
                 var feedbackDado by remember(actionId) { mutableStateOf<Boolean?>(null) }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(onClick = { feedbackDado = true; viewModel.recordPromptFeedback(actionId, true) }, enabled = feedbackDado == null, modifier = Modifier.semantics { contentDescription = "Avaliar prompt como útil" }) { Text(if (feedbackDado == true) "👍 Obrigado" else "👍") }
                     TextButton(onClick = { feedbackDado = false; viewModel.recordPromptFeedback(actionId, false) }, enabled = feedbackDado == null, modifier = Modifier.semantics { contentDescription = "Avaliar prompt como não útil" }) { Text(if (feedbackDado == false) "👎 Obrigado" else "👎") }
                 }
+            }
+            event.validationWarning?.let { warning ->
+                Card { Text(warning, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(10.dp)) }
             }
         }
         is ThreadEvent.System -> Card { Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text(event.text, color = if (event.text.contains("bloqueado", true)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant); event.progress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }; if (viewModel.phase is SandboxPhase.Blocked) OutlinedButton(onClick = { viewModel.prepareSandbox() }) { Text("Tentar de novo") } } }

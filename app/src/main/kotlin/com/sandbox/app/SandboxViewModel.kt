@@ -60,6 +60,12 @@ sealed interface SandboxPhase {
 }
 
 data class QuickCommand(val label: String, val command: String)
+data class TerminalEntry(
+    val command: String,
+    val output: String = "",
+    val exitCode: Int? = null,
+    val running: Boolean = true
+)
 
 enum class ChatRole { USER, ASSISTANT, ERROR, STEP }
 data class ChatMessage(
@@ -67,7 +73,8 @@ data class ChatMessage(
     val content: String,
     val promptActionId: String? = null,
     val contentType: GeneratedContentType = GeneratedContentType.TEXT,
-    val researchSources: List<ResearchSourceUi> = emptyList()
+    val researchSources: List<ResearchSourceUi> = emptyList(),
+    val validationWarning: String? = null
 )
 
 enum class SessionStatus { IDLE, RUNNING, AWAITING_APPROVAL, DONE, FAILED, BLOCKED }
@@ -255,7 +262,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         activeThreadEvents.forEach { event ->
             when (event) {
                 is ThreadEvent.User -> chatMessages.add(ChatMessage(ChatRole.USER, event.text))
-                is ThreadEvent.Agent -> chatMessages.add(ChatMessage(ChatRole.ASSISTANT, event.text, contentType = event.contentType))
+                is ThreadEvent.Agent -> chatMessages.add(ChatMessage(ChatRole.ASSISTANT, event.text, contentType = event.contentType, validationWarning = event.validationWarning))
                 is ThreadEvent.System -> chatMessages.add(ChatMessage(ChatRole.ERROR, event.text))
                 else -> Unit
             }
@@ -352,7 +359,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
 
     private fun eventToJson(event: ThreadEvent): JSONObject = when (event) {
         is ThreadEvent.User -> JSONObject().put("type", "user").put("text", event.text)
-        is ThreadEvent.Agent -> JSONObject().put("type", "agent").put("text", event.text)
+        is ThreadEvent.Agent -> JSONObject().put("type", "agent").put("text", event.text).put("validationWarning", event.validationWarning ?: JSONObject.NULL)
         is ThreadEvent.System -> JSONObject().put("type", "system").put("text", event.text)
         is ThreadEvent.Report -> JSONObject().put("type", "report").put("title", event.title).put("body", event.body)
         is ThreadEvent.Approval -> JSONObject().put("type", "approval").put("id", event.id)
@@ -386,7 +393,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
 
     private fun eventFromJson(item: JSONObject): ThreadEvent? = when (item.optString("type")) {
         "user" -> ThreadEvent.User(item.optString("text"))
-        "agent" -> ThreadEvent.Agent(item.optString("text"))
+        "agent" -> ThreadEvent.Agent(item.optString("text"), validationWarning = item.optString("validationWarning").takeIf { it.isNotBlank() && it != "null" })
         "system" -> ThreadEvent.System(item.optString("text"))
         "report" -> ThreadEvent.Report(item.optString("title"), item.optString("body"))
         "approval" -> ThreadEvent.Approval(item.optString("id"))
@@ -415,7 +422,21 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     var lastResult by mutableStateOf<com.sandbox.runtime.SandboxExecutionResult?>(null); private set
     var lastExecution by mutableStateOf<ExecutionLog?>(null); private set
     var liveTerminalOutput by mutableStateOf(""); private set
-    fun clearTerminal() { commandInput = ""; lastResult = null; lastExecution = null }
+    var terminalHistory by mutableStateOf<List<TerminalEntry>>(emptyList()); private set
+    var commandHistory by mutableStateOf<List<String>>(emptyList()); private set
+    private var commandHistoryCursor = 0
+    fun clearTerminal() { commandInput = ""; lastResult = null; lastExecution = null; liveTerminalOutput = ""; terminalHistory = emptyList(); commandHistory = emptyList(); commandHistoryCursor = 0 }
+    private fun appendTerminalOutput(chunk: String) {
+        terminalHistory.lastOrNull()?.let { entry ->
+            terminalHistory = terminalHistory.dropLast(1) + entry.copy(output = (entry.output + chunk).takeLast(12000))
+        }
+    }
+    fun recallPreviousCommand() {
+        if (commandHistory.isEmpty()) return
+        val index = (commandHistory.lastIndex - commandHistoryCursor).coerceAtLeast(0)
+        commandInput = commandHistory[index]
+        commandHistoryCursor = (commandHistoryCursor + 1).coerceAtMost(commandHistory.lastIndex)
+    }
     var diagnosticsReport by mutableStateOf<String?>(null); private set
     var diagnosticsRunning by mutableStateOf(false); private set
     var lastBrainCycle by mutableStateOf<ResultadoCiclo?>(null); private set
@@ -630,22 +651,49 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         if (phase != SandboxPhase.Ready) { appendThreadEvent(ThreadEvent.System("Comando indisponível: sandbox ocupado.")); return }
         val command = commandInput.trim()
         if (command.isEmpty()) return
+        commandInput = ""
+        commandHistory = (commandHistory + command).takeLast(100)
+        commandHistoryCursor = 0
+        terminalHistory = terminalHistory + TerminalEntry(command = command)
         viewModelScope.launch {
             phase = SandboxPhase.Running; liveTerminalOutput = ""
             val e = withContext(Dispatchers.IO) {
                 runCatching {
                     active.execute(listOf("/bin/bash", "-c", command), 60, "/home/sandbox", onOutput = { line, stderr ->
-                        viewModelScope.launch { liveTerminalOutput = (liveTerminalOutput + if (stderr) "[stderr] $line\n" else "$line\n").takeLast(12000) }
+                        viewModelScope.launch {
+                            val chunk = if (stderr) "[stderr] $line\n" else "$line\n"
+                            liveTerminalOutput = (liveTerminalOutput + chunk).takeLast(12000)
+                            appendTerminalOutput(chunk)
+                        }
                     })
                 }.getOrNull()
             }
-            if (e != null) { lastExecution = e; lastResult = e.toUiResult() } else appendThreadEvent(ThreadEvent.System("Comando falhou ao executar."))
+            if (e != null) {
+                lastExecution = e; lastResult = e.toUiResult()
+                val finalOutput = buildString {
+                    if (e.stdout.isNotBlank()) append(e.stdout)
+                    if (e.stderr.isNotBlank()) { if (isNotEmpty()) append('\n'); append("[stderr] "); append(e.stderr) }
+                }.takeLast(12000)
+                terminalHistory.lastOrNull()?.let { entry -> terminalHistory = terminalHistory.dropLast(1) + entry.copy(output = finalOutput, exitCode = e.exitCode, running = false) }
+            } else {
+                terminalHistory.lastOrNull()?.let { entry -> terminalHistory = terminalHistory.dropLast(1) + entry.copy(output = "Comando falhou ao executar.\n", running = false) }
+                appendThreadEvent(ThreadEvent.System("Comando falhou ao executar."))
+            }
             phase = SandboxPhase.Ready
         }
     }
 
     private fun hasApiKeyInCatalog(): Boolean =
         apiProviders.any { provider -> apiKeyStore.get(provider.id)?.trim()?.isNotEmpty() == true }
+
+    private fun postExecutionWarning(cycle: ResultadoCiclo): String? {
+        val gate = cycle.posExecucao ?: return null
+        if (cycle.aprovado) return null
+        val details = gate.issues.ifEmpty {
+            listOf("verification=${gate.verification.status}", "critique=${gate.critique.status}", "readiness=${gate.readiness.status}")
+        }
+        return "Atenção: a resposta não passou na verificação pós-execução. ${details.joinToString("; ")}"
+    }
 
     /** Regra estrutural: a conversa Android entra no Brain; nenhum executor local é chamado pelo chat. */
     fun sendChatMessage() {
@@ -665,7 +713,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         val content = cycle.resposta ?: "Plano concluído: ${cycle.aprovado}"
                         val capability = cycle.passos.lastOrNull { it.resultado != null }?.capacidade
                         val evidence = cycle.passos.flatMap { it.executionEvidence }
-                        ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability, evidence), researchSources = cycle.researchSources.map { it.toUiSource() })
+                        ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability, evidence), researchSources = cycle.researchSources.map { it.toUiSource() }, validationWarning = postExecutionWarning(cycle))
                     } else {
                         ChatMessage(ChatRole.ERROR, "Brain indisponível enquanto o sandbox não está pronto. Prepare o sandbox e envie novamente.")
                     }
@@ -673,7 +721,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     .getOrElse { ChatMessage(ChatRole.ERROR, "Brain não conseguiu responder: ${it.message ?: it.javaClass.simpleName}") }
             }
             chatMessages.add(response); chatRunning = false
-            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content, response.promptActionId, response.contentType, response.researchSources) else ThreadEvent.System(response.content))
+            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content, response.promptActionId, response.contentType, response.researchSources, response.validationWarning) else ThreadEvent.System(response.content))
         }
     }
     /** Entrada única do composer Codex-style: texto livre ou comando operacional. */
@@ -730,7 +778,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         val content = cycle.resposta ?: "Plano concluído: ${cycle.aprovado}"
                         val capability = cycle.passos.lastOrNull { it.resultado != null }?.capacidade
                         val evidence = cycle.passos.flatMap { it.executionEvidence }
-                        ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability, evidence), researchSources = cycle.researchSources.map { it.toUiSource() })
+                        ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability, evidence), researchSources = cycle.researchSources.map { it.toUiSource() }, validationWarning = postExecutionWarning(cycle))
                     } else {
                         ChatMessage(ChatRole.ERROR, "Brain indisponível enquanto o sandbox não está pronto. Prepare o sandbox e envie novamente.")
                     }
@@ -738,7 +786,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     .getOrElse { ChatMessage(ChatRole.ERROR, "Brain não conseguiu responder ao comando ${entrada.comando}: ${it.message ?: it.javaClass.simpleName}") }
             }
             chatMessages.add(response); chatRunning = false
-            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content, response.promptActionId, response.contentType, response.researchSources) else ThreadEvent.System(response.content))
+            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content, response.promptActionId, response.contentType, response.researchSources, response.validationWarning) else ThreadEvent.System(response.content))
         }
     }
     private fun com.brain.research.ResearchResult.toUiSource() = ResearchSourceUi(title, source, url, relevantContent.take(240))

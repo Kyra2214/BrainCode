@@ -49,3 +49,10 @@ repositório.
 A Fase 7 do escopo offline atual pode ser concluída quando o preflight local passar e o gate device/emulador tiver evidência reproduzível. Assinatura de produção e infraestrutura externa devem permanecer registradas como futuro, não como bloqueios do produto offline.
 
 Os RootFS `0.3.3`, `0.4.1` e `0.5.0` permanecem artefatos imutáveis. Uma falha de validação deve investigar o runtime ou o ambiente de implantação, sem reconstruir silenciosamente os tarballs homologados.
+
+
+## Checklist adicional de assets Android
+
+- [ ] Confirmar que `app/src/main/assets/` não contém symlinks (`find app/src/main/assets -type l` deve retornar vazio).
+- [ ] Assets Roofts devem conter cópias reais das árvores necessárias para que AAPT2/Gradle e o empacotamento Android sejam independentes do sistema operacional.
+- [ ] Após alterações nos assets, executar `:app:assembleDebug` e validar a instalação real do Roofts 0.6 em um build Android.
