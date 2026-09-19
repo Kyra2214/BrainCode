@@ -79,6 +79,7 @@ class KeywordPlanner(
         planejar(objetivo).copy(
             assumptions = reasoning.assumptions.toSet(),
             fallback = if (reasoning.missing.isEmpty()) null else "prosseguir-localmente-com-suposições-explicitas",
-            missingRequirements = reasoning.missing
+            missingRequirements = reasoning.missing,
+            contextPack = reasoning.contextPack
         )
 }
