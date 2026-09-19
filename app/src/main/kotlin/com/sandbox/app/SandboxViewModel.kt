@@ -631,7 +631,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     capabilityExecutors = mapOf(
                         "workspace.generate" to codeGenerationExecutor,
                         "prompt.library.generate" to promptGenerationExecutor,
-                        "sandbox.info" to webResearchExecutor
+                        "sandbox.info" to webResearchExecutor,
+                        "network.research" to webResearchExecutor
                     ),
                     events = FileEventStore(File(dir, "brain/chat-events.jsonl"))
                 )
