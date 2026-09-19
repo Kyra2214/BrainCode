@@ -260,7 +260,17 @@ class PromptGenerationExecutor(
     ): EscalonamentoResultado {
         if (!scoreInicial.abaixoDoPadrao) return EscalonamentoResultado(criado.texto, criado.origem, scoreInicial, false)
 
-        val viaIa = runCatching { improver.melhorar(criado.texto, pedido, scoreInicial.pontosFracos, authorizedAccountIds) }.getOrNull()?.takeIf { it.isNotBlank() }
+        // Escalonamento para IA é condicionado a uma conta explicitamente autorizada.
+        // Sem conta autorizada, o caminho permanece local e determinístico:
+        // o Brain não pode ficar bloqueado esperando rede/provedor quando o Prompt Creator
+        // local + RevisionEngine já conseguem produzir uma resposta válida.
+        val viaIa = if (authorizedAccountIds.isNotEmpty()) {
+            runCatching { improver.melhorar(criado.texto, pedido, scoreInicial.pontosFracos, authorizedAccountIds) }
+                .getOrNull()
+                ?.takeIf { it.isNotBlank() }
+        } else {
+            null
+        }
         if (viaIa != null) {
             val scoreIa = PromptQualityValidator.validar(pedido, viaIa, criado.dominio, reasoningEngine.analyze(pedido).requirements)
             if (scoreIa.total >= scoreInicial.total) return EscalonamentoResultado(viaIa, "${criado.origem}+ia-especialista", scoreIa, true)
