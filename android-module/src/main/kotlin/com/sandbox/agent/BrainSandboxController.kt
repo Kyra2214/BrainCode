@@ -70,6 +70,7 @@ class BrainSandboxController(
     capabilityProviders: List<CapabilityProvider> = emptyList(),
     capabilityExecutors: Map<String, ActionExecutor> = emptyMap(),
     private val apiKeyAvailable: () -> Boolean = { true },
+    private val authorizedAccountIds: Set<String> = emptySet(),
     private val events: EventStore = InMemoryEventStore(),
     private val revisionFixer: RevisionFixer = ContextRevisionFixer()
 ) {
@@ -117,7 +118,6 @@ class BrainSandboxController(
     )
     private val promptRetrieval = promptLibrary?.let { Retrieval(listOf(PromptLibraryRetrievalSource.from(it))) }
     private val apiCatalog = ApiCatalogRegistry.current() ?: InMemoryApiCatalog(emptyList())
-    private val authorizedProviderAccounts = apiCatalog.listarModelos().map { "android:${it.providerId}" }.toSet()
     private val bridge = BrainSandboxExecutionBridge(
         CicloExecucaoPlano(
             policyBroker = policy,
@@ -127,7 +127,7 @@ class BrainSandboxController(
             approvalStore = approvals,
                 dispatcher = dispatcher,
                 accountRouter = AccountRouter(),
-                authorizedAccountIds = authorizedProviderAccounts
+                authorizedAccountIds = authorizedAccountIds
         )
     )
     private val reasoningEngine = ReasoningEngine()
