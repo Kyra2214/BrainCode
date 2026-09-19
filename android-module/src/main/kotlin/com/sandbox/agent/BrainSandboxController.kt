@@ -37,6 +37,8 @@ import com.brain.retrieval.PromptLibraryRetrievalSource
 import com.brain.retrieval.Retrieval
 import com.brain.retrieval.RetrievalQuery
 import com.brain.reasoning.ReasoningEngine
+import com.brain.behavior.PlanningGate
+import com.brain.behavior.RequirementGate
 import com.brain.reasoning.TaskState
 import com.brain.execution.OperationalState
 import com.brain.execution.Observation
@@ -124,6 +126,8 @@ class BrainSandboxController(
         )
     )
     private val reasoningEngine = ReasoningEngine()
+    private val requirementGate = RequirementGate()
+    private val planningGate = PlanningGate()
     private val treeOfThoughts = TreeOfThoughts()
     private val layeredMemory = LayeredMemory()
     @Volatile private var taskState: TaskState? = null
@@ -144,8 +148,11 @@ class BrainSandboxController(
         return bridge.authorizeAndExecute(plano, runId = runId, actor = actor)
     }
 
-    fun executePlan(plano: PlanoExecucao, runId: String = "plan-${System.currentTimeMillis()}"): ResultadoCiclo =
-        executeWithEvents(plano, runId) { bridge.authorizeAndExecute(plano, runId = runId, actor = actor) }
+    fun executePlan(plano: PlanoExecucao, runId: String = "plan-${System.currentTimeMillis()}"): ResultadoCiclo {
+        val gate = planningGate.evaluate(plano)
+        if (!gate.isSuccessful) return blockedCycle(plano, runId, gate.issues.joinToString("; ") { it.message })
+        return executeWithEvents(plano, runId) { bridge.authorizeAndExecute(plano, runId = runId, actor = actor) }
+    }
 
     fun resumePlan(plano: PlanoExecucao, runId: String, approvalId: String): ResultadoCiclo =
         executeWithEvents(plano, runId) { bridge.resume(plano, runId = runId, actor = actor, approvalId = approvalId) }
@@ -170,6 +177,14 @@ class BrainSandboxController(
     ): ResultadoCiclo {
         emit(runId, "chat", "TaskCreated", mapOf("objective" to objective.take(500)))
         val reasoning = reasoningEngine.analyze(objective)
+        val requirementGateResult = requirementGate.evaluate(reasoning)
+        if (!requirementGateResult.isSuccessful) {
+            return blockedCycle(
+                PlanoExecucao(objective, listOf(PassoPlano("requirements", "brain.requirements", "requisitos resolvidos"))),
+                runId,
+                requirementGateResult.issues.joinToString("; ") { it.message }
+            )
+        }
         taskState = TaskState(objective).withReasoning(reasoning)
         layeredMemory.rememberEpisode(objective, Provenance("brain:task-created", confidence = 1.0))
         val planner = com.brain.planner.KeywordPlanner()
@@ -238,6 +253,15 @@ class BrainSandboxController(
         }
         return finalCycle
     }
+
+    private fun blockedCycle(plan: PlanoExecucao, runId: String, reason: String): ResultadoCiclo =
+        ResultadoCiclo(
+            plan.objetivo,
+            runId,
+            plan.passos.map { step ->
+                ResultadoPasso(step.id, StatusPasso.REPROVADO, motivo = reason, capacidade = step.capacidade)
+            }
+        )
 
     fun localEvents(runId: String? = null) = events.replay(runId)
     fun localEventsHealthy(): Boolean = events.verifyIntegrity()
