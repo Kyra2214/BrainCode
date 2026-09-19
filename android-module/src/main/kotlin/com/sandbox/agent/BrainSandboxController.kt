@@ -130,6 +130,7 @@ class BrainSandboxController(
     private val planningGate = PlanningGate()
     private val treeOfThoughts = TreeOfThoughts()
     private val layeredMemory = LayeredMemory()
+    private val postExecutionGate = PostExecutionGate(layeredMemory)
     @Volatile private var taskState: TaskState? = null
 
     /** Executa o primeiro caso de uso real do Brain dentro do Sandbox preparado. */
@@ -297,8 +298,22 @@ class BrainSandboxController(
                 }
             }
         }
-        emit(runId, "execution", if (result.aprovado) "Delivered" else "ValidationFailed", mapOf("approved" to result.aprovado.toString()))
-        return result
+        val postExecution = postExecutionGate.evaluate(plan, result)
+        val finalResult = result.copy(posExecucao = postExecution)
+        emit(
+            runId,
+            "post-execution",
+            if (finalResult.aprovado) "ValidatedLearningRecorded" else "PostExecutionBlocked",
+            mapOf(
+                "verification" to postExecution.verification.status.name,
+                "critic" to postExecution.critique.status.name,
+                "revision" to postExecution.revision.action.name,
+                "readiness" to postExecution.readiness.status.name,
+                "learning" to postExecution.learningRecorded.toString()
+            )
+        )
+        emit(runId, "execution", if (finalResult.aprovado) "Delivered" else "ValidationFailed", mapOf("approved" to finalResult.aprovado.toString()))
+        return finalResult
     }
 
     private fun emit(runId: String, taskId: String, type: String, payload: Map<String, String>) {
