@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.brain.events.InMemoryEventStore
 
 class BehaviorObservabilityTest {
     @Test fun `diagnostico correlaciona eventos por run e task`() {
@@ -23,5 +24,14 @@ class BehaviorObservabilityTest {
         assertFalse(detail.contains("abc123"))
         assertFalse(detail.contains("account-a"))
         assertTrue(detail.contains("[REDACTED]"))
+    }
+
+    @Test fun `event store e o sink canonico de behavior trace`() {
+        val events = InMemoryEventStore()
+        val diagnostics = BehaviorDiagnostics(EventStoreBehaviorTraceSink(events))
+        diagnostics.record("run", "task", "readiness", "READY", readiness = "READY")
+        assertEquals(1, events.replay("run").count { it.type == "BehaviorTrace" })
+        assertEquals("READY", EventStoreBehaviorTraceSink(events).list("run").single().readiness)
+        assertTrue(events.verifyIntegrity())
     }
 }

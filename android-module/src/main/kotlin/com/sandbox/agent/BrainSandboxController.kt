@@ -39,6 +39,8 @@ import com.brain.retrieval.RetrievalQuery
 import com.brain.reasoning.ReasoningEngine
 import com.brain.behavior.PlanningGate
 import com.brain.behavior.RequirementGate
+import com.brain.behavior.BehaviorDiagnostics
+import com.brain.behavior.EventStoreBehaviorTraceSink
 import com.brain.behavior.VerificationResult
 import com.brain.reasoning.TaskState
 import com.brain.execution.OperationalState
@@ -71,6 +73,7 @@ class BrainSandboxController(
     private val events: EventStore = InMemoryEventStore(),
     private val revisionFixer: RevisionFixer = ContextRevisionFixer()
 ) {
+    private val behaviorDiagnostics = BehaviorDiagnostics(EventStoreBehaviorTraceSink(events, "android-local"))
     private val dynamicCapabilityProviders = capabilityProviders
     private val approvals = FileApprovalStore(File(rootfsDir.parentFile ?: rootfsDir, "approvals.jsonl"))
     private val sandbox = Sandbox(runtime = runtime, rootfsDir = rootfsDir)
@@ -371,6 +374,18 @@ class BrainSandboxController(
     private fun emit(runId: String, taskId: String, type: String, payload: Map<String, String>) {
         val sequence = events.replay().size.toLong()
         events.append(BrainEvent(runId, "android-local", taskId, type, sequence, timestamp = Instant.now(), payload = payload, idempotencyKey = "$runId:$taskId:$type:$sequence"))
+        behaviorDiagnostics.record(
+            runId = runId,
+            taskId = taskId,
+            stage = type,
+            status = payload["status"] ?: payload["approved"] ?: type,
+            detail = payload.entries.joinToString(", ") { "${it.key}=${it.value}" },
+            attempt = payload["attempt"]?.toIntOrNull(),
+            result = payload["result"] ?: payload["approved"],
+            revision = if (type.startsWith("Revision") || type.startsWith("FixVerify")) type else null,
+            readiness = payload["readiness"],
+            learning = payload["learning"]
+        )
     }
 
     private fun capability(id: String, provided: Set<String>) = CapabilityDefinition(
