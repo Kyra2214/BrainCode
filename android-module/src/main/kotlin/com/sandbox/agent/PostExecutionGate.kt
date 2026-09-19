@@ -73,13 +73,13 @@ class PostExecutionGate(private val memory: LayeredMemory) {
         val critique: CritiqueResult = critic.evaluate(critiqueInput)
         val revision: RevisionDecision = review.review(critiqueInput, critique)
         val completed = mapOf(
-            ReadinessStageName.IMPLEMENTATION to cycle.passos.isNotEmpty() && cycle.passos.all { it.status == StatusPasso.APROVADO },
+            ReadinessStageName.IMPLEMENTATION to (cycle.passos.isNotEmpty() && cycle.passos.all { it.status == StatusPasso.APROVADO }),
             ReadinessStageName.TESTS to verification.passed,
             ReadinessStageName.QA to (critique.status == com.brain.behavior.CritiqueStatus.PASS),
-            ReadinessStageName.SECURITY to cycle.passos.isNotEmpty() && cycle.passos.all { it.decisaoPolicy?.decision?.name == "ALLOW" },
-            ReadinessStageName.ARCHITECTURE to plan.passos.isNotEmpty() && plan.passos.all { it.id.isNotBlank() && it.capacidade.isNotBlank() },
-            ReadinessStageName.REGRESSION to verification.passed && cycle.passos.isNotEmpty() && cycle.passos.all { it.status == StatusPasso.APROVADO },
-            ReadinessStageName.RELEASE to verification.passed && critique.status == com.brain.behavior.CritiqueStatus.PASS
+            ReadinessStageName.SECURITY to (cycle.passos.isNotEmpty() && cycle.passos.all { it.decisaoPolicy?.decision?.name == "ALLOW" }),
+            ReadinessStageName.ARCHITECTURE to (plan.passos.isNotEmpty() && plan.passos.all { it.id.isNotBlank() && it.capacidade.isNotBlank() }),
+            ReadinessStageName.REGRESSION to (verification.passed && cycle.passos.isNotEmpty() && cycle.passos.all { it.status == StatusPasso.APROVADO }),
+            ReadinessStageName.RELEASE to (verification.passed && critique.status == com.brain.behavior.CritiqueStatus.PASS)
         )
         fun ownEvidence(stage: ReadinessStageName, ids: List<String>, enabled: Boolean): List<String> =
             if (enabled) ids.map { id -> "${cycle.runId}:readiness:${stage.name.lowercase()}:$id" } else emptyList()
