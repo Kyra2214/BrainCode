@@ -38,6 +38,7 @@ class BrainCodeJourneyE2ETest {
             runCatching {
                 composeRule.onNodeWithContentDescription("Enviar")
                     .assertIsDisplayed()
+                    .assertIsEnabled()
                 true
             }.getOrDefault(false)
         }
