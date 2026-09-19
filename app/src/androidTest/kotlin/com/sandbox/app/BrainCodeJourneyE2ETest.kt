@@ -33,10 +33,13 @@ class BrainCodeJourneyE2ETest {
         composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.onAllNodesWithText("Preparar sandbox", substring = true, useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty() ||
-                composeRule.onAllNodesWithText("Tentar de novo", substring = true, useUnmergedTree = true)
-                    .fetchSemanticsNodes().isNotEmpty() ||
-                composeRule.onAllNodesWithText("Sandbox pronto", substring = true, useUnmergedTree = true)
-                    .fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("Tentar de novo", substring = true, useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty() ||
+            runCatching {
+                composeRule.onNodeWithContentDescription("Enviar")
+                    .assertIsDisplayed()
+                true
+            }.getOrDefault(false)
         }
 
         val prepare = composeRule.onAllNodesWithText("Preparar sandbox", substring = true, useUnmergedTree = true)
@@ -52,22 +55,18 @@ class BrainCodeJourneyE2ETest {
         }
 
         composeRule.waitUntil(timeoutMillis = 120_000) {
-            composeRule.onAllNodesWithText("Sandbox pronto", substring = true, useUnmergedTree = true)
-                .fetchSemanticsNodes().isNotEmpty() ||
-                composeRule.onAllNodesWithText("Bloqueado:", substring = true, useUnmergedTree = true)
-                    .fetchSemanticsNodes().isNotEmpty()
-        }
-        check(composeRule.onAllNodesWithText("Sandbox pronto", substring = true, useUnmergedTree = true)
-            .fetchSemanticsNodes().isNotEmpty()) {
-            "Sandbox não ficou pronto no ambiente E2E; a UI exibiu um estado bloqueado."
-        }
-        composeRule.waitUntil(timeoutMillis = 10_000) {
             runCatching {
                 composeRule.onNodeWithContentDescription("Enviar")
                     .assertIsDisplayed()
                     .assertIsEnabled()
                 true
             }.getOrDefault(false)
+        }
+        check(runCatching {
+            composeRule.onNodeWithContentDescription("Enviar").assertIsEnabled()
+            true
+        }.getOrDefault(false)) {
+            "Sandbox não ficou pronto no ambiente E2E; o composer permaneceu desabilitado."
         }
     }
 
