@@ -1,64 +1,37 @@
 # BrainCode — Estado Atual
 
-**HEAD de referência:** `26ab43afede8c05c6bcb4e981a0e98f70c42c8a6`.
+HEAD funcional da auditoria: caf0d3960e8fde5fbc7bbd193a6dc15d9217ce1f.
 
-## Verde / consolidado
+## Consolidado
 
-- Capability model universal em `:brain`.
-- Capability Registry.
-- Capability Discovery e candidatos.
-- Capability Provider/discovery lazy.
-- PolicyBroker.
-- ActionGateway e auditoria de ação.
-- SkillRegistry.
-- Bounded Agents.
-- Memória de conhecimento e ciclo de aprendizado.
-- Routing/catalogação dinâmica de APIs/providers.
-- Integração de capability/policy com o Sandbox.
-- Testes JVM relacionados ao núcleo 2.0.
-- CI atual com unit tests, APK debug e Android lint.
+Capability Registry/Discovery, PolicyBroker, ActionGateway, Dispatcher, Agents bounded, SkillRegistry, ReasoningEngine, RequirementDiscovery, AssumptionManager, ContextPack, Planner, AcceptanceCriteria, PlanningGate, AuthorizedPlan, BrainSandboxController, CicloExecucaoPlano, DurableJobRunner/WorkflowEngine, PostExecutionGate, Verification, UniversalCritic, Revision/Fix, Readiness, ValidatedLearning, LayeredMemory e EventStore/BehaviorTrace.
 
-## Parcial / ainda exige integração ou evidência
+A UI possui estados de planejamento, execução, verificação, crítica, revisão, correção, reexecução, PASS/BLOCKED/FAILED/READY.
 
-- conversa Android usando o gateway real em todos os caminhos relevantes;
-- retrieval executor que consuma automaticamente retrieval hints;
-- validação semântica forte de conhecimento;
-- validação de código por build/test/lint antes de elevar confiança;
-- deduplicação e versionamento de conhecimento;
-- durable jobs/workflows em todos os caminhos de produto;
-- hardening OS-level do Sandbox.
+Roofts 0.3–0.5 estão preservados e 0.6 está instalado separadamente.
 
-## Backlog arquitetural
+## 2.4 Context Engineering
 
-1. Retrieval executor.
-2. Evidence/citation contract mais estruturado.
-3. Knowledge deduplication/fingerprint.
-4. Knowledge versioning/corrections.
-5. Critic semântico com validação executável.
-6. Planner/ExecutionPlan em todos os fluxos complexos.
-7. Dispatcher/Workflow/DAG com lifecycle completo.
-8. Durable JobStore onde houver tarefas longas.
-9. Auto-Skills somente após validação forte.
-10. Hardening OS-level, trust chain e limites de recursos.
+Implementado: CLAUDE.md, AGENTS.md, INITIAL.md, PRP template, contrato CONTEXT_ENGINEERING.md e ContextPack como entrada tipada do PlanoExecucao.
 
-## Fora de escopo atual
+Não implementado ainda: retrieval semântico geral, hashing/deduplicação/chunking geral, ranking lexical/semântico e executor universal de retrievalHints.
 
-- baixar LLM local;
-- treinar modelo;
-- criar Agent com LLM próprio;
-- copiar runtime do IaBrain;
-- importar Room/schema do IaBrain;
-- criar catálogos enormes apenas para substituir os atuais;
-- adicionar componentes sem caller real.
+## Correção encontrada nesta auditoria
 
-## Regra de conclusão
+Planner.kt já tentava fazer PlanoExecucao.copy(contextPack=...), mas PlanoExecucao não possuía esse campo. Isso era uma inconsistência real do contrato.
 
-Uma funcionalidade só é considerada pronta quando houver, conforme aplicável:
+Commit caf0d396 corrigiu o contrato: PlanoExecucao agora possui contextPack e os Tasks derivados preservam esse contexto.
 
-1. implementação;
-2. teste;
-3. caller real;
-4. evidência observável;
-5. documentação atualizada.
+## Parcial/backlog
 
-A existência de uma classe isolada ou de um teste unitário isolado não prova integração do produto.
+1. testes focados finais da mudança 2.4;
+2. CI completo;
+3. E2E completo em emulador/dispositivo;
+4. readiness final;
+5. testes arquiteturais contra caminhos paralelos;
+6. executor universal de retrievalHints;
+7. deduplicação/versionamento de conhecimento;
+8. hardening OS-level e SSRF/DNS rebinding;
+9. durable jobs com leases/fencing completos.
+
+Não declarar CI/E2E verdes sem execução comprovada.
