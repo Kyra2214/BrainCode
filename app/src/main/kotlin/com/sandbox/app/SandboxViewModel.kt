@@ -194,8 +194,16 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     )
 
     init {
-        if (sessions.isEmpty()) createSession()
-        else if (activeSessionId == null) {
+        // Instrumentation tests share the app data directory across test methods.
+        // Never let a persisted session become implicit context for another E2E journey.
+        // Normal app launches keep the existing session restore behavior unchanged.
+        if (BuildConfig.E2E_FAKE_ROOTFS) {
+            sessions = emptyList()
+            activeSessionId = null
+            createSession()
+        } else if (sessions.isEmpty()) {
+            createSession()
+        } else if (activeSessionId == null) {
             activeSessionId = sessions.maxByOrNull { it.updatedAt }?.id
             restoreChatFromActiveSession()
         }
