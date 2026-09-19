@@ -738,8 +738,16 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     .getOrElse { ChatMessage(ChatRole.ERROR, "Brain não conseguiu responder: ${it.message ?: it.javaClass.simpleName}") }
             }
             chatMessages.add(response); chatRunning = false
-            if (response.role == ChatRole.ERROR) brainUiStage = BrainUiStage.FAILED
-            else if (brainUiStage !in setOf(BrainUiStage.REVISE, BrainUiStage.CORRIGINDO, BrainUiStage.REEXECUTANDO)) brainUiStage = BrainUiStage.READY
+            if (response.role == ChatRole.ERROR) {
+                brainUiStage = BrainUiStage.FAILED
+            } else if (response.role == ChatRole.ASSISTANT) {
+                // O relatório pós-execução é a fonte de verdade: uma resposta
+                // produzida não significa que passou na verificação do Brain.
+                // Antes, qualquer resposta que não fosse erro técnico virava
+                // READY e escondia FAILED/REVISE no cabeçalho.
+                val cyclePassed = response.validationWarning == null
+                brainUiStage = if (cyclePassed) BrainUiStage.READY else BrainUiStage.FAILED
+            }
             appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content, response.promptActionId, response.contentType, response.researchSources, response.validationWarning) else ThreadEvent.System(response.content))
         }
     }
