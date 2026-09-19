@@ -214,7 +214,7 @@ class BrainSandboxController(
             assumptions = plan.assumptions.toList()
         )
         var cycle: ResultadoCiclo? = null
-        durableJobs.run(
+        val job = durableJobs.run(
             jobId = "job-$runId",
             runId = runId,
             taskId = "plan",
@@ -244,7 +244,9 @@ class BrainSandboxController(
                 )
             }
         )
-        val finalCycle = requireNotNull(cycle) { "Workflow não produziu resultado do plano" }
+        val finalCycle = requireNotNull(cycle) {
+            "Workflow não produziu resultado do plano${job.error?.let { ": $it" } ?: ""}"
+        }
         val operational = OperationalState(
             objective = objective,
             completed = finalCycle.passos.filter { it.status == StatusPasso.APROVADO }.map { it.passoId },
