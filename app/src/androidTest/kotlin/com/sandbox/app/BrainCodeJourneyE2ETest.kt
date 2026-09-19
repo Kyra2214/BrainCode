@@ -30,19 +30,6 @@ class BrainCodeJourneyE2ETest {
 
     @Before
     fun requireSandboxForJourney() {
-        composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithText("Preparar sandbox", substring = true, useUnmergedTree = true)
-                .fetchSemanticsNodes().isNotEmpty() ||
-            composeRule.onAllNodesWithText("Tentar de novo", substring = true, useUnmergedTree = true)
-                .fetchSemanticsNodes().isNotEmpty() ||
-            runCatching {
-                composeRule.onNodeWithContentDescription("Enviar")
-                    .assertIsDisplayed()
-                    .assertIsEnabled()
-                true
-            }.getOrDefault(false)
-        }
-
         val prepare = composeRule.onAllNodesWithText("Preparar sandbox", substring = true, useUnmergedTree = true)
             .fetchSemanticsNodes()
         if (prepare.isNotEmpty()) {
