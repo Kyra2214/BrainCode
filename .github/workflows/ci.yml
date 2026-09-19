@@ -59,12 +59,16 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Run all JVM/unit tests
+        id: unit-tests
+        continue-on-error: true
         run: ./gradlew :brain:test :app:testDebugUnitTest --no-daemon --stacktrace
 
       - name: Assemble Android debug APK
+        if: always()
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
 
       - name: Run Android lint
+        if: success()
         run: ./gradlew :app:lintDebug --no-daemon --stacktrace
 
       - name: Upload debug APK
@@ -87,3 +91,7 @@ jobs:
             **/build/reports/lint-results-*.html
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: Preserve test failure status
+        if: steps.unit-tests.outcome == 'failure'
+        run: exit 1
