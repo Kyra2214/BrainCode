@@ -4,8 +4,11 @@ package com.brain.prompt
 object ImprovementVocabulary {
     val radicals: List<String> = listOf(
         "melhor", "otimiz", "reformul", "aperfeiç", "aperfeic",
-        "mud", "troc", "substitu", "adicion", "ajust", "corrig", "edit"
+        "mud", "troc", "substitu", "adicion", "ajust", "corrig", "edit",
+        "profission"
     )
 
     val regex: String = radicals.joinToString("|") { Regex.escape(it) }
+
+    fun containsIn(text: String): Boolean = radicals.any { it in text.lowercase() }
 }

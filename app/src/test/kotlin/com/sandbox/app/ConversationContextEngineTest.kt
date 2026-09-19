@@ -29,6 +29,25 @@ class ConversationContextEngineTest {
     }
 
     @Test
+    fun `melhorar foguete preserva detalhes novos e referencia o artefato anterior`() {
+        val promptAnterior = "Fotografia fotorrealista de um foguete espacial decolando, com iluminação cinematográfica, céu estrelado ao fundo, alta definição e detalhes realistas."
+        val history = listOf(
+            ChatMessage(ChatRole.USER, "crie um prompt de imagem realista de um foguete"),
+            ChatMessage(ChatRole.ASSISTANT, promptAnterior)
+        )
+
+        val resolved = engine.resolve(
+            history,
+            "vamos melhorar quero esse foguete no deserto ao entardecer a imagem e de uma plataforma ao longe"
+        )
+
+        assertTrue(resolved.objective.contains("deserto"))
+        assertTrue(resolved.objective.contains("entardecer"))
+        assertTrue(resolved.objective.contains("plataforma ao longe"))
+        assertTrue(resolved.objective.contains("artefato anterior: $promptAnterior"))
+    }
+
+    @Test
     fun `contexto longo preserva ideia inicial e requisitos antigos`() {
         val history = buildList {
             add(ChatMessage(ChatRole.USER, "Tenho uma ideia de aplicativo offline para criar projetos"))

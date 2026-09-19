@@ -163,6 +163,28 @@ class PromptGenerationExecutorTest {
         assertTrue(execution.result.orEmpty().contains("Melhorei"))
     }
 
+    @Test fun `melhoria do foguete usa detalhes novos e o artefato anterior`() {
+        val library = FakePromptLibrary()
+        var instrucaoRecebida = ""
+        var promptAnteriorRecebido = ""
+        val iaFuncional = PromptImprover { atual, original ->
+            instrucaoRecebida = original
+            promptAnteriorRecebido = atual
+            "$atual, no deserto ao entardecer, com uma plataforma ao longe"
+        }
+        val objetivoResolvido = "Objetivo atual: vamos melhorar quero esse foguete no deserto ao entardecer a imagem e de uma plataforma ao longe\n" +
+            "Referências resolvidas:\n- artefato anterior: Fotografia fotorrealista de um foguete espacial decolando, com iluminação cinematográfica"
+
+        val execution = executor(library, iaFuncional).execute(request(objetivoResolvido), capability, decision)
+
+        assertTrue(execution.success)
+        assertTrue(execution.result.orEmpty().contains("Melhorei"))
+        assertTrue(instrucaoRecebida.contains("deserto"))
+        assertTrue(instrucaoRecebida.contains("entardecer"))
+        assertTrue(instrucaoRecebida.contains("plataforma ao longe"))
+        assertTrue(promptAnteriorRecebido.contains("foguete espacial decolando"))
+    }
+
     @Test fun `melhoria sem referencia pede esclarecimento e nao usa instrucao como sujeito`() {
         val execution = executor(FakePromptLibrary(), iaIndisponivel).execute(
             request("vamos melhorar o prompt quero que o rosto da imagem seja igual sem mudar a fisionomia"),

@@ -16,6 +16,7 @@ import com.brain.prompt.PromptQualityValidator
 import com.brain.prompt.PromptSimilarity
 import com.brain.prompt.PromptTemplate
 import com.brain.prompt.PromptRequestChecklist
+import com.brain.prompt.ImprovementVocabulary
 import com.brain.prompt.taxaSucessoEfetiva
 import com.brain.reasoning.ReasoningEngine
 import com.brain.reasoning.RevisionEngine
@@ -287,7 +288,7 @@ class PromptGenerationExecutor(
         val marcadorArtefato = "artefato anterior: "
         val idxArtefato = objetivo.indexOf(marcadorArtefato)
         if (idxArtefato < 0) return null
-        if (PALAVRAS_MELHORIA.none { it in objetivo.lowercase(Locale.ROOT) }) return null
+        if (!ImprovementVocabulary.containsIn(objetivo)) return null
         val instrucao = if (objetivo.startsWith("Objetivo atual: ")) {
             objetivo.removePrefix("Objetivo atual: ").substringBefore("\n").trim()
         } else objetivo.substringBefore("\n").trim()
@@ -339,6 +340,5 @@ class PromptGenerationExecutor(
 
     private companion object {
         const val TAXA_SUCESSO_MINIMA_PARA_REUSO = 0.5
-        val PALAVRAS_MELHORIA = listOf("melhor", "otimiz", "mais profissional", "versão melhor", "refaç", "reformul", "fundo", "deserto", "meteoro", "adicione", "adiciona", "mude", "muda", "troque", "troca", "substitua", "substitui")
     }
 }
