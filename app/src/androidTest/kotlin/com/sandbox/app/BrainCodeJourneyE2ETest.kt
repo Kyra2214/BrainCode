@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -124,9 +125,14 @@ class BrainCodeJourneyE2ETest {
     @Test
     fun missingRequirementBecomesClarificationQuestion() {
         send("Quero discutir fotografia")
-        composeRule.waitUntil(timeoutMillis = 120_000) {
-            composeRule.onAllNodesWithText("sujeito principal", substring = true, useUnmergedTree = true)
-                .fetchSemanticsNodes().isNotEmpty()
+        try {
+            composeRule.waitUntil(timeoutMillis = 120_000) {
+                composeRule.onAllNodesWithText("sujeito principal", substring = true, useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+        } catch (failure: Throwable) {
+            onRoot(useUnmergedTree = true).printToLog("BRAINCODE_CLARIFICATION_FAILURE")
+            throw failure
         }
     }
 
