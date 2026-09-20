@@ -60,7 +60,27 @@ class ManagedSandboxRuntime(
                 return failed
             }
         }
-        return finish(active.get()!!, command, workingDir, started, timeoutSeconds, onOutput)
+        val a = active.get()!!
+        return try {
+            finish(a, command, workingDir, started, timeoutSeconds, onOutput)
+        } catch (t: Throwable) {
+            // finish() falhando aqui deixava o runtime preso em RUNNING para sempre
+            // (active nunca era limpo, stateRef nunca voltava a READY), fazendo todo
+            // comando seguinte falhar de imediato no check() acima. Precisamos
+            // sempre liberar o estado e devolver um log explicando o erro real, em
+            // vez de deixar a exceção subir e ser engolida como "Comando falhou ao
+            // executar." sem detalhe nenhum.
+            emit(RuntimeEventType.RUNTIME_ERROR_UNHANDLED_FINISH, a.id, t.message)
+            runCatching { stopProcess(a.process) }
+            val now = System.currentTimeMillis()
+            val failed = ExecutionLog(a.id, sessionId, command, workingDir, started, now, now - started,
+                null, TerminationReason.RUNTIME_ERROR, false, false, "", t.message ?: t.javaClass.simpleName, SandboxState.READY)
+            runCatching { repository.save(failed) }.onFailure { emit(RuntimeEventType.PERSISTENCE_ERROR, a.id, it.message) }
+            failed
+        } finally {
+            active.compareAndSet(a, null)
+            stateRef.set(SandboxState.READY)
+        }
     }
 
     fun cancel(): Boolean = terminateActive(TerminationReason.CANCELLED, RuntimeEventType.PROCESS_CANCELLED)

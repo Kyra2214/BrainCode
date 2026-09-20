@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -26,7 +28,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -38,8 +44,25 @@ fun TerminalScreen(viewModel: SandboxViewModel, onBack: () -> Unit) {
     val history = viewModel.terminalHistory
     val tailLength = history.lastOrNull()?.output?.length ?: 0
     val clipboard = LocalClipboardManager.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val inputFocusRequester = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     var unseenOutput by remember { mutableStateOf(false) }
+
+    // O campo de comando ficava com foco (e o teclado aberto) o tempo todo,
+    // inclusive enquanto o usuário rolava a lista para selecionar uma saída
+    // antiga. Como o campo fica logo abaixo da lista, o gesto de seleção
+    // acabava caindo em cima do teclado/campo e o texto selecionado era
+    // "colado" ali sem o usuário pedir. Tirando o foco assim que a lista
+    // começa a rolar, o teclado some e a seleção/cópia fica isolada — tocar
+    // no campo de novo volta a focar normalmente.
+    LaunchedEffect(listState.isScrollInProgress) {
+        if (listState.isScrollInProgress) {
+            focusManager.clearFocus(force = true)
+            keyboardController?.hide()
+        }
+    }
     val nearBottom by remember {
         derivedStateOf {
             val lastVisible = listState.layoutInfo.visibleItemsInfo.maxOfOrNull { it.index } ?: -1
@@ -66,7 +89,10 @@ fun TerminalScreen(viewModel: SandboxViewModel, onBack: () -> Unit) {
     fun copyOutput(entry: TerminalEntry) = copy(entry.output)
     fun copyEntry(entry: TerminalEntry) = copy("$ ${entry.command}\n${entry.output}")
 
-    Column(modifier = Modifier.fillMaxSize().imePadding().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding().padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("Terminal", style = MaterialTheme.typography.titleLarge)
             OutlinedButton(onClick = onBack) { Text("Voltar") }
@@ -118,7 +144,7 @@ fun TerminalScreen(viewModel: SandboxViewModel, onBack: () -> Unit) {
                 value = viewModel.commandInput,
                 onValueChange = { viewModel.commandInput = it },
                 label = { Text("sandbox:~$") },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).focusRequester(inputFocusRequester),
                 singleLine = true
             )
             Button(onClick = { viewModel.runCommand() }, enabled = viewModel.phase == SandboxPhase.Ready && viewModel.commandInput.isNotBlank()) { Text("Executar") }

@@ -15,7 +15,12 @@ enum class RuntimeEventType {
     // suporte a alguma flag. Isso é uma falha de isolamento, não um detalhe
     // de log: memory_mb/cpu_seconds/etc. configurados podem não estar
     // valendo de verdade para essa execução.
-    RESOURCE_LIMIT_UNVERIFIED
+    RESOURCE_LIMIT_UNVERIFIED,
+    // finish() lançou uma exceção não tratada depois que o processo já tinha
+    // sido iniciado (fora do try/catch de start). Sem este evento, a falha
+    // ficava muda: o runtime simplesmente travava em RUNNING e o motivo real
+    // nunca chegava a lugar nenhum.
+    RUNTIME_ERROR_UNHANDLED_FINISH
 }
 
 data class ExecutionLog(

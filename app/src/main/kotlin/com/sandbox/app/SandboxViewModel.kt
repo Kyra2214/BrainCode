@@ -719,7 +719,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         terminalHistory = terminalHistory + TerminalEntry(command = command)
         viewModelScope.launch {
             phase = SandboxPhase.Running; liveTerminalOutput = ""
-            val e = withContext(Dispatchers.IO) {
+            val result = withContext(Dispatchers.IO) {
                 runCatching {
                     active.execute(listOf("/bin/bash", "-c", command), 60, "/home/sandbox", onOutput = { line, stderr ->
                         viewModelScope.launch {
@@ -728,8 +728,13 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                             appendTerminalOutput(chunk)
                         }
                     })
-                }.getOrNull()
+                }
             }
+            // runCatching aqui também capturava CancellationException, o que quebra o
+            // cancelamento cooperativo da coroutine (ela parecia "falhar" em vez de
+            // simplesmente ser cancelada). Deixamos essa subir normalmente.
+            result.exceptionOrNull()?.let { if (it is kotlinx.coroutines.CancellationException) throw it }
+            val e = result.getOrNull()
             if (e != null) {
                 lastExecution = e; lastResult = e.toUiResult()
                 val finalOutput = buildString {
@@ -738,8 +743,15 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 }
                 terminalHistory.lastOrNull()?.let { entry -> terminalHistory = terminalHistory.dropLast(1) + entry.copy(output = finalOutput, exitCode = e.exitCode, running = false) }
             } else {
-                terminalHistory.lastOrNull()?.let { entry -> terminalHistory = terminalHistory.dropLast(1) + entry.copy(output = "Comando falhou ao executar.\n", running = false) }
-                appendThreadEvent(ThreadEvent.System("Comando falhou ao executar."))
+                // Antes isto sempre mostrava "Comando falhou ao executar." sem detalhe
+                // nenhum, mesmo quando a causa raiz era conhecida (a exceção era
+                // descartada em .getOrNull()). Agora mostramos a mensagem real, que é
+                // o que faltava para diagnosticar por que o terminal "não reconhece
+                // comandos".
+                val detail = result.exceptionOrNull()?.message?.takeIf { it.isNotBlank() }
+                val message = if (detail != null) "Comando falhou ao executar: $detail\n" else "Comando falhou ao executar (erro desconhecido).\n"
+                terminalHistory.lastOrNull()?.let { entry -> terminalHistory = terminalHistory.dropLast(1) + entry.copy(output = message, running = false) }
+                appendThreadEvent(ThreadEvent.System(message.trim()))
             }
             phase = SandboxPhase.Ready
         }
