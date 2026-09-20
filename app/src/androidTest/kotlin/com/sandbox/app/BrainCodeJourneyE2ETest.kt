@@ -128,4 +128,20 @@ class BrainCodeJourneyE2ETest {
         send("Agora coloque o foguete em um deserto ao entardecer com meteoros.")
         waitForAssistantContaining("deserto")
     }
+
+    @Test
+    fun creationJourneyRequiresApprovalBeforeWorkspaceExecution() {
+        send("Crie um aplicativo Android simples de notas com tela de lista e edição.")
+        composeRule.waitUntil(timeoutMillis = 120_000) {
+            composeRule.onAllNodesWithText("Aprovação necessária", substring = true, useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("Aprovar e retomar", substring = true, useUnmergedTree = true).performClick()
+        composeRule.waitUntil(timeoutMillis = 120_000) {
+            composeRule.onAllNodesWithText("Resultado", substring = true, useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty() ||
+                composeRule.onAllNodesWithText("Plano concluído", substring = true, useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+        }
+    }
 }

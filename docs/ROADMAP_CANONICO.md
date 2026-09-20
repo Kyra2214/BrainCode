@@ -129,6 +129,8 @@ Não iniciar a integração de APIs externas antes de Porta 1 e Porta 2 estarem 
 [ ] CI/E2E/readiness final da Porta 3.
 [ ] declarar Porta 3 consolidada somente com evidência verde.
 
+Após auditoria, foram adicionados o gate persistente via `FileApprovalStore`, `CreationWorkflowPlanner`, `CreateDeliveryTest`, `FileApprovalStorePersistenceTest` e a jornada instrumentada `creationJourneyRequiresApprovalBeforeWorkspaceExecution`. A consolidação final permanece pendente até CI, UI E2E e readiness no mesmo HEAD.
+
 ### Critério de conclusão do Marco 5
 
 O Marco 5 somente será considerado concluído quando:

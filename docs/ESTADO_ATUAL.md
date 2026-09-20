@@ -94,3 +94,7 @@ O fluxo de tarefas existente foi coberto até QA/aprovação/correção, e `Defa
 - `LocalDeliveryPackagerTest` passou e verificou `README.md`, código e exclusão do próprio ZIP.
 - `:app:compileDebugKotlin` passou após a extração do empacotador.
 - APK ainda não foi gerado/entregue; falta o gate final de regressão/CI e a verificação do APK final.
+
+### Correção de gaps da Fase 4
+
+Uma auditoria posterior encontrou que a aprovação da criação estava apenas no estado da sessão e não era ligada ao `FileApprovalStore`, que o chat não armazenava o `approvalId` para o botão de retomada, e que roadmap/tarefas/especialistas ainda não eram compostos pelo fluxo. Esses gaps foram corrigidos: `executeObjective` cria `ApprovalRequest` persistente, o ViewModel decide e consome a aprovação pelo botão, o plano original é retomado, e `CreationWorkflowPlanner` registra roadmap, tarefas e assignments de especialistas. Também foram adicionados `CreateDeliveryTest`, `FileApprovalStorePersistenceTest` e uma jornada E2E de criação.

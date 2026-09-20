@@ -53,5 +53,9 @@ class FileApprovalStore(private val file: File) : ApprovalStore {
     private fun toJson(r: ApprovalRecord) = JSONObject().apply {
         put("id", r.request.id); put("runId", r.request.runId); put("taskId", r.request.taskId); put("capability", r.request.capability); put("resource", r.request.resource); put("expiresAt", r.request.expiresAt.toString()); put("status", r.status.name); put("decidedAt", r.decidedAt?.toString() ?: JSONObject.NULL)
     }
-    private fun fromJson(j: JSONObject): ApprovalRecord = ApprovalRecord(ApprovalRequest(j.getString("id"), j.getString("runId"), j.getString("taskId"), j.getString("capability"), j.getString("resource"), Instant.parse(j.getString("expiresAt"))), ApprovalStatus.valueOf(j.getString("status")), j.optString("decidedAt").takeUnless { it == "null" }?.let(Instant::parse))
+    private fun fromJson(j: JSONObject): ApprovalRecord = ApprovalRecord(
+        ApprovalRequest(j.getString("id"), j.getString("runId"), j.getString("taskId"), j.getString("capability"), j.getString("resource"), Instant.parse(j.getString("expiresAt"))),
+        ApprovalStatus.valueOf(j.getString("status")),
+        j.opt("decidedAt")?.takeUnless { it == JSONObject.NULL }?.toString()?.takeIf { it.isNotBlank() }?.let(Instant::parse)
+    )
 }

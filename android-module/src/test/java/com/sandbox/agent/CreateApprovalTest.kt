@@ -2,6 +2,7 @@ package com.sandbox.agent
 
 import com.brain.gateway.ActionExecution
 import com.brain.gateway.ActionExecutor
+import com.brain.planner.PlanoExecucao
 import com.brain.secretary.DeterministicSecretary
 import com.brain.secretary.SecretaryState
 import com.sandbox.runtime.FileExecutionLogRepository
@@ -15,6 +16,34 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CreateApprovalTest {
+    @Test
+    fun `criação inicial fica pendente e retoma pelo ApprovalStore`() {
+        val root = Files.createTempDirectory("create-pending-").toFile()
+        try {
+            var writes = 0
+            val controller = BrainSandboxController(
+                runtime = ManagedSandboxRuntime(TestLauncher(root), FileExecutionLogRepository(File(root, "logs")), sessionId = "session-create-pending"),
+                rootfsDir = root,
+                capabilityExecutors = mapOf("workspace.generate" to ActionExecutor { _, _, _ -> writes++; ActionExecution(true, result = "criado", evidence = listOf("workspace:test")) })
+            )
+            val intent = DeterministicSecretary().classify("criar um aplicativo de notas")
+            val pending = controller.executeObjective(intent.originalPrompt, "create-pending", intent = intent)
+            val approvalId = requireNotNull(pending.passos.single().approvalId)
+
+            assertEquals(StatusPasso.AGUARDANDO_APROVACAO, pending.passos.single().status)
+            assertEquals(0, writes)
+            assertTrue(controller.approve(approvalId))
+            val resumed = controller.resumePlan(PlanoExecucao(intent.originalPrompt, listOf(com.brain.planner.PassoPlano("produzir", "workspace.write", "artefato criado"))), "create-pending", approvalId)
+
+            assertTrue("resumed=$resumed", resumed.passos.any { it.status == StatusPasso.APROVADO })
+            assertEquals(1, writes)
+            assertTrue(controller.localEvents("create-pending").any { it.type == "CreateApprovalRequested" })
+            assertTrue(controller.localEvents("create-pending").any { it.type == "RoadmapCreated" })
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
     @Test
     fun `workspace só executa depois de approved`() {
         val root = Files.createTempDirectory("create-approval-").toFile()

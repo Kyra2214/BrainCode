@@ -902,6 +902,12 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                             onPasso = { passo -> viewModelScope.launch(Dispatchers.Main.immediate) { publishStep(passo) } },
                             intent = intent
                         )
+                        cycle.passos.firstOrNull { it.status == com.sandbox.agent.StatusPasso.AGUARDANDO_APROVACAO && it.approvalId != null }?.let { pending ->
+                            pendingApprovalPlan = com.brain.planner.PlanoExecucao(resolved.toBrainObjective(), listOf(com.brain.planner.PassoPlano(pending.passoId, pending.capacidade ?: "workspace.generate", "execução aprovada", parametros = listOf(resolved.toBrainObjective()))))
+                            pendingApprovalRunId = cycle.runId
+                            pendingApprovalId = pending.approvalId
+                            appendThreadEvent(ThreadEvent.Approval(requireNotNull(pending.approvalId)))
+                        }
                         withContext(Dispatchers.Main.immediate) { publishCycleStages(cycle) }
                         val promptActionId = cycle.passos.firstOrNull { it.capacidade == "prompt.library.write" }?.actionId
                         val content = cycle.resposta ?: "Plano concluído: ${cycle.aprovado}"
@@ -1154,7 +1160,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         brainController?.registrarFeedbackDePrompt(actionId, positivo)
     }
 
-    fun approveAndResume() { val c = brainController ?: return; val plan = pendingApprovalPlan ?: return; val runId = pendingApprovalRunId ?: return; val id = pendingApprovalId ?: return; if (phase != SandboxPhase.Ready) return; viewModelScope.launch { phase = SandboxPhase.Running; lastBrainCycle = withContext(Dispatchers.IO) { c.resumePlan(plan, runId, id) }; pendingApprovalId = null; pendingApprovalPlan = null; pendingApprovalRunId = null; phase = SandboxPhase.Ready } }
+    fun approveAndResume() { val c = brainController ?: return; val plan = pendingApprovalPlan ?: return; val runId = pendingApprovalRunId ?: return; val id = pendingApprovalId ?: return; if (phase != SandboxPhase.Ready) return; viewModelScope.launch { phase = SandboxPhase.Running; lastBrainCycle = withContext(Dispatchers.IO) { if (!c.approve(id)) return@withContext ResultadoCiclo(plan.objetivo, runId, listOf(ResultadoPasso("approval", com.sandbox.agent.StatusPasso.NEGADO_PELA_POLICY, motivo = "aprovação não pôde ser registrada", approvalId = id))); c.resumePlan(plan, runId, id) }; pendingApprovalId = null; pendingApprovalPlan = null; pendingApprovalRunId = null; phase = SandboxPhase.Ready } }
     fun refreshWorkspace() { val p = platform ?: return; workspaceProjects = p.workspace.listProjects(); sqliteServiceStatus = p.services.status(BuiltInServices.sqlite("/home/sandbox/workspace")) }
     fun createWorkspaceProject() {
         val p = platform ?: run { appendThreadEvent(ThreadEvent.System("Workspace indisponível: sandbox não está pronto.")); return }

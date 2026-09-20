@@ -6,7 +6,7 @@ Fechar a Porta 3 sem criar segundo orquestrador: discussão e requisitos continu
 
 ## Subfase 4.0 — máquina e aprovação
 
-`CreatePhaseMachine` percorre `DISCUSSION → REQUIREMENTS → ARCHITECTURE → PLAN → APPROVED → EXECUTION → INTEGRATION → REVIEW → TESTS → DELIVERY`. `SecretaryState.approve()` registra as transições e exige aprovação explícita antes de `APPROVED`. A sessão persiste o estado existente em JSON.
+`CreatePhaseMachine` percorre `DISCUSSION → REQUIREMENTS → ARCHITECTURE → PLAN → APPROVED → EXECUTION → INTEGRATION → REVIEW → TESTS → DELIVERY`. `SecretaryState.approve()` registra as transições e exige aprovação explícita antes de `APPROVED`. A sessão persiste o estado existente em JSON, e `BrainSandboxController` cria/consome `ApprovalRequest` no `FileApprovalStore` antes de executar o plano.
 
 A UI reconhece aprovação explícita quando já existe uma intenção `CREATE` ativa e persiste a nova intenção antes de chamar o controller. O `DoorPolicy` continua negando escrita/execução para fases anteriores; a integração `CreateApprovalTest` comprova zero escrita antes da aprovação e execução controlada depois dela.
 
@@ -16,7 +16,7 @@ A UI reconhece aprovação explícita quando já existe uma intenção `CREATE` 
 
 ## Subfases seguintes
 
-Reutilizar Requirements/Planning/Code/UI/Backend/Database/Security/Test/Review/Integration/Release existentes, gerar prompts pela biblioteca local, registrar segunda opinião/revisão, criar roadmap/tarefas e fechar a entrega local com recibo, resumo e ZIP. Git só deve operar em workspace autorizado. APIs externas seguem bloqueadas por D1.
+`CreationWorkflowPlanner` agora compõe roadmap, tarefas e assignments de especialistas para o plano aprovado; `BrainSandboxController` registra esses eventos antes da execução. Reutilizar Requirements/Planning/Code/UI/Backend/Database/Security/Test/Review/Integration/Release existentes, gerar prompts pela biblioteca local, registrar segunda opinião/revisão e fechar a entrega local com recibo, resumo e ZIP. Git só deve operar em workspace autorizado. APIs externas seguem bloqueadas por D1.
 
 ## Critérios de aceite
 

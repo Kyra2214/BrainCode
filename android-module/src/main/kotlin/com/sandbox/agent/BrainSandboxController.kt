@@ -18,6 +18,7 @@ import com.brain.job.JobStore
 import com.brain.execution.RiskClass
 import com.brain.policy.PolicyBroker
 import com.brain.policy.FileApprovalStore
+import com.brain.policy.ApprovalRequest
 import com.brain.router.ApiCatalogRegistry
 import com.brain.router.DefaultAIRouter
 import com.brain.router.InMemoryApiCatalog
@@ -49,6 +50,9 @@ import com.brain.memory.LayeredMemory
 import com.brain.memory.Provenance
 import com.brain.planner.TreeOfThoughts
 import com.brain.secretary.OrderIntent
+import com.brain.secretary.Door
+import com.brain.secretary.CreatePhase
+import com.brain.core.CreationWorkflowPlanner
 import java.io.File
 import java.time.Instant
 import kotlin.coroutines.Continuation
@@ -139,6 +143,8 @@ class BrainSandboxController(
     private val treeOfThoughts = TreeOfThoughts()
     private val layeredMemory = LayeredMemory()
     private val postExecutionGate = PostExecutionGate(layeredMemory)
+    private val pendingCreateScopes = mutableMapOf<String, com.brain.secretary.DoorScope>()
+    private val pendingCreatePlans = mutableMapOf<String, PlanoExecucao>()
     @Volatile private var taskState: TaskState? = null
 
     /** Executa o primeiro caso de uso real do Brain dentro do Sandbox preparado. */
@@ -166,7 +172,11 @@ class BrainSandboxController(
     }
 
     fun resumePlan(plano: PlanoExecucao, runId: String, approvalId: String): ResultadoCiclo =
-        executeWithEvents(plano, runId) { attemptPlan, attemptRunId -> bridge.resume(attemptPlan, runId = attemptRunId, actor = actor, approvalId = approvalId) }
+        executeWithEvents(pendingCreatePlans[runId] ?: plano, runId) {
+            attemptPlan, _ -> bridge.resume(attemptPlan, runId = runId, actor = actor, approvalId = approvalId, doorScope = pendingCreateScopes[runId])
+        }.also { pendingCreateScopes.remove(runId); pendingCreatePlans.remove(runId) }
+
+    fun approve(approvalId: String): Boolean = approvals.decide(approvalId, approved = true)?.status == com.brain.policy.ApprovalStatus.APPROVED
 
     fun approvalDemoPlan(): PlanoExecucao = PlanoExecucao(
         objetivo = "executar plano de demonstração com aprovação humana",
@@ -225,10 +235,13 @@ class BrainSandboxController(
         }
         taskState = TaskState(objective).withReasoning(reasoning)
         layeredMemory.rememberEpisode(objective, Provenance("brain:task-created", confidence = 1.0))
-        val planner = com.brain.planner.KeywordPlanner(if (intent == null) com.brain.planner.KeywordFunctionSplitter() else com.brain.planner.DoorAwareSplitter(secretary))
+        val planningIntent = if (intent?.door == Door.CREATE && intent.phase < CreatePhase.APPROVED) {
+            intent.copy(phase = CreatePhase.APPROVED, scope = intent.scope.copy(phase = CreatePhase.APPROVED))
+        } else intent
+        val planner = com.brain.planner.KeywordPlanner(if (planningIntent == null) com.brain.planner.KeywordFunctionSplitter() else com.brain.planner.DoorAwareSplitter(secretary))
         val basePlan = runBlockingPlanner {
-            if (intent == null) planner.planejar(reasoning.objective, reasoning)
-            else planner.planejar(reasoning.objective, intent, reasoning)
+            if (planningIntent == null) planner.planejar(reasoning.objective, reasoning)
+            else planner.planejar(reasoning.objective, planningIntent, reasoning)
         }
         if (basePlan.passos.any { it.capacidade == "brain.analyze" } && !apiKeyAvailable()) {
             emit(runId, "reasoning", "LocalFallbackSelected", mapOf("reason" to "api-unavailable"))
@@ -242,6 +255,36 @@ class BrainSandboxController(
         val plan = basePlan.copy(
             assumptions = basePlan.assumptions + treeAssumptions + if (promptHit != null) setOf("prompt-template:${promptHit.id}") else emptySet()
         )
+        if (planningIntent?.door == Door.CREATE && planningIntent.phase >= CreatePhase.APPROVED) {
+            val creation = CreationWorkflowPlanner.build(planningIntent, reasoning.requirements.map { it.text })
+            emit(runId, "roadmap", "RoadmapCreated", mapOf("phases" to creation.roadmap.fases.size.toString(), "tasks" to creation.tasks.size.toString()))
+            creation.assignments.forEach { assignment ->
+                emit(runId, assignment.taskId, "TaskAssigned", mapOf("specialist" to assignment.specialistId, "capability" to assignment.capability))
+                emit(runId, assignment.taskId, "SpecialistSelected", mapOf("specialist" to assignment.specialistId))
+            }
+        }
+        if (intent?.door == Door.CREATE && intent.phase < CreatePhase.APPROVED) {
+            val gatedStep = plan.passos.firstOrNull { it.capacidade.startsWith("workspace.") || it.capacidade.startsWith("sandbox.") }
+            if (gatedStep != null) {
+                val approval = approvals.create(
+                    ApprovalRequest(
+                        runId = runId,
+                        taskId = gatedStep.id,
+                        capability = gatedStep.capacidade,
+                        resource = "create:${gatedStep.id}",
+                        expiresAt = Instant.now().plusSeconds(3600)
+                    )
+                )
+                pendingCreateScopes[runId] = planningIntent!!.scope
+                pendingCreatePlans[runId] = plan
+                emit(runId, "secretary", "CreateApprovalRequested", mapOf("approvalId" to approval.request.id, "phase" to intent.phase.name, "nextPhase" to CreatePhase.APPROVED.name))
+                return ResultadoCiclo(
+                    plan.objetivo,
+                    runId,
+                    listOf(ResultadoPasso(gatedStep.id, StatusPasso.AGUARDANDO_APROVACAO, motivo = "aprovação explícita necessária antes de ${gatedStep.capacidade}", approvalId = approval.request.id, capacidade = gatedStep.capacidade))
+                )
+            }
+        }
         taskState = taskState?.withPlan(
             summary = plan.passos.joinToString(",") { "${it.id}:${it.capacidade}" },
             assumptions = plan.assumptions.toList()
@@ -267,7 +310,7 @@ class BrainSandboxController(
                             )
                         )
                         onPasso(passo)
-                    }, doorScope = intent?.scope)
+                    }, doorScope = planningIntent?.scope)
                 }
                 WorkflowStepResult(
                     nodeId = node.id,
