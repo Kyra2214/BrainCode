@@ -382,7 +382,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
 
     private fun eventToJson(event: ThreadEvent): JSONObject = when (event) {
         is ThreadEvent.User -> JSONObject().put("type", "user").put("text", event.text)
-        is ThreadEvent.Agent -> JSONObject().put("type", "agent").put("text", event.text).put("validationWarning", event.validationWarning ?: JSONObject.NULL).put("validationPassed", event.validationPassed ?: JSONObject.NULL)
+        is ThreadEvent.Agent -> JSONObject().put("type", "agent").put("text", event.text).put("validationWarning", event.validationWarning ?: JSONObject.NULL).put("validationPassed", event.validationPassed ?: JSONObject.NULL).put("promptReasoning", event.promptReasoning?.toJson() ?: JSONObject.NULL)
         is ThreadEvent.System -> JSONObject().put("type", "system").put("text", event.text)
         is ThreadEvent.Report -> JSONObject().put("type", "report").put("title", event.title).put("body", event.body)
         is ThreadEvent.Approval -> JSONObject().put("type", "approval").put("id", event.id)
@@ -414,9 +414,29 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         return ConversationContext(json.optString("idea").takeIf { it.isNotBlank() && it != "null" }, list("requirements"), list("decisions"), list("discarded"), list("pending"), list("artifacts"), list("references"))
     }
 
+    private fun PromptReasoningUi.toJson(): JSONObject = JSONObject()
+        .put("intent", intent)
+        .put("mandatoryElements", JSONArray(mandatoryElements))
+        .put("evidence", JSONArray(evidence))
+        .put("assumptions", JSONArray(assumptions))
+        .put("revisions", JSONArray(revisions))
+
+    private fun JSONObject.toPromptReasoningUi(): PromptReasoningUi = PromptReasoningUi(
+        intent = optString("intent"),
+        mandatoryElements = optStringList("mandatoryElements"),
+        evidence = optStringList("evidence"),
+        assumptions = optStringList("assumptions"),
+        revisions = optStringList("revisions")
+    )
+
+    private fun JSONObject.optStringList(name: String): List<String> {
+        val array = optJSONArray(name) ?: return emptyList()
+        return (0 until array.length()).mapNotNull { index -> array.optString(index).takeIf { it.isNotBlank() } }
+    }
+
     private fun eventFromJson(item: JSONObject): ThreadEvent? = when (item.optString("type")) {
         "user" -> ThreadEvent.User(item.optString("text"))
-        "agent" -> ThreadEvent.Agent(item.optString("text"), validationWarning = item.optString("validationWarning").takeIf { it.isNotBlank() && it != "null" }, validationPassed = item.opt("validationPassed")?.takeUnless { it == JSONObject.NULL }?.let { item.optBoolean("validationPassed") })
+        "agent" -> ThreadEvent.Agent(item.optString("text"), promptReasoning = item.optJSONObject("promptReasoning")?.toPromptReasoningUi(), validationWarning = item.optString("validationWarning").takeIf { it.isNotBlank() && it != "null" }, validationPassed = item.opt("validationPassed")?.takeUnless { it == JSONObject.NULL }?.let { item.optBoolean("validationPassed") })
         "system" -> ThreadEvent.System(item.optString("text"))
         "report" -> ThreadEvent.Report(item.optString("title"), item.optString("body"))
         "approval" -> ThreadEvent.Approval(item.optString("id"))
