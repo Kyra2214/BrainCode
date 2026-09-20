@@ -77,7 +77,12 @@ Executor geral de retrievalHints ainda é backlog.
 
 Agents são bounded workers. Skills descrevem procedimentos. Capabilities são unidades autorizáveis. Providers implementam serviços.
 
-Roofts 0.3–0.5 permanecem preservados. Roofts 0.6 está instalado como payload upstream, mas suas Skills ainda não são um runtime ativo.
+**RooftS é uma única entidade composta por camadas 0.3, 0.4, 0.5 e 0.6.** Os artefatos físicos permanecem separados quando necessário para preservar integridade e proveniência.
+
+- RooftS 0.3–0.5: camadas RootFS preservadas.
+- RooftS 0.6 / Agent Skills: camada de skills, agents e workflows auxiliares.
+
+A camada 0.6 está instalada como payload, mas suas Skills ainda não são um runtime ativo e esta consolidação não as integra ao Planner, Dispatcher ou ActionGateway. A definição canônica está em `docs/ROOFTS.md`.
 
 ## 8. Segurança
 
