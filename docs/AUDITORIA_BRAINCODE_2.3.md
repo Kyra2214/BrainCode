@@ -43,7 +43,7 @@ Isso evita declarar aprendizado validado quando o `Readiness` aprovou a execuç�
 
 ### 4. Documentação
 
-`ESTADO_ATUAL.md`, esta auditoria e a arquitetura/roadmap devem refletir o HEAD atual. Roofts 0.6 continua instalado como payload independente, mas deliberadamente não integrado ao runtime. Retrieval universal/semântico, hardening OS-level e leases/fencing continuam marcos posteriores.
+`ESTADO_ATUAL.md`, esta auditoria e a arquitetura/roadmap devem refletir o HEAD atual. RooftS é uma entidade única com camadas 0.3–0.6; a camada 0.6 / Agent Skills continua deliberadamente não integrada ao runtime. Retrieval universal/semântico, hardening OS-level e leases/fencing continuam marcos posteriores.
 
 ## Matriz 2.3
 
