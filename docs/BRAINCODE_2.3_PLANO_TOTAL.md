@@ -71,8 +71,10 @@ O estado atual já possui peças importantes:
 - Evidence / research;
 - Sandbox;
 - runtime Python de referência em `brain_runtime/`;
-- Roofts 0.3 / 0.4 / 0.5 preservados;
-- Roofts 0.6 instalado a partir de `addyosmani/agent-skills`.
+- RooftS é uma entidade única composta pelas camadas 0.3, 0.4, 0.5 e 0.6;
+- RooftS 0.3 / 0.4 / 0.5 permanecem preservados;
+- RooftS 0.6 / Agent Skills está instalado como camada do mesmo RooftS, sem integração comportamental nesta fase;
+- definição canônica: `docs/ROOFTS.md`.
 
 A 2.3 deve **reutilizar e integrar**, não duplicar.
 
