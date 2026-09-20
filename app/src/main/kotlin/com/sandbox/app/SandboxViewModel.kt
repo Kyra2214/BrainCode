@@ -246,8 +246,38 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         return true
     }
 
+    /** Uma aprovação pendente pertence à sessão cujo card a exibe; se essa sessão sumir, a aprovação some junto. */
+    private fun dropPendingApprovalOwnedBy(session: ThreadSession?) {
+        val pending = pendingApprovalId ?: return
+        if (session?.events?.any { it is ThreadEvent.Approval && it.id == pending } == true) {
+            pendingApprovalId = null; pendingApprovalPlan = null; pendingApprovalRunId = null
+        }
+    }
+
+    /** Apaga a sessão (não só o conteúdo). Bloqueia se ela é a ativa e está executando. */
+    fun deleteSession(id: String): Boolean {
+        val target = sessions.firstOrNull { it.id == id } ?: return false
+        if (id == activeSessionId && (phase == SandboxPhase.Running || chatRunning)) return false
+        dropPendingApprovalOwnedBy(target)
+        sessions = sessions.filterNot { it.id == id }
+        if (id == activeSessionId) {
+            val next = sessions.maxByOrNull { it.updatedAt }
+            if (next == null) {
+                createSession() // nunca fica sem sessão ativa; já persiste
+                return true
+            }
+            activeSessionId = next.id
+            workspaceProjectName = next.workspaceProjectName.orEmpty()
+            restoreChatFromActiveSession()
+            brainUiStage = BrainUiStage.IDLE
+        }
+        persistSessions()
+        return true
+    }
+
     fun clearActiveSession() {
         val id = activeSessionId ?: return
+        dropPendingApprovalOwnedBy(sessions.firstOrNull { it.id == id })
         sessions = sessions.map { session -> if (session.id != id) session else session.copy(title = "Nova tarefa", events = emptyList(), conversationContext = ConversationContext(), updatedAt = System.currentTimeMillis()) }
         chatMessages.clear()
         brainUiStage = BrainUiStage.IDLE
@@ -465,6 +495,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     var lastResult by mutableStateOf<com.sandbox.runtime.SandboxExecutionResult?>(null); private set
     var lastExecution by mutableStateOf<ExecutionLog?>(null); private set
     var liveTerminalOutput by mutableStateOf(""); private set
+    /** Sessão do chat que iniciou a execução em andamento (null = veio do Terminal e não pode aparecer na thread). */
+    var liveRunSessionId by mutableStateOf<String?>(null); private set
     var terminalHistory by mutableStateOf<List<TerminalEntry>>(emptyList()); private set
     var commandHistory by mutableStateOf<List<String>>(emptyList()); private set
     private var commandHistoryCursor = 0
@@ -708,15 +740,26 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun runCommand() {
-        val active = runtime ?: run { appendThreadEvent(ThreadEvent.System("Comando indisponível: sandbox não está pronto.")); return }
-        if (phase != SandboxPhase.Ready) { appendThreadEvent(ThreadEvent.System("Comando indisponível: sandbox ocupado.")); return }
+    /** Comando sem execução possível: no chat vira evento da thread; no Terminal fica só no scrollback. */
+    private fun reportRunIssue(fromChat: Boolean, message: String) {
+        if (fromChat) appendThreadEvent(ThreadEvent.System(message))
+        else terminalHistory = terminalHistory + TerminalEntry(command = commandInput.trim(), output = "$message\n", running = false)
+    }
+
+    /**
+     * [fromChat] = true só para /run digitado no chat. Execuções do Terminal NÃO entram na thread:
+     * antes, lastResult/lastExecution eram estado global e apareciam em qualquer chat (inclusive novo).
+     */
+    fun runCommand(fromChat: Boolean = false) {
+        val active = runtime ?: run { reportRunIssue(fromChat, "Comando indisponível: sandbox não está pronto."); return }
+        if (phase != SandboxPhase.Ready) { reportRunIssue(fromChat, "Comando indisponível: sandbox ocupado."); return }
         val command = commandInput.trim()
         if (command.isEmpty()) return
         commandInput = ""
         commandHistory = (commandHistory + command).takeLast(100)
         commandHistoryCursor = 0
         terminalHistory = terminalHistory + TerminalEntry(command = command)
+        liveRunSessionId = if (fromChat) activeSessionId else null
         viewModelScope.launch {
             phase = SandboxPhase.Running; liveTerminalOutput = ""
             val result = withContext(Dispatchers.IO) {
@@ -735,8 +778,13 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             // simplesmente ser cancelada). Deixamos essa subir normalmente.
             result.exceptionOrNull()?.let { if (it is kotlinx.coroutines.CancellationException) throw it }
             val e = result.getOrNull()
+            // Resultado do chat vira evento persistido da própria sessão (não estado global);
+            // é anexado depois de phase = Ready para não gravar status RUNNING na sessão.
+            var chatEvent: ThreadEvent? = null
             if (e != null) {
-                lastExecution = e; lastResult = e.toUiResult()
+                val uiResult = e.toUiResult()
+                lastExecution = e; lastResult = uiResult
+                chatEvent = ThreadEvent.Terminal(uiResult, e)
                 val finalOutput = buildString {
                     if (e.stdout.isNotBlank()) append(e.stdout)
                     if (e.stderr.isNotBlank()) { if (isNotEmpty()) append('\n'); append("[stderr] "); append(e.stderr) }
@@ -751,9 +799,11 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 val detail = result.exceptionOrNull()?.message?.takeIf { it.isNotBlank() }
                 val message = if (detail != null) "Comando falhou ao executar: $detail\n" else "Comando falhou ao executar (erro desconhecido).\n"
                 terminalHistory.lastOrNull()?.let { entry -> terminalHistory = terminalHistory.dropLast(1) + entry.copy(output = message, running = false) }
-                appendThreadEvent(ThreadEvent.System(message.trim()))
+                chatEvent = ThreadEvent.System(message.trim())
             }
+            liveRunSessionId = null
             phase = SandboxPhase.Ready
+            if (fromChat) chatEvent?.let { appendThreadEvent(it) }
         }
     }
 
@@ -828,7 +878,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             lower == "/sqlite start" -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; startSqliteService() }
             lower == "/sqlite stop" -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; stopSqliteService() }
             lower == "/discovery" -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; runDiscovery() }
-            lower.startsWith("/run ") -> { val script = command.substringAfter(" ").trim(); if (script.isNotBlank()) { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; commandInput = script; runCommand() } }
+            lower.startsWith("/run ") -> { val script = command.substringAfter(" ").trim(); if (script.isNotBlank()) { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; commandInput = script; runCommand(fromChat = true) } }
             lower == "/deliver" -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; publishLocalDelivery() }
             command.startsWith("/") && command.length > 1 -> {
                 val espaco = command.indexOf(' ')

@@ -153,9 +153,8 @@ fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}, o
             // (preparar/baixar/erro), para não esconder uma ação necessária do usuário.
             if (viewModel.phase != SandboxPhase.Ready) StatusSection(viewModel)
             val events = remember(
-                viewModel.activeThreadEvents.toList(), viewModel.liveTerminalOutput, viewModel.lastExecution,
-                viewModel.lastResult, viewModel.pendingApprovalId, viewModel.lastTestLabReport,
-                viewModel.lastSecurityAssessment, viewModel.lastGitStatus, viewModel.phase, query
+                viewModel.activeThreadEvents.toList(), viewModel.liveTerminalOutput, viewModel.liveRunSessionId,
+                viewModel.activeSessionId, viewModel.phase, query
             ) { threadEvents(viewModel, query) }
             val listState = rememberLazyListState()
             var composerHeight by remember { mutableStateOf(104.dp) }
@@ -213,12 +212,10 @@ private fun eventKey(event: ThreadEvent, index: Int): String = "$index:${when (e
 
 private fun threadEvents(viewModel: SandboxViewModel, query: String = ""): List<ThreadEvent> = buildList {
     addAll(viewModel.activeThreadEvents)
-    if (viewModel.phase == SandboxPhase.Running && viewModel.liveTerminalOutput.isNotBlank()) add(ThreadEvent.Report("Terminal · ao vivo", viewModel.liveTerminalOutput))
-    viewModel.lastExecution?.let { execution -> viewModel.lastResult?.let { add(ThreadEvent.Terminal(it, execution)) } }
-    viewModel.pendingApprovalId?.let { add(ThreadEvent.Approval(it)) }
-    if (viewModel.activeThreadEvents.none { it is ThreadEvent.Report && it.title == "TestLab" }) viewModel.lastTestLabReport?.let { add(ThreadEvent.Report("TestLab", "${if (it.success) "PASS" else "FAIL"} — ${it.passed}/${it.steps.size} etapas")) }
-    if (viewModel.activeThreadEvents.none { it is ThreadEvent.Report && it.title == "Security gate" }) viewModel.lastSecurityAssessment?.let { add(ThreadEvent.Report("Security gate", "${if (it.readiness.ready) "APROVADO" else "BLOQUEADO"} — ${it.findings.size} achado(s)")) }
-    if (viewModel.activeThreadEvents.none { it is ThreadEvent.Report && it.title == "Git status" }) viewModel.lastGitStatus?.let { add(ThreadEvent.Report("Git status", it)) }
+    // Só a saída AO VIVO de um /run desta mesma sessão. Todo o resto (Terminal, TestLab, Security gate,
+    // Git status, Aprovação) já é gravado como evento da sessão; injetar o "último resultado" global aqui
+    // fazia a saída do Terminal vazar para qualquer chat, sobreviver ao Limpar e aparecer em chat novo.
+    if (viewModel.phase == SandboxPhase.Running && viewModel.liveRunSessionId == viewModel.activeSessionId && viewModel.liveTerminalOutput.isNotBlank()) add(ThreadEvent.Report("Terminal · ao vivo", viewModel.liveTerminalOutput))
 }.filter { query.isBlank() || eventText(it).contains(query, ignoreCase = true) }
 
 private fun eventText(event: ThreadEvent): String = when (event) {
@@ -255,6 +252,16 @@ private fun ThreadTopBar(viewModel: SandboxViewModel, searchOpen: Boolean, onTog
 
 @Composable
 private fun TaskSidebar(viewModel: SandboxViewModel, onClose: () -> Unit) {
+    var pendingDelete by remember { mutableStateOf<SessionSummary?>(null) }
+    pendingDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Apagar conversa?") },
+            text = { Text("\"${target.title}\" será removida da lista e do armazenamento. Essa ação não pode ser desfeita.") },
+            confirmButton = { Button(onClick = { viewModel.deleteSession(target.id); pendingDelete = null }) { Text("Apagar") } },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancelar") } }
+        )
+    }
     Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Tarefas", style = MaterialTheme.typography.titleMedium)
@@ -266,10 +273,13 @@ private fun TaskSidebar(viewModel: SandboxViewModel, onClose: () -> Unit) {
         viewModel.sessionSummaries.forEach { session ->
             val active = session.id == viewModel.activeSessionId
             Card(onClick = { viewModel.switchSession(session.id); onClose() }, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Abrir sessão ${session.title}" }, colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = if (active) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer)) {
-                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(if (active) "● ${session.title}" else session.title, style = MaterialTheme.typography.titleSmall)
-                    Text("${session.status.name} · ${session.workspaceProjectName ?: "sem workspace"}", style = MaterialTheme.typography.labelSmall)
-                    Text(session.lastEventPreview, style = MaterialTheme.typography.bodySmall, maxLines = 2)
+                Row(modifier = Modifier.fillMaxWidth().padding(start = 10.dp, top = 4.dp, bottom = 4.dp, end = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(if (active) "● ${session.title}" else session.title, style = MaterialTheme.typography.titleSmall)
+                        Text("${session.status.name} · ${session.workspaceProjectName ?: "sem workspace"}", style = MaterialTheme.typography.labelSmall)
+                        Text(session.lastEventPreview, style = MaterialTheme.typography.bodySmall, maxLines = 2)
+                    }
+                    IconButton(onClick = { pendingDelete = session }, modifier = Modifier.semantics { contentDescription = "Apagar sessão ${session.title}" }) { Icon(Icons.Default.Delete, contentDescription = null) }
                 }
             }
         }
