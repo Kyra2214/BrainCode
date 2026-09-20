@@ -126,10 +126,10 @@ Não iniciar a integração de APIs externas antes de Porta 1 e Porta 2 estarem 
 [ ] fechar segunda opinião e retorno ao responsável quando houver erro.
 [x] consolidar Git autorizado / entrega ZIP.
 [x] bateria de testes funcional + regressão.
-[ ] CI/E2E/readiness final da Porta 3.
-[ ] declarar Porta 3 consolidada somente com evidência verde.
+[x] CI/E2E/readiness final da Porta 3.
+[x] declarar Porta 3 consolidada somente com evidência verde.
 
-Após auditoria, foram adicionados o gate persistente via `FileApprovalStore`, `CreationWorkflowPlanner`, `CreateDeliveryTest`, `FileApprovalStorePersistenceTest` e a jornada instrumentada `creationJourneyRequiresApprovalBeforeWorkspaceExecution`. A consolidação final permanece pendente até CI, UI E2E e readiness no mesmo HEAD.
+Após auditoria, foram adicionados o gate persistente via `FileApprovalStore`, `CreationWorkflowPlanner`, `CreateDeliveryTest`, `FileApprovalStorePersistenceTest` e a jornada instrumentada `creationJourneyRequiresApprovalBeforeWorkspaceExecution`. CI `35536050052` e UI E2E `35536055182` passaram no commit `f859426`; a Porta 3 está consolidada para este HEAD.
 
 ### Critério de conclusão do Marco 5
 
