@@ -72,7 +72,7 @@ class BrainSandboxController(
     private val apiKeyAvailable: () -> Boolean = { true },
     private val authorizedAccountIds: Set<String> = emptySet(),
     private val events: EventStore = InMemoryEventStore(),
-    private val revisionFixer: RevisionFixer = ContextRevisionFixer()
+    private val revisionFixer: RevisionFixer = FindingsRevisionFixer()
 ) {
     private val behaviorDiagnostics = BehaviorDiagnostics(EventStoreBehaviorTraceSink(events, "android-local"))
     private val dynamicCapabilityProviders = capabilityProviders
@@ -298,13 +298,28 @@ class BrainSandboxController(
         var currentPlan = plan
         var attempt = 1
         val revisionAttempts = mutableListOf<RevisionAttemptTrace>()
+        val candidates = mutableListOf<Pair<ResultadoCiclo, ResultadoPosExecucao>>()
+        var previousOutputSignature: String? = null
+        var previousFindingsSignature: String? = null
         while (attempt <= MAX_EXECUTION_ATTEMPTS) {
             val attemptRunId = "$runId:attempt-$attempt"
             emit(runId, "execution", "AttemptStarted", mapOf("attempt" to attempt.toString(), "attemptRunId" to attemptRunId))
             val startedAt = System.nanoTime()
-            val result = runCatching { action(currentPlan, attemptRunId) }
-                .onFailure { emit(attemptRunId, "execution", "ExecutionFailed", mapOf("error" to (it.message ?: "unknown").take(500))) }
-                .getOrThrow()
+            var technicalRetry = 0
+            var result: ResultadoCiclo
+            while (true) {
+                val execution = runCatching { action(currentPlan, attemptRunId) }
+                if (execution.isSuccess) {
+                    result = requireNotNull(execution.getOrNull())
+                    break
+                }
+                val error = execution.exceptionOrNull()
+                emit(attemptRunId, "execution", "ExecutionFailed", mapOf("error" to (error?.message ?: "unknown").take(500), "technicalRetry" to technicalRetry.toString()))
+                if (technicalRetry >= MAX_TECHNICAL_RETRIES) throw error ?: IllegalStateException("falha técnica desconhecida")
+                technicalRetry++
+                emit(attemptRunId, "execution", "TechnicalRetry", mapOf("retry" to technicalRetry.toString(), "max" to MAX_TECHNICAL_RETRIES.toString()))
+                Thread.sleep(TECHNICAL_RETRY_BACKOFF_MS * technicalRetry)
+            }
             val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
             promptOutcomeTracker?.let { tracker ->
                 result.passos.forEach { passo ->
@@ -337,6 +352,19 @@ class BrainSandboxController(
                 runId = runId,
                 posExecucao = postExecution.copy(revisionAttempts = revisionAttempts.toList())
             )
+            candidates += result to postExecution
+            val outputSignature = result.resposta.orEmpty().trim()
+            val findingsSignature = postExecution.critique.findings.joinToString("|") { "${it.code}:${it.message}" }
+            if (attempt > 1 && outputSignature == previousOutputSignature && findingsSignature == previousFindingsSignature) {
+                val noProgress = finalResult.copy(posExecucao = postExecution.copy(
+                    issues = postExecution.issues + "revision.no-progress",
+                    revisionAttempts = revisionAttempts + RevisionAttemptTrace(attemptRunId, attempt, "ABORT", "saída e findings idênticos à tentativa anterior")
+                ))
+                emit(runId, "revision", "RevisionAborted", mapOf("reason" to "no-progress", "attempts" to attempt.toString()))
+                return noProgress
+            }
+            previousOutputSignature = outputSignature
+            previousFindingsSignature = findingsSignature
             emit(
                 attemptRunId,
                 "post-execution",
@@ -351,7 +379,8 @@ class BrainSandboxController(
                     "revision" to postExecution.revision.action.name,
                     "readiness" to postExecution.readiness.status.name,
                     "learning" to postExecution.learningRecorded.toString(),
-                    "attempt" to attempt.toString()
+                    "attempt" to attempt.toString(),
+                    "findings" to postExecution.critique.findings.joinToString(" | ") { "${it.code}: ${it.message}" }.take(1000)
                 )
             )
             if (postExecution.revision.action != com.brain.behavior.RevisionAction.REVISE) {
@@ -359,24 +388,32 @@ class BrainSandboxController(
                 return finalResult
             }
             if (attempt == MAX_EXECUTION_ATTEMPTS) {
-                val exhausted = finalResult.copy(posExecucao = postExecution.copy(
-                    issues = postExecution.issues + "revision.max-attempts-exceeded",
+                val best = candidates.minByOrNull { (_, gate) -> gate.critique.findings.sumOf { finding -> when (finding.severity) {
+                    com.brain.behavior.FindingSeverity.BLOCKING -> 1000
+                    com.brain.behavior.FindingSeverity.HIGH -> 100
+                    com.brain.behavior.FindingSeverity.MEDIUM -> 10
+                    com.brain.behavior.FindingSeverity.LOW -> 1
+                } } } ?: (result to postExecution)
+                val exhausted = best.first.copy(runId = runId, posExecucao = best.second.copy(
+                    issues = best.second.issues + "revision.max-attempts-exceeded",
                     revisionAttempts = revisionAttempts + RevisionAttemptTrace(attemptRunId, attempt, "ABORT", "máximo de tentativas atingido")
                 ))
                 emit(runId, "revision", "RevisionAborted", mapOf("reason" to "max-attempts", "attempts" to attempt.toString()))
                 return exhausted
             }
             val nextAttempt = attempt + 1
+            val previousSignature = planSignature(currentPlan)
             val fix = RevisionFixVerifyLearn(revisionFixer).apply(currentPlan, postExecution.critique, nextAttempt) { application ->
+                val changed = planSignature(application.plan) != previousSignature
                 VerificationResult(
-                    com.brain.behavior.VerificationStatus.PASSED,
-                    listOf(com.brain.behavior.VerificationCheck("revision-fix", true, application.evidence, "${runId}:fix:$nextAttempt")),
+                    if (changed && application.evidence.isNotBlank()) com.brain.behavior.VerificationStatus.PASSED else com.brain.behavior.VerificationStatus.FAILED,
+                    listOf(com.brain.behavior.VerificationCheck("revision-fix", changed && application.evidence.isNotBlank(), if (changed) application.evidence else "plano não mudou", "${runId}:fix:$nextAttempt")),
                     listOf("${runId}:fix:$nextAttempt")
                 )
             }
             if (!fix.completed) {
                 val blocked = finalResult.copy(posExecucao = postExecution.copy(
-                    issues = postExecution.issues + fix.issues.map { "revision.fix.$it" },
+                    issues = postExecution.issues + fix.issues.map { "revision.fix.$it" } + if (fix.verification?.passed == false) listOf("revision.no-progress") else emptyList(),
                     revisionAttempts = revisionAttempts + RevisionAttemptTrace(attemptRunId, attempt, "FIX_FAILED", fix.issues.joinToString(";"))
                 ))
                 emit(runId, "revision", "RevisionFixFailed", mapOf("attempt" to attempt.toString(), "issues" to fix.issues.joinToString(";").take(500)))
@@ -391,7 +428,14 @@ class BrainSandboxController(
         error("execution attempts exhausted without terminal result")
     }
 
-    private companion object { const val MAX_EXECUTION_ATTEMPTS = 3 }
+    private companion object {
+        const val MAX_EXECUTION_ATTEMPTS = 3
+        const val MAX_TECHNICAL_RETRIES = 2
+        const val TECHNICAL_RETRY_BACKOFF_MS = 50L
+    }
+
+    private fun planSignature(plan: PlanoExecucao): String =
+        (plan.assumptions.toList().sorted() + plan.ordemDeExecucao.flatMap { listOf(it.id) + it.parametros }).joinToString("\u001f")
 
     private fun emit(runId: String, taskId: String, type: String, payload: Map<String, String>) {
         val sequence = events.replay().size.toLong()

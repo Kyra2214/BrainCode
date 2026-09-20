@@ -747,9 +747,10 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     private fun postExecutionWarning(cycle: ResultadoCiclo): String? {
         val gate = cycle.posExecucao ?: return null
         if (cycle.aprovado) return null
-        val details = gate.issues.ifEmpty {
+        val findings = gate.critique.findings.map { "${it.code}: ${it.message}" }
+        val details = (gate.issues + findings).ifEmpty {
             listOf("verification=${gate.verification.status}", "critique=${gate.critique.status}", "readiness=${gate.readiness.status}")
-        }
+        }.distinct()
         return "Atenção: a resposta não passou na verificação pós-execução. ${details.joinToString("; ")}"
     }
 

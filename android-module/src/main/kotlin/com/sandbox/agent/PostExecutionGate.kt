@@ -10,6 +10,8 @@ import com.brain.behavior.ReadinessStageName
 import com.brain.behavior.RevisionAction
 import com.brain.behavior.RevisionDecision
 import com.brain.behavior.UniversalCritic
+import com.brain.behavior.CritiqueFinding
+import com.brain.behavior.FindingSeverity
 import com.brain.behavior.ValidatedLearning
 import com.brain.behavior.LearningCandidate
 import com.brain.memory.LayeredMemory
@@ -70,7 +72,20 @@ class PostExecutionGate(private val memory: LayeredMemory) {
             evidence = evidence,
             result = cycle.resposta.orEmpty()
         )
-        val critique: CritiqueResult = critic.evaluate(critiqueInput)
+        val baseCritique: CritiqueResult = critic.evaluate(critiqueInput)
+        val researchWasUsed = cycle.researchSources.any { source ->
+            val output = cycle.resposta.orEmpty().lowercase()
+            listOf(source.title, source.source, source.relevantContent)
+                .flatMap { it.lowercase().split(Regex("[^\\p{L}\\p{Nd}]+")) }
+                .filter { it.length >= 5 }
+                .any { it in output }
+        }
+        val critique: CritiqueResult = if (cycle.researchSources.isNotEmpty() && !researchWasUsed) {
+            baseCritique.copy(
+                status = if (baseCritique.status == com.brain.behavior.CritiqueStatus.BLOCKED) baseCritique.status else com.brain.behavior.CritiqueStatus.NEEDS_REVISION,
+                findings = baseCritique.findings + CritiqueFinding("research.unused", "fontes de pesquisa disponíveis não refletidas no resultado", FindingSeverity.MEDIUM)
+            )
+        } else baseCritique
         val revision: RevisionDecision = review.review(critiqueInput, critique)
         val completed = mapOf(
             ReadinessStageName.IMPLEMENTATION to (cycle.passos.isNotEmpty() && cycle.passos.all { it.status == StatusPasso.APROVADO }),

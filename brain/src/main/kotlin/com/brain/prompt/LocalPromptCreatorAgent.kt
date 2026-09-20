@@ -92,9 +92,10 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
         // checklist e pergunta pelo sujeito quando ele não estiver identificável.
         val sujeito = sujeitoSplit ?: componentes["sujeito"] ?: extrairSujeito(textoBase) ?: "o sujeito principal especificado pelo usuário"
         val estilo = componentes["estilo"] ?: (if ("fotorrealista" in pedido.lowercase() || "fotografia" in pedido.lowercase()) "fotografia fotorrealista" else "ilustração digital detalhada")
-        val ambiente = ambienteSplit ?: componentes["ambiente"] ?: padraoImagem("ambiente")
-        val composicao = componentes["composicao"] ?: padraoImagem("composicao")
-        val iluminacao = componentes["iluminacao"] ?: padraoImagem("iluminacao")
+        val pesquisa = insightsDaPesquisa(contextoPesquisa)
+        val ambiente = ambienteSplit ?: componentes["ambiente"] ?: pesquisa["ambiente"] ?: padraoImagem("ambiente")
+        val composicao = componentes["composicao"] ?: pesquisa["composicao"] ?: padraoImagem("composicao")
+        val iluminacao = componentes["iluminacao"] ?: pesquisa["iluminacao"] ?: padraoImagem("iluminacao")
         val camera = componentes["camera"] ?: padraoImagem("camera")
         val lente = componentes["lente"] ?: padraoImagem("lente")
         val profundidade = componentes["profundidade"] ?: padraoImagem("profundidade")
@@ -220,6 +221,16 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
     private fun primeiraOcorrencia(lower: String, vararg pares: Pair<String, String>): String? =
         pares.firstOrNull { (chave, _) -> chave in lower }?.second
 
+    private fun insightsDaPesquisa(contexto: String?): Map<String, String> {
+        val lower = contexto.orEmpty().lowercase(Locale.ROOT)
+        return buildMap {
+            if ("golden hour" in lower || "luz dourada" in lower) put("iluminacao", "luz dourada de golden hour")
+            else if ("luz natural" in lower || "natural light" in lower) put("iluminacao", "luz natural equilibrada")
+            if ("plano geral" in lower || "wide shot" in lower) put("composicao", "plano geral com hierarquia visual")
+            if ("céu" in lower || "paisagem" in lower || "landscape" in lower) put("ambiente", "paisagem coerente com céu ao fundo")
+        }
+    }
+
     private fun resumir(texto: String, maxChars: Int): String =
         texto.trim().replace(Regex("\\s+"), " ").take(maxChars).let { if (texto.length > maxChars) "$it…" else it }
 
@@ -230,7 +241,7 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
         val sujeito = extrairSujeitoEAmbiente(textoBase).first ?: componentes["sujeito"] ?: extrairSujeito(textoBase) ?: "o sujeito principal especificado pelo usuário"
         val movimento = primeiraOcorrencia(pedido.lowercase(), "travelling" to "travelling", "câmera lenta" to "câmera lenta", "zoom" to "zoom progressivo", "panorâmica" to "panorâmica") ?: "movimento de câmera suave"
         val duracao = Regex("(\\d+)\\s*(segundos|s\\b)").find(pedido)?.value ?: "duração curta (poucos segundos)"
-        val iluminacao = componentes["iluminacao"] ?: padraoImagem("iluminacao")
+        val iluminacao = componentes["iluminacao"] ?: insightsDaPesquisa(contextoPesquisa)["iluminacao"] ?: padraoImagem("iluminacao")
         val estilo = componentes["estilo"] ?: "estilo cinematográfico"
         val base = "Vídeo com $sujeito. Movimento de câmera: $movimento. Duração: $duracao. Iluminação: $iluminacao. Estilo visual: $estilo."
         return base

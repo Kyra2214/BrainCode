@@ -48,6 +48,28 @@ class ContextRevisionFixer : RevisionFixer {
     }
 }
 
+/** Converte findings em instruções que chegam ao executor do passo de geração. */
+class FindingsRevisionFixer : RevisionFixer {
+    override fun fix(plan: PlanoExecucao, critique: CritiqueResult, attempt: Int): FixApplication {
+        val feedback = critique.findings.joinToString(" | ") { finding ->
+            val criterion = finding.criterionId?.let { " requisito=$it" }.orEmpty()
+            "revision-feedback:${finding.code}: ${finding.message}$criterion"
+        }.ifBlank { "revision-feedback:quality: revisar o resultado contra o objetivo original" }
+        val marker = "brain-revision-attempt:$attempt"
+        val revised = plan.copy(
+            assumptions = plan.assumptions + marker + feedback,
+            passos = plan.passos.map { step ->
+                step.copy(parametros = (step.parametros + marker + feedback).distinct())
+            }
+        )
+        return FixApplication(
+            plan = revised,
+            summary = "feedback de ${critique.findings.size} finding(s) aplicado na tentativa $attempt",
+            evidence = "$marker:${critique.findings.joinToString(",") { it.code }}:feedback-applied"
+        )
+    }
+}
+
 /** Executa a sequência universal de scan → plan → fix → verify → learn para a revisão. */
 class RevisionFixVerifyLearn(
     private val fixer: RevisionFixer

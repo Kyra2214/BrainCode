@@ -81,6 +81,30 @@ class RevisionRetryIntegrationTest {
         }
     }
 
+    @Test
+    fun `excecao tecnica repete a mesma tentativa antes de revisar`() {
+        val root = Files.createTempDirectory("technical-retry-").toFile()
+        try {
+            var calls = 0
+            val executor = ActionExecutor { _, _, _ ->
+                calls++
+                if (calls == 1) error("timeout transitório")
+                ActionExecution(success = true, result = "resultado estável", evidence = listOf("technical-retry-ok"))
+            }
+            val controller = controller(root, mapOf("sandbox.test" to executor))
+            val plan = PlanoExecucao("retry técnico", listOf(PassoPlano("step", "sandbox.test", "resultado estável")))
+
+            val result = controller.executePlan(plan, runId = "run-technical")
+
+            assertTrue(result.aprovado)
+            assertEquals(2, calls)
+            assertTrue(controller.localEvents("run-technical").any { it.type == "TechnicalRetry" })
+            assertTrue(result.posExecucao?.revisionAttempts.orEmpty().isEmpty())
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
     private fun controller(root: File, executors: Map<String, ActionExecutor>): BrainSandboxController {
         val runtime = ManagedSandboxRuntime(
             TestLauncher(root),

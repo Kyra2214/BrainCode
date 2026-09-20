@@ -25,6 +25,14 @@ import com.brain.router.PapelPipeline
 import com.brain.capability.CostClass
 import kotlinx.coroutines.runBlocking
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+
+data class PromptImprovementMetrics(
+    val calls: Int,
+    val cacheHits: Int,
+    val skippedByBudget: Int,
+    val estimatedTokensLastCall: Int
+)
 
 /** Encaminha um pedido de melhoria de prompt para uma IA — só chamado quando a qualidade local é insuficiente. */
 fun interface PromptImprover {
@@ -37,6 +45,9 @@ fun interface PromptImprover {
     fun melhorar(promptAtual: String, pedidoOriginal: String, pontosFracos: Set<String>, authorizedAccountIds: Set<String>): String =
         melhorar(promptAtual, pedidoOriginal, pontosFracos)
 
+    fun melhorar(promptAtual: String, pedidoOriginal: String, pontosFracos: Set<String>, authorizedAccountIds: Set<String>, contextoPesquisa: String?): String =
+        melhorar(promptAtual, pedidoOriginal, pontosFracos, authorizedAccountIds)
+
     /**
      * Tier de custo real da última chamada a [melhorar]. Default FREE para implementações
      * (fakes de teste, por exemplo) que não sabem/não têm custo real a reportar.
@@ -45,11 +56,17 @@ fun interface PromptImprover {
 
     /** Implementações que fazem rede devem exigir conta autorizada; fakes/local podem rodar sem ela. */
     fun requerContaAutorizada(): Boolean = false
+    fun metricas(): PromptImprovementMetrics = PromptImprovementMetrics(0, 0, 0, 0)
 }
 
 /** Implementação padrão: delega ao BrainApiGateway (mesmo caminho de IA já usado pelo resto do app). */
-class GatewayPromptImprover(private val gateway: BrainApiGateway) : PromptImprover {
+class GatewayPromptImprover(private val gateway: BrainApiGateway, private val maxPromptTokens: Int = 3000) : PromptImprover {
     @Volatile private var ultimoCusto: CostClass = CostClass.FREE
+    private val cache = ConcurrentHashMap<String, String>()
+    @Volatile private var chamadas = 0
+    @Volatile private var cacheHits = 0
+    @Volatile private var budgetSkips = 0
+    @Volatile private var ultimoEstimado = 0
 
     override fun melhorar(promptAtual: String, pedidoOriginal: String): String =
         melhorar(promptAtual, pedidoOriginal, emptySet())
@@ -64,28 +81,51 @@ class GatewayPromptImprover(private val gateway: BrainApiGateway) : PromptImprov
         pontosFracos: Set<String>,
         authorizedAccountIds: Set<String>
     ): String {
+        return melhorar(promptAtual, pedidoOriginal, pontosFracos, authorizedAccountIds, null)
+    }
+
+    override fun melhorar(
+        promptAtual: String,
+        pedidoOriginal: String,
+        pontosFracos: Set<String>,
+        authorizedAccountIds: Set<String>,
+        contextoPesquisa: String?
+    ): String {
         val specialistPrompt = """
             Você é o especialista de engenharia de prompts do BrainCode.
             Reescreva somente o prompt existente, preservando rigorosamente a intenção original.
             Não mude o assunto, não invente requisitos e não adicione explicações.
             A validação determinística encontrou estes pontos fracos: ${pontosFracos.ifEmpty { setOf("qualidade geral") }.joinToString(", ")}.
+            Feedback de revisão obrigatório: ${pontosFracos.filter { it.startsWith("revision-feedback:") }.joinToString(" | ").ifBlank { "nenhum" }}.
+            Evidências de pesquisa disponíveis (use somente o que for relevante, sem inventar fatos): ${contextoPesquisa?.take(2500).orEmpty().ifBlank { "nenhuma" }}
             Corrija esses pontos sem alterar o objetivo. Responda somente com o prompt final,
             sem aspas, prefácio, conclusão ou comentários.
 
             Pedido original:
-            $pedidoOriginal
+            ${pedidoOriginal.take(2500)}
 
             Prompt atual (a melhorar):
-            $promptAtual
+            ${promptAtual.take(5000)}
         """.trimIndent()
+        val estimatedTokens = (specialistPrompt.length + 3) / 4
+        ultimoEstimado = estimatedTokens
+        if (estimatedTokens > maxPromptTokens) {
+            budgetSkips++
+            throw IllegalStateException("prompt de melhoria excede orçamento de ${maxPromptTokens} tokens")
+        }
+        val cacheKey = listOf(promptAtual, pedidoOriginal, pontosFracos.sorted(), contextoPesquisa.orEmpty().take(2500)).toString()
+        cache[cacheKey]?.let { cached -> cacheHits++; return cached }
+        chamadas++
         val resultado = gateway.complete(specialistPrompt, PapelPipeline.ESCRITA_DE_PROMPT, authorizedAccountIds)
         ultimoCusto = resultado.costClass
-        return resultado.text.trim()
+        return resultado.text.trim().also { cache[cacheKey] = it }
     }
 
     override fun custoDaUltimaMelhoria(): CostClass = ultimoCusto
 
     override fun requerContaAutorizada(): Boolean = true
+
+    override fun metricas(): PromptImprovementMetrics = PromptImprovementMetrics(chamadas, cacheHits, budgetSkips, ultimoEstimado)
 }
 
 /** Conversão determinística de tier qualitativo para um número comparável/agregável na biblioteca. */
@@ -258,7 +298,7 @@ class PromptGenerationExecutor(
         )
     }
 
-    /** Validator -> se insuficiente, tenta IA; se IA falhar/indisponível, melhoria heurística local. Nunca lança. */
+    /** Local -> RevisionEngine -> IA somente como último recurso; nunca lança. */
     private fun escalonar(
         pedido: String,
         criado: PromptCriado,
@@ -268,26 +308,27 @@ class PromptGenerationExecutor(
     ): EscalonamentoResultado {
         if (!scoreInicial.abaixoDoPadrao) return EscalonamentoResultado(criado.texto, criado.origem, scoreInicial, false, criado.reasoning)
 
-        // Escalonamento para IA é condicionado a uma conta explicitamente autorizada.
-        // Implementações de rede só podem escalar quando existe uma conta autorizada.
-        // Fakes/local continuam podendo ser usados nos testes e em integrações determinísticas.
+        // Entrega 1: toda a correção determinística vem antes de qualquer rede.
+        // A IA permanece apenas como último recurso, condicionada a autorização.
+        val feedback = extrairFeedback(contextoPesquisa)
+        val pontos = scoreInicial.pontosFracos + feedback
+        val reasoning = reasoningEngine.analyze(pedido)
+        val local = creator.melhorarLocalmente(criado.texto, pedido, pontos, contextoPesquisa)
+        val revisao = revisionEngine.revise(reasoning, local.texto)
+        val scoreLocal = revisao.critique.score
+        if (scoreLocal.total >= scoreInicial.total) {
+            return EscalonamentoResultado(revisao.prompt, "local:revision-engine:${revisao.revisions}", scoreLocal, false, criado.reasoning.merge(revisao.reasoning))
+        }
         val viaIa = if (!improver.requerContaAutorizada() || authorizedAccountIds.isNotEmpty()) {
-            runCatching { improver.melhorar(criado.texto, pedido, scoreInicial.pontosFracos, authorizedAccountIds) }
+            runCatching { improver.melhorar(local.texto, pedido, pontos, authorizedAccountIds, contextoPesquisa) }
                 .getOrNull()
                 ?.takeIf { it.isNotBlank() }
-        } else {
-            null
-        }
+        } else null
         if (viaIa != null) {
-            val scoreIa = PromptQualityValidator.validar(pedido, viaIa, criado.dominio, reasoningEngine.analyze(pedido).requirements)
-            if (scoreIa.total >= scoreInicial.total) return EscalonamentoResultado(viaIa, "${criado.origem}+ia-especialista", scoreIa, true, criado.reasoning)
+            val scoreIa = PromptQualityValidator.validar(pedido, viaIa, criado.dominio, reasoning.requirements)
+            if (scoreIa.total >= scoreLocal.total) return EscalonamentoResultado(viaIa, "${criado.origem}+ia-especialista", scoreIa, true, criado.reasoning)
         }
-
-        val reasoning = reasoningEngine.analyze(pedido)
-        val revisao = revisionEngine.revise(reasoning, criado.texto)
-        val scoreLocal = revisao.critique.score
-        return if (scoreLocal.total >= scoreInicial.total) EscalonamentoResultado(revisao.prompt, "local:revision-engine:${revisao.revisions}", scoreLocal, false, criado.reasoning.merge(revisao.reasoning))
-        else EscalonamentoResultado(criado.texto, criado.origem, scoreInicial, false, criado.reasoning)
+        return EscalonamentoResultado(criado.texto, criado.origem, scoreInicial, false, criado.reasoning)
     }
 
     private data class EscalonamentoResultado(val texto: String, val origem: String, val score: PromptQualityScore, val aiUsada: Boolean, val reasoning: PromptReasoningTrace)
@@ -329,6 +370,11 @@ class PromptGenerationExecutor(
         if (bruto.startsWith("WebResearch indisponível", ignoreCase = true)) return null
         return bruto
     }
+    private fun extrairFeedback(contexto: String?): Set<String> = contexto.orEmpty()
+        .split(" | ", "\n")
+        .map { it.trim() }
+        .filter { it.startsWith("revision-feedback:") }
+        .toSet()
 
     /** Propõe um id estável a partir do objetivo, mas quem decide se isso é duplicata de um
      *  template já existente (e portanto deve herdar id/estatísticas antigas) é só a biblioteca —

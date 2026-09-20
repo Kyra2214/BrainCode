@@ -1,10 +1,33 @@
 # Tarefas Pendentes — BrainCode
 
-Atualizado pela auditoria de 2026-09-19.
+Atualizado pela implementação do loop de revisão e pesquisa de 2026-09-19.
+
+## Alteração atual — revisão real e pesquisa
+
+### Entrega 1 — regras locais, Fases 0/1/2/3/5
+
+[x] fixer baseado em findings com `revision-feedback`.
+[x] verificação real de mudança do plano.
+[x] abortar `revision.no-progress`.
+[x] selecionar melhor tentativa por severidade.
+[x] incluir findings no evento e no aviso da UI.
+[x] propagar feedback e evidências ao Prompt Creator/Gateway.
+[x] usar sinais de pesquisa em campos genéricos do prompt local.
+[x] critério `research.unused` quando fontes não são refletidas.
+[x] retry técnico separado do ciclo de qualidade.
+[ ] testes novos de integração listados no plano.
+[ ] confirmar build Android em ambiente com SDK.
+
+### Entrega 2 — controle da IA, Fase 4
+
+[ ] medir quantos ciclos a Entrega 1 resolve sem IA.
+[x] orçamento de tokens por ciclo.
+[x] prompt compacto para o especialista.
+[x] cache de melhorias e invalidação por feedback.
+[x] métrica de escalonamento, custo e taxa de sucesso.
 
 ## P0 — Fechamento da alteração atual
 
-[ ] testes focados Planner/ContextPack.
 [ ] :brain:test.
 [ ] :android-module:testDebugUnitTest.
 [ ] :app:testDebugUnitTest.
