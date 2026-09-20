@@ -316,7 +316,7 @@ class PromptGenerationExecutor(
         val local = creator.melhorarLocalmente(criado.texto, pedido, pontos, contextoPesquisa)
         val revisao = revisionEngine.revise(reasoning, local.texto)
         val scoreLocal = revisao.critique.score
-        if (scoreLocal.total >= scoreInicial.total) {
+        if (!scoreLocal.abaixoDoPadrao && scoreLocal.total >= scoreInicial.total) {
             return EscalonamentoResultado(revisao.prompt, "local:revision-engine:${revisao.revisions}", scoreLocal, false, criado.reasoning.merge(revisao.reasoning))
         }
         val viaIa = if (!improver.requerContaAutorizada() || authorizedAccountIds.isNotEmpty()) {
