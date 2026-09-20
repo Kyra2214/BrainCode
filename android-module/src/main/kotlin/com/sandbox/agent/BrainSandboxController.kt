@@ -233,7 +233,7 @@ class BrainSandboxController(
                     listOf(PassoPlano("clarificar", "chat.respond", "pergunta de esclarecimento não vazia", parametros = listOf(clarification.question, "clarification.status=NEEDS_CLARIFICATION", "clarification.missing=${clarification.missingRequirements.joinToString("|")}")))
                 )
                 emit(runId, "plan", "PlanCreated", mapOf("steps" to "1", "kind" to "clarification"))
-                return bridge.authorizeAndExecute(
+                val clarificationCycle = bridge.authorizeAndExecute(
                     clarificationPlan,
                     runId,
                     actor,
@@ -252,6 +252,14 @@ class BrainSandboxController(
                     },
                     doorScope = intent.scope
                 )
+                if (clarificationCycle.resposta.isNullOrBlank() && clarificationCycle.passos.any { it.capacidade == "chat.respond" && it.status == StatusPasso.APROVADO }) {
+                    return clarificationCycle.copy(
+                        passos = clarificationCycle.passos.map { passo ->
+                            if (passo.capacidade == "chat.respond") passo.copy(resultado = clarification.question) else passo
+                        }
+                    )
+                }
+                return clarificationCycle
             }
             return blockedCycle(
                 PlanoExecucao(objective, listOf(PassoPlano("requirements", "brain.requirements", "requisitos resolvidos"))),
