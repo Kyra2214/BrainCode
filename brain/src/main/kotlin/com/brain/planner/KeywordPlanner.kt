@@ -4,6 +4,9 @@ import com.brain.execution.RiskClass
 import com.brain.prompt.PromptDomain
 import com.brain.reasoning.ReasoningState
 import com.brain.router.PapelPipeline
+import com.brain.secretary.DeterministicSecretary
+import com.brain.secretary.DoorPolicy
+import com.brain.secretary.OrderIntent
 import com.brain.text.IntentNegation
 
 /** Decompõe objetivo em funções declarativas; não autoriza nem executa. */
@@ -38,8 +41,6 @@ class KeywordFunctionSplitter : FunctionSplitter {
         if (!normalizado.contains("criar documento") && pesquisaNecessaria) {
             passos += PassoPlano(
                 "pesquisar", "network.research", "evidência de pesquisa disponível",
-                // A consulta usa só o que o usuário pediu agora; o texto do artefato anterior
-                // ("Referências resolvidas") só atrapalha a busca.
                 parametros = listOf(
                     if (promptVisual) ResearchQuery.paraPromptVisual(texto)
                     else texto.substringBefore("\nReferências resolvidas:").trim().ifBlank { texto }
@@ -67,7 +68,28 @@ class KeywordFunctionSplitter : FunctionSplitter {
         }
         return passos
     }
+}
 
+/**
+ * Splitter que aplica a intenção do Secretário antes de entregar o plano ao
+ * PolicyBroker. O splitter legado continua sendo usado quando nenhuma intenção
+ * é fornecida, preservando as chamadas existentes.
+ */
+class DoorAwareSplitter(
+    private val secretary: DeterministicSecretary = DeterministicSecretary(),
+    private val legacy: FunctionSplitter = KeywordFunctionSplitter()
+) : FunctionSplitter {
+    override fun split(objetivo: String): List<PassoPlano> = split(secretary.classify(objetivo), objetivo)
+
+    fun split(intent: OrderIntent, objetivo: String = intent.originalPrompt): List<PassoPlano> {
+        val candidates = legacy.split(objetivo)
+        val allowed = candidates.filter { DoorPolicy.allows(intent.scope, it.capacidade) }
+        if (allowed.isEmpty()) return listOf(
+            PassoPlano("entender", "brain.analyze", "objetivo classificado", papel = PapelPipeline.PLANEJAMENTO)
+        )
+        val ids = allowed.map { it.id }.toSet()
+        return allowed.map { passo -> passo.copy(dependeDe = passo.dependeDe.filter { it in ids }) }
+    }
 }
 
 /** Planner canônico: recebe funções divididas e apenas monta o ExecutionPlan. */
@@ -78,6 +100,19 @@ class KeywordPlanner(
         val texto = objetivo.trim()
         require(texto.isNotBlank()) { "objetivo não pode ser vazio" }
         return PlanoExecucao(texto, splitter.split(texto))
+    }
+
+    suspend fun planejar(objetivo: String, intent: OrderIntent, reasoning: ReasoningState? = null): PlanoExecucao {
+        val texto = objetivo.trim()
+        require(texto.isNotBlank()) { "objetivo não pode ser vazio" }
+        val intentSplitter = splitter as? DoorAwareSplitter ?: DoorAwareSplitter()
+        val base = PlanoExecucao(texto, intentSplitter.split(intent, texto))
+        return if (reasoning == null) base else base.copy(
+            assumptions = reasoning.assumptions.toSet(),
+            fallback = if (reasoning.missing.isEmpty()) null else "prosseguir-localmente-com-suposições-explicitas",
+            missingRequirements = reasoning.missing,
+            contextPack = reasoning.contextPack
+        )
     }
 
     override suspend fun planejar(objetivo: String, reasoning: ReasoningState): PlanoExecucao =

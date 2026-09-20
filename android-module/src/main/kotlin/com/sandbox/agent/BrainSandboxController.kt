@@ -48,6 +48,7 @@ import com.brain.execution.Observation
 import com.brain.memory.LayeredMemory
 import com.brain.memory.Provenance
 import com.brain.planner.TreeOfThoughts
+import com.brain.secretary.OrderIntent
 import java.io.File
 import java.time.Instant
 import kotlin.coroutines.Continuation
@@ -72,7 +73,8 @@ class BrainSandboxController(
     private val apiKeyAvailable: () -> Boolean = { true },
     private val authorizedAccountIds: Set<String> = emptySet(),
     private val events: EventStore = InMemoryEventStore(),
-    private val revisionFixer: RevisionFixer = FindingsRevisionFixer()
+    private val revisionFixer: RevisionFixer = FindingsRevisionFixer(),
+    private val secretary: com.brain.secretary.DeterministicSecretary = com.brain.secretary.DeterministicSecretary()
 ) {
     private val behaviorDiagnostics = BehaviorDiagnostics(EventStoreBehaviorTraceSink(events, "android-local"))
     private val dynamicCapabilityProviders = capabilityProviders
@@ -181,9 +183,22 @@ class BrainSandboxController(
     fun executeObjective(
         objective: String,
         runId: String = "chat-${System.currentTimeMillis()}",
-        onPasso: (ResultadoPasso) -> Unit = {}
+        onPasso: (ResultadoPasso) -> Unit = {},
+        intent: OrderIntent? = null
     ): ResultadoCiclo {
         emit(runId, "chat", "TaskCreated", mapOf("objective" to objective.take(500)))
+        intent?.let { designated ->
+            emit(
+                runId,
+                "secretary",
+                "DoorDesignated",
+                mapOf(
+                    "door" to designated.door.name,
+                    "phase" to designated.phase.name,
+                    "restrictions" to designated.restrictions.joinToString(",") { it.name }
+                )
+            )
+        }
         val reasoning = reasoningEngine.analyze(objective)
         val requirementGateResult = requirementGate.evaluate(reasoning)
         if (!requirementGateResult.isSuccessful) {
@@ -195,8 +210,11 @@ class BrainSandboxController(
         }
         taskState = TaskState(objective).withReasoning(reasoning)
         layeredMemory.rememberEpisode(objective, Provenance("brain:task-created", confidence = 1.0))
-        val planner = com.brain.planner.KeywordPlanner()
-        val basePlan = runBlockingPlanner { planner.planejar(reasoning.objective, reasoning) }
+        val planner = com.brain.planner.KeywordPlanner(if (intent == null) com.brain.planner.KeywordFunctionSplitter() else com.brain.planner.DoorAwareSplitter(secretary))
+        val basePlan = runBlockingPlanner {
+            if (intent == null) planner.planejar(reasoning.objective, reasoning)
+            else planner.planejar(reasoning.objective, intent, reasoning)
+        }
         if (basePlan.passos.any { it.capacidade == "brain.analyze" } && !apiKeyAvailable()) {
             emit(runId, "reasoning", "LocalFallbackSelected", mapOf("reason" to "api-unavailable"))
         }
@@ -221,8 +239,8 @@ class BrainSandboxController(
             manifest = WorkflowManifest("brain-plan", "1.0.0", listOf(WorkflowNode("plan", "brain.plan", retryLimit = 0))),
             authorize = { it == "brain.plan" },
             execute = { node, attempt ->
-                cycle = executeWithEvents(plan, runId, reasoning.requirements.map { it.text }) { attemptPlan, attemptRunId ->
-                    bridge.authorizeAndExecute(attemptPlan, attemptRunId, actor) { passo ->
+                cycle = executeWithEvents(plan, runId, if (intent == null) emptyList() else reasoning.requirements.map { it.text }) { attemptPlan, attemptRunId ->
+                    bridge.authorizeAndExecute(attemptPlan, attemptRunId, actor, onPasso = { passo ->
                         emit(
                             attemptRunId,
                             passo.passoId,
@@ -234,7 +252,7 @@ class BrainSandboxController(
                             )
                         )
                         onPasso(passo)
-                    }
+                    }, doorScope = intent?.scope)
                 }
                 WorkflowStepResult(
                     nodeId = node.id,
@@ -314,10 +332,10 @@ class BrainSandboxController(
                     break
                 }
                 val error = execution.exceptionOrNull()
-                emit(attemptRunId, "execution", "ExecutionFailed", mapOf("error" to (error?.message ?: "unknown").take(500), "technicalRetry" to technicalRetry.toString()))
+                emit(runId, "execution", "ExecutionFailed", mapOf("attemptRunId" to attemptRunId, "error" to (error?.message ?: "unknown").take(500), "technicalRetry" to technicalRetry.toString()))
                 if (technicalRetry >= MAX_TECHNICAL_RETRIES) throw error ?: IllegalStateException("falha técnica desconhecida")
                 technicalRetry++
-                emit(attemptRunId, "execution", "TechnicalRetry", mapOf("retry" to technicalRetry.toString(), "max" to MAX_TECHNICAL_RETRIES.toString()))
+                emit(runId, "execution", "TechnicalRetry", mapOf("attemptRunId" to attemptRunId, "retry" to technicalRetry.toString(), "max" to MAX_TECHNICAL_RETRIES.toString()))
                 Thread.sleep(TECHNICAL_RETRY_BACKOFF_MS * technicalRetry)
             }
             val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
@@ -355,7 +373,8 @@ class BrainSandboxController(
             candidates += result to postExecution
             val outputSignature = result.resposta.orEmpty().trim()
             val findingsSignature = postExecution.critique.findings.joinToString("|") { "${it.code}:${it.message}" }
-            if (attempt > 1 && outputSignature == previousOutputSignature && findingsSignature == previousFindingsSignature) {
+            if (attempt > 1 && outputSignature == previousOutputSignature && findingsSignature == previousFindingsSignature &&
+                postExecution.critique.status != com.brain.behavior.CritiqueStatus.PASS) {
                 val noProgress = finalResult.copy(posExecucao = postExecution.copy(
                     issues = postExecution.issues + "revision.no-progress",
                     revisionAttempts = revisionAttempts + RevisionAttemptTrace(attemptRunId, attempt, "ABORT", "saída e findings idênticos à tentativa anterior")

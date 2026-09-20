@@ -1,6 +1,7 @@
 package com.brain.policy
 
 import com.brain.execution.ResourceBudget
+import com.brain.secretary.DoorScope
 
 /**
  * O terreno preparado que o Brain entrega pro Sandbox antes de qualquer
@@ -17,7 +18,8 @@ class ExecutionAuthorization private constructor(
     val networkAllowed: Boolean,
     val filesystemRoots: List<String>,
     val budget: ResourceBudget,
-    val expiresAt: String
+    val expiresAt: String,
+    val doorScope: DoorScope? = null
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -25,16 +27,16 @@ class ExecutionAuthorization private constructor(
         return decisionId == other.decisionId && runId == other.runId && taskId == other.taskId &&
             actor == other.actor && capability == other.capability && riskClass == other.riskClass &&
             networkAllowed == other.networkAllowed && filesystemRoots == other.filesystemRoots &&
-            budget == other.budget && expiresAt == other.expiresAt
+            budget == other.budget && expiresAt == other.expiresAt && doorScope == other.doorScope
     }
 
     override fun hashCode(): Int =
-        listOf(decisionId, runId, taskId, actor, capability, riskClass, networkAllowed, filesystemRoots, budget, expiresAt).hashCode()
+        listOf(decisionId, runId, taskId, actor, capability, riskClass, networkAllowed, filesystemRoots, budget, expiresAt, doorScope).hashCode()
 
     override fun toString(): String =
         "ExecutionAuthorization(decisionId=$decisionId, runId=$runId, taskId=$taskId, actor=$actor, " +
             "capability=$capability, riskClass=$riskClass, networkAllowed=$networkAllowed, " +
-            "filesystemRoots=$filesystemRoots, budget=$budget, expiresAt=$expiresAt)"
+            "filesystemRoots=$filesystemRoots, budget=$budget, expiresAt=$expiresAt, doorScope=$doorScope)"
 
     companion object {
         /**
@@ -56,7 +58,8 @@ class ExecutionAuthorization private constructor(
                 networkAllowed = decision.networkAllowed,
                 filesystemRoots = decision.filesystemRoots,
                 budget = decision.budget.toResourceBudget(),
-                expiresAt = decision.expiresAt
+                expiresAt = decision.expiresAt,
+                doorScope = decision.doorScope
             )
         }
     }

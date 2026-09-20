@@ -11,6 +11,7 @@ android-module/src/main/kotlin/com/sandbox/runtime/SandboxRuntime.kt
 android-module/src/main/kotlin/com/sandbox/runtime/PackagedRuntime.kt
 android-module/src/main/kotlin/com/sandbox/android/AndroidSandboxFactory.kt
 android-module/src/main/kotlin/com/sandbox/agent/AgentSandboxSession.kt
+app/src/main/kotlin/com/sandbox/app/SandboxViewModel.kt
 app/src/main/kotlin/com/sandbox/sandbox/PluginModels.kt
 brain/src/main/kotlin/com/brain/qa/ExecutorValidacaoProjeto.kt
 brain/src/main/kotlin/com/brain/qa/DescobertaComandosValidacao.kt

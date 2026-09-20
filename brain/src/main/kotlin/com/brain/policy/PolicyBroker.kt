@@ -1,6 +1,7 @@
 package com.brain.policy
 
 import com.brain.capability.CapabilityRegistry
+import com.brain.secretary.DoorPolicy
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
@@ -27,6 +28,10 @@ class PolicyBroker(
         when {
             context.ttlSeconds <= 0 -> reason = "policy TTL must be positive"
             context.budget.values.any { it < 0 } -> reason = "budget values cannot be negative"
+            context.doorScope != null && !DoorPolicy.allows(context.doorScope, capability) ->
+                reason = "capability '$capability' is outside the designated door ${context.doorScope.door}"
+            context.doorScope != null && context.authorizedAccountIds.isNotEmpty() && !context.doorScope.externalAccountsAllowed ->
+                reason = "external accounts are not allowed for door ${context.doorScope.door}"
             !isRegistered(capability) -> reason = "capability '$capability' is not registered"
             capability !in (actors[actor] ?: emptySet()) -> reason = "actor '$actor' is not authorized for '$capability'"
             !context.sandboxRequired && context.riskClass !in setOf(RiskClass.LOW, RiskClass.READ_ONLY) ->
@@ -78,7 +83,8 @@ class PolicyBroker(
             reason = reason,
             resource = resource,
             limitsApplied = limitsApplied,
-            authorizedAccountIds = context.authorizedAccountIds.toSet()
+            authorizedAccountIds = context.authorizedAccountIds.toSet(),
+            doorScope = context.doorScope
         )
         return unsigned.copy(authorizationToken = AuthorizationToken.issue(unsigned))
     }

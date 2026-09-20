@@ -2,6 +2,7 @@ package com.sandbox.agent
 
 import com.brain.planner.AuthorizedPlan
 import com.brain.planner.PlanoExecucao
+import com.brain.secretary.DoorScope
 
 /**
  * Fase 2: ponto único de entrada para a execução Android.
@@ -13,9 +14,9 @@ class BrainSandboxExecutionBridge(private val ciclo: CicloExecucaoPlano) {
     fun execute(autorizado: AuthorizedPlan, runId: String, actor: String, onPasso: (ResultadoPasso) -> Unit = {}): ResultadoCiclo =
         ciclo.executar(autorizado, runId, actor, onPasso)
 
-    fun authorizeAndExecute(plano: PlanoExecucao, runId: String, actor: String, onPasso: (ResultadoPasso) -> Unit = {}): ResultadoCiclo =
-        ciclo.autorizarEExecutar(plano, runId, actor, onPasso)
+    fun authorizeAndExecute(plano: PlanoExecucao, runId: String, actor: String, onPasso: (ResultadoPasso) -> Unit = {}, doorScope: DoorScope? = null): ResultadoCiclo =
+        ciclo.autorizarEExecutar(plano, runId, actor, doorScope = doorScope, onPasso = onPasso)
 
-    fun resume(plano: PlanoExecucao, runId: String, actor: String, approvalId: String): ResultadoCiclo =
-        ciclo.retomar(plano, runId, actor, approvalId)
+    fun resume(plano: PlanoExecucao, runId: String, actor: String, approvalId: String, doorScope: DoorScope? = null): ResultadoCiclo =
+        ciclo.retomar(plano, runId, actor, approvalId, doorScope = doorScope)
 }

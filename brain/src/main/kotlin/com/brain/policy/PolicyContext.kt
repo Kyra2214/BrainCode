@@ -1,5 +1,7 @@
 package com.brain.policy
 
+import com.brain.secretary.DoorScope
+
 /**
  * Resultado possível de uma autorização. Espelha
  * reference/braincode-python/brain_runtime/models.py::Decision.
@@ -32,7 +34,9 @@ data class PolicyContext(
     val dataClassifications: Set<String> = emptySet(),
     val environment: String = "sandbox",
     /** Contas que a Policy permite para esta execução; vazio significa nenhuma conta externa. */
-    val authorizedAccountIds: Set<String> = emptySet()
+    val authorizedAccountIds: Set<String> = emptySet(),
+    /** Escopo designado pelo Secretário; nulo preserva o contrato legado. */
+    val doorScope: DoorScope? = null
 ) {
     init {
         require(runId.isNotBlank()) { "runId não pode ser vazio" }
@@ -70,7 +74,8 @@ data class PolicyDecision(
     val resource: String = "",
     val authorizationToken: AuthorizationToken? = null,
     val limitsApplied: Boolean = false,
-    val authorizedAccountIds: Set<String> = emptySet()
+    val authorizedAccountIds: Set<String> = emptySet(),
+    val doorScope: DoorScope? = null
 ) {
     val outcome: PolicyOutcome
         get() = when {

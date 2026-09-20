@@ -61,7 +61,7 @@ jobs:
       - name: Run all JVM/unit tests
         id: unit-tests
         continue-on-error: true
-        run: ./gradlew :brain:test :app:testDebugUnitTest --no-daemon --stacktrace
+        run: ./gradlew :brain:test :android-module:test :app:testDebugUnitTest --no-daemon --stacktrace
 
       - name: Assemble Android debug APK
         if: always()

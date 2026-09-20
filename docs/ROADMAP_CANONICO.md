@@ -138,3 +138,7 @@ O Marco 5 somente será considerado concluído quando:
 3. A camada de APIs estiver integrada e validada.
 4. Porta 3 estiver consolidada e validada.
 5. CI/E2E/readiness apresentarem evidência correspondente no HEAD final.
+
+### Registro de execução incremental
+
+O primeiro módulo da Fase 1 foi implementado em `com.brain.secretary`. A classificação determinística, a matriz `DoorPolicy`, o transporte de `DoorScope`, a persistência de `SecretaryState` e a proteção do splitter já possuem testes focados verdes. A Porta 1 não é considerada consolidada enquanto CI remoto, regressão completa, E2E e readiness não apresentarem evidência verde no mesmo HEAD.

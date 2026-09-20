@@ -11,9 +11,11 @@ E2E é a camada de prova desse ciclo. Cada estágio relevante deve produzir esta
 ## 2. Fronteiras
 
 UI/Chat coleta intenção e mostra estado; não executa provider diretamente.
+O Secretário determinístico classifica cada ordem em `Door.CHAT`, `Door.PROMPT` ou `Door.CREATE`, define a fase e registra restrições em `OrderIntent`.
 SandboxViewModel adapta UI ao runtime; não autoriza capability.
 BrainSandboxController é a entrada Android do Brain: reasoning, gates, planner, workflow e pós-execução.
 ReasoningEngine produz intenção, requisitos, assumptions e ContextPack.
+`DoorScope` acompanha `PolicyContext`, `PolicyDecision`, `AuthorizationToken` e `ExecutionAuthorization`; uma capacidade fora da porta é negada pelo `PolicyBroker` antes do `ActionGateway`.
 ContextPack é contexto compacto e imutável; não concede permissão.
 Planner produz PlanoExecucao; não autoriza nem executa.
 CapabilityRegistry registra capacidades.
@@ -42,6 +44,7 @@ O histórico completo não deve ser carregado indiscriminadamente.
 SandboxViewModel.submitThreadInput
 → sendChatMessage
 → ConversationContextEngine
+→ DeterministicSecretary / SecretaryState
 → BrainSandboxController.executeObjective
 → ReasoningEngine
 → RequirementGate

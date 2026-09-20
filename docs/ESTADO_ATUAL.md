@@ -33,3 +33,19 @@ O chat não usa fallback direto para provider quando o Sandbox não está pronto
 Roofts 0.6 permanece instalado como payload independente e deliberadamente **não integrado ao runtime**. Retrieval universal/semântico, hardening OS-level e leases/fencing continuam backlog de marcos posteriores.
 
 CI/E2E devem ser considerados somente após execução comprovada no HEAD deste documento.
+
+## Fase 1 — implementação incremental em 20/09/2026
+
+O primeiro módulo da consolidação das três portas foi implementado sem substituir o Brain Core. O pacote `com.brain.secretary` agora contém `Door`, `CreatePhase`, `Restriction`, `DoorScope`, `OrderIntent`, `SecretaryState`, `DeterministicSecretary` e `DoorPolicy`. O `DoorAwareSplitter` aplica a intenção antes de criar o `PlanoExecucao`.
+
+O escopo da porta é transportado pelo `PolicyContext`, `PolicyDecision`, `AuthorizationToken` e `ExecutionAuthorization`. O `PolicyBroker` continua sendo a autoridade final. O `BrainSandboxController` emite `DoorDesignated`, e `ThreadSession` persiste `SecretaryState` mantendo compatibilidade com JSONs antigos sem esse campo.
+
+A decisão D1 permanece na opção A: APIs e contas externas seguem bloqueadas nas três portas. A Web continua sendo uma capability sujeita à matriz e às restrições explícitas.
+
+### Evidências executadas
+
+- Os testes focados de classificação, matriz, PolicyBroker, ActionGateway e DoorAwareSplitter passaram.
+- `BrainSandboxControllerDoorTest` passou e comprovou que uma intenção CHAT não produz passos `workspace.write` ou `sandbox.code`.
+- `:app:compileDebugKotlin` passou com JDK 17 e Android SDK 34.
+- O teste `WebResearchIntegrationTest` já falhava no HEAD anterior por bloqueios do PostExecutionGate em fixtures fake; ele não foi usado como evidência de regressão da Fase 1.
+- A Fase 1 ainda não é marcada como consolidada. CI remoto, readiness completo e a correção das falhas preexistentes permanecem gates posteriores deste módulo.

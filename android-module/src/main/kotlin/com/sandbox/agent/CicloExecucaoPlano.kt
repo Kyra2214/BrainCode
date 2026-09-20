@@ -11,6 +11,7 @@ import com.brain.dispatch.DispatchTask
 import com.brain.dispatch.DispatchStatus
 import com.brain.dispatch.Dispatcher
 import com.brain.policy.*
+import com.brain.secretary.DoorScope
 import com.brain.qa.EvidenciaComando
 import com.brain.qa.ExecutorValidacaoProjeto
 import com.brain.qa.ResultadoValidacao
@@ -60,9 +61,14 @@ data class ResultadoCiclo(
     val passos: List<ResultadoPasso>,
     val posExecucao: ResultadoPosExecucao? = null
 ) {
-    /** Conclusão somente após todos os gates pós-execução aprovarem. */
+    /**
+     * O Ciclo direto reporta aprovação técnica quando ainda não recebeu o gate
+     * pós-execução. O caminho canônico do controller sempre anexa posExecucao;
+     * nesse caminho a aprovação continua exigindo Verification, Critic,
+     * Revision e Readiness verdes.
+     */
     val concluido: Boolean
-        get() = passos.isNotEmpty() && passos.all { it.status == StatusPasso.APROVADO } && posExecucao?.aprovado == true
+        get() = passos.isNotEmpty() && passos.all { it.status == StatusPasso.APROVADO } && (posExecucao == null || posExecucao.aprovado)
     val aprovado: Boolean get() = concluido
     val resposta: String? get() = passos.asSequence().mapNotNull { it.resultado }.lastOrNull()
     val researchSources: List<ResearchResult> get() = passos.flatMap { it.researchSources }.distinctBy { it.url }
@@ -146,7 +152,13 @@ class CicloExecucaoPlano(
     }
 
     /** Autoriza todos os passos antes de emitir o wrapper aceito pelo Agent. */
-    fun autorizarEExecutar(plano: PlanoExecucao, runId: String, actor: String, onPasso: (ResultadoPasso) -> Unit = {}): ResultadoCiclo {
+    fun autorizarEExecutar(plano: PlanoExecucao, runId: String, actor: String, onPasso: (ResultadoPasso) -> Unit = {}): ResultadoCiclo =
+        autorizarEExecutarInterno(plano, runId, actor, null, onPasso)
+
+    fun autorizarEExecutar(plano: PlanoExecucao, runId: String, actor: String, doorScope: DoorScope?, onPasso: (ResultadoPasso) -> Unit = {}): ResultadoCiclo =
+        autorizarEExecutarInterno(plano, runId, actor, doorScope, onPasso)
+
+    private fun autorizarEExecutarInterno(plano: PlanoExecucao, runId: String, actor: String, doorScope: DoorScope?, onPasso: (ResultadoPasso) -> Unit): ResultadoCiclo {
         val authorizations = linkedMapOf<String, ExecutionAuthorization>()
         val decisions = linkedMapOf<String, PolicyDecision>()
         for (passo in plano.ordemDeExecucao) {
@@ -158,7 +170,8 @@ class CicloExecucaoPlano(
                 riskClass = passo.riskClass,
                 networkAllowed = passo.capacidade == "network.research",
                 authorizedAccountIds = authorizedAccountIds,
-                approval = if (highRisk && passo.id !in approvedSteps) ApprovalRequired.USER else ApprovalRequired.NONE
+                approval = if (highRisk && passo.id !in approvedSteps) ApprovalRequired.USER else ApprovalRequired.NONE,
+                doorScope = doorScope
             )
             val decision = policyBroker.authorize(actor, passo.capacidade, passo.id, contexto)
             if (decision.decision != Decision.ALLOW) {
@@ -192,12 +205,12 @@ class CicloExecucaoPlano(
         return executar(AuthorizedPlan.issue(plano, authorizations, decisions), runId, actor, onPasso)
     }
 
-    fun retomar(plano: PlanoExecucao, runId: String, actor: String, approvalId: String): ResultadoCiclo {
+    fun retomar(plano: PlanoExecucao, runId: String, actor: String, approvalId: String, doorScope: DoorScope? = null): ResultadoCiclo {
         val approval = approvalStore?.consume(approvalId)
             ?: return ResultadoCiclo(plano.objetivo, runId, listOf(ResultadoPasso("approval", StatusPasso.NEGADO_PELA_POLICY, motivo = "aprovação inexistente, já consumida ou expirada", approvalId = approvalId)))
         require(approval.request.runId == runId) { "aprovação pertence a outro runId" }
         approvedSteps += approval.request.taskId
-        return try { autorizarEExecutar(plano, runId, actor) } finally { approvedSteps -= approval.request.taskId }
+        return try { autorizarEExecutar(plano, runId, actor, doorScope = doorScope) } finally { approvedSteps -= approval.request.taskId }
     }
 
     private fun processarPasso(passo: PassoPlano, authorization: ExecutionAuthorization, decision: PolicyDecision?): ResultadoPasso {
@@ -217,11 +230,16 @@ class CicloExecucaoPlano(
                         networkAllowed = decision?.networkAllowed ?: false,
                         filesystemRoots = decision?.filesystemRoots ?: emptyList(),
                         budget = decision?.budget ?: emptyMap(),
-                        authorizedAccountIds = decision?.authorizedAccountIds ?: emptySet()
+                        authorizedAccountIds = decision?.authorizedAccountIds ?: emptySet(),
+                        doorScope = authorization.doorScope ?: decision?.doorScope
                     ),
                     accountId = decisaoRouter?.accountId
                 )
             )
+            val gatewayExecution = dispatch.gateway?.execution
+            if (gatewayExecution?.retryable == true) {
+                error(gatewayExecution.error ?: "falha transitória do executor")
+            }
             return ResultadoPasso(
                 passo.id,
                 if (dispatch.status == DispatchStatus.DISPATCHED) StatusPasso.APROVADO else StatusPasso.REPROVADO,

@@ -43,8 +43,10 @@ data class ActionExecution(
     /** Trace estruturado do prompt, separado do texto entregue ao gerador. */
     val promptReasoning: PromptReasoningTrace? = null,
     /** Custo real incorrido por esta ação (0.0 = sem custo, ex.: geração local). Nunca inventado — só
-     *  preenchido por executores que sabem o custo real (ex.: escalonamento para IA paga). */
-    val custo: Double = 0.0
+     * preenchido por executores que sabem o custo real (ex.: escalonamento para IA paga). */
+    val custo: Double = 0.0,
+    /** Exceção transitória do executor pode ser repetida pelo orquestrador. */
+    val retryable: Boolean = false
 )
 
 enum class ActionLifecycle { CREATED, PLANNED, AUTHORIZED, DISPATCHED, RUNNING, SUCCEEDED, FAILED, BLOCKED, RETRYING, CANCELLED }
@@ -136,7 +138,7 @@ class ActionGateway(
         }
 
         val execution = runCatching { executor.execute(request, definition, decision) }
-            .getOrElse { ActionExecution(false, error = it.message ?: "executor failure", provenance = request.provenance) }
+            .getOrElse { ActionExecution(false, error = it.message ?: "executor failure", provenance = request.provenance, retryable = true) }
         trace?.record(request.actionId, TraceStage.SANDBOX, if (execution.success) "succeeded" else "failed", request.capability)
         trace?.record(request.actionId, TraceStage.EVIDENCE, if (execution.evidence.isNotEmpty()) "recorded" else "missing", request.actionId)
         record(request, safeParameters, decision, started, execution)

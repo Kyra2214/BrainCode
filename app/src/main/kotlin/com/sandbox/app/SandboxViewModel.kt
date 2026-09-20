@@ -32,6 +32,13 @@ import com.sandbox.sandbox.SelfCheckSection
 import com.sandbox.sandbox.SelfCheckItem
 import com.sandbox.sandbox.SelfCheckStatus
 import com.brain.planner.PlanoExecucao
+import com.brain.secretary.CreatePhase
+import com.brain.secretary.DeterministicSecretary
+import com.brain.secretary.Door
+import com.brain.secretary.DoorScope
+import com.brain.secretary.OrderIntent
+import com.brain.secretary.Restriction
+import com.brain.secretary.SecretaryState
 import com.brain.prompt.InMemoryPromptLibrary
 import com.brain.prompt.PromptLibraryLoader
 import com.brain.memory.FileKnowledgeMemory
@@ -95,7 +102,9 @@ data class ThreadSession(
     val updatedAt: Long,
     val status: SessionStatus,
     val events: List<ThreadEvent>,
-    val conversationContext: ConversationContext = ConversationContext()
+    val conversationContext: ConversationContext = ConversationContext(),
+    /** Estado do Secretário; ausência no JSON antigo significa estado vazio. */
+    val secretaryState: SecretaryState = SecretaryState()
 )
 
 data class SessionSummary(
@@ -172,6 +181,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     var phase by mutableStateOf<SandboxPhase>(SandboxPhase.NotReady); private set
     val chatMessages = mutableStateListOf<ChatMessage>()
     private val conversationContextEngine = ConversationContextEngine()
+    private val secretary = DeterministicSecretary()
     var chatInput by mutableStateOf("")
     var chatRunning by mutableStateOf(false); private set
     var brainUiStage by mutableStateOf(BrainUiStage.IDLE); private set
@@ -278,7 +288,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     fun clearActiveSession() {
         val id = activeSessionId ?: return
         dropPendingApprovalOwnedBy(sessions.firstOrNull { it.id == id })
-        sessions = sessions.map { session -> if (session.id != id) session else session.copy(title = "Nova tarefa", events = emptyList(), conversationContext = ConversationContext(), updatedAt = System.currentTimeMillis()) }
+        sessions = sessions.map { session -> if (session.id != id) session else session.copy(title = "Nova tarefa", events = emptyList(), conversationContext = ConversationContext(), secretaryState = SecretaryState(), updatedAt = System.currentTimeMillis()) }
         chatMessages.clear()
         brainUiStage = BrainUiStage.IDLE
         chatRunning = false
@@ -332,6 +342,14 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             persistSessions()
         }
         return resolved
+    }
+
+    private fun designateSecretaryIntent(intent: OrderIntent) {
+        val id = activeSessionId ?: return
+        sessions = sessions.map { session ->
+            if (session.id == id) session.copy(secretaryState = session.secretaryState.designate(intent), updatedAt = System.currentTimeMillis()) else session
+        }
+        persistSessions()
     }
 
     private fun eventPreview(event: ThreadEvent?): String = when (event) {
@@ -405,7 +423,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         sessions.forEach { session ->
             val events = JSONArray()
             session.events.forEach { event -> events.put(eventToJson(event)) }
-            array.put(JSONObject().put("id", session.id).put("title", session.title).put("workspace", session.workspaceProjectName ?: JSONObject.NULL).put("createdAt", session.createdAt).put("updatedAt", session.updatedAt).put("status", session.status.name).put("events", events).put("conversationContext", contextToJson(session.conversationContext)))
+            array.put(JSONObject().put("id", session.id).put("title", session.title).put("workspace", session.workspaceProjectName ?: JSONObject.NULL).put("createdAt", session.createdAt).put("updatedAt", session.updatedAt).put("status", session.status.name).put("events", events).put("conversationContext", contextToJson(session.conversationContext)).put("secretaryState", secretaryStateToJson(session.secretaryState)))
         }
         sessionsFile.writeText(JSONObject().put("sessions", array).toString())
     }
@@ -425,7 +443,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         (0 until array.length()).map { index ->
             val item = array.getJSONObject(index)
             val eventsJson = item.optJSONArray("events") ?: JSONArray()
-            ThreadSession(item.getString("id"), item.getString("title"), item.optString("workspace").takeIf { it.isNotBlank() && it != "null" }, item.getLong("createdAt"), item.getLong("updatedAt"), runCatching { SessionStatus.valueOf(item.getString("status")) }.getOrDefault(SessionStatus.IDLE), (0 until eventsJson.length()).mapNotNull { eventFromJson(eventsJson.getJSONObject(it)) }, contextFromJson(item.optJSONObject("conversationContext")))
+            ThreadSession(item.getString("id"), item.getString("title"), item.optString("workspace").takeIf { it.isNotBlank() && it != "null" }, item.getLong("createdAt"), item.getLong("updatedAt"), runCatching { SessionStatus.valueOf(item.getString("status")) }.getOrDefault(SessionStatus.IDLE), (0 until eventsJson.length()).mapNotNull { eventFromJson(eventsJson.getJSONObject(it)) }, contextFromJson(item.optJSONObject("conversationContext")), secretaryStateFromJson(item.optJSONObject("secretaryState")))
         }
     }.getOrDefault(emptyList())
 
@@ -443,6 +461,34 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         fun list(name: String) = (0 until (json.optJSONArray(name)?.length() ?: 0)).map { json.optJSONArray(name)!!.getString(it) }
         return ConversationContext(json.optString("idea").takeIf { it.isNotBlank() && it != "null" }, list("requirements"), list("decisions"), list("discarded"), list("pending"), list("artifacts"), list("references"))
     }
+
+    private fun secretaryStateToJson(state: SecretaryState): JSONObject = JSONObject()
+        .put("currentIntent", state.currentIntent?.let(::intentToJson) ?: JSONObject.NULL)
+        .put("history", JSONArray(state.history.map(::intentToJson)))
+
+    private fun secretaryStateFromJson(json: JSONObject?): SecretaryState {
+        if (json == null) return SecretaryState()
+        val historyJson = json.optJSONArray("history") ?: JSONArray()
+        val history = (0 until historyJson.length()).mapNotNull { index -> intentFromJson(historyJson.optJSONObject(index)) }
+        val current = intentFromJson(json.optJSONObject("currentIntent"))
+        return SecretaryState(current, history)
+    }
+
+    private fun intentToJson(intent: OrderIntent): JSONObject = JSONObject()
+        .put("originalPrompt", intent.originalPrompt)
+        .put("door", intent.door.name)
+        .put("phase", intent.phase.name)
+        .put("explicit", intent.explicit)
+        .put("restrictions", JSONArray(intent.restrictions.map { it.name }))
+
+    private fun intentFromJson(json: JSONObject?): OrderIntent? = runCatching {
+        if (json == null) return null
+        val restrictionsJson = json.optJSONArray("restrictions") ?: JSONArray()
+        val restrictions = (0 until restrictionsJson.length()).mapNotNull { index -> runCatching { Restriction.valueOf(restrictionsJson.getString(index)) }.getOrNull() }.toSet()
+        val door = Door.valueOf(json.getString("door"))
+        val phase = CreatePhase.valueOf(json.getString("phase"))
+        OrderIntent(json.getString("originalPrompt"), door, phase, restrictions, DoorScope(door, phase, restrictions), json.optBoolean("explicit", false))
+    }.getOrNull()
 
     private fun PromptReasoningUi.toJson(): JSONObject = JSONObject()
         .put("intent", intent)
@@ -831,10 +877,15 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     val controller = brainController
                     if (controller != null && phase == SandboxPhase.Ready) {
                         val resolved = resolveConversation(prompt)
+                        val intent = secretary.classify(resolved.currentPrompt)
+                        designateSecretaryIntent(intent)
                         brainUiStage = BrainUiStage.EXECUTANDO
-                        val cycle = controller.executeObjective(resolved.toBrainObjective(), "chat-${System.currentTimeMillis()}") { passo ->
-                            viewModelScope.launch(Dispatchers.Main.immediate) { publishStep(passo) }
-                        }
+                        val cycle = controller.executeObjective(
+                            resolved.toBrainObjective(),
+                            "chat-${System.currentTimeMillis()}",
+                            onPasso = { passo -> viewModelScope.launch(Dispatchers.Main.immediate) { publishStep(passo) } },
+                            intent = intent
+                        )
                         withContext(Dispatchers.Main.immediate) { publishCycleStages(cycle) }
                         val promptActionId = cycle.passos.firstOrNull { it.capacidade == "prompt.library.write" }?.actionId
                         val content = cycle.resposta ?: "Plano concluído: ${cycle.aprovado}"
@@ -908,9 +959,14 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 runCatching {
                     val controller = brainController
                     if (controller != null && phase == SandboxPhase.Ready) {
-                        val cycle = controller.executeObjective(resolved.toBrainObjective(), "cmd-${entrada.slug}-${System.currentTimeMillis()}") { passo ->
-                            viewModelScope.launch(Dispatchers.Main.immediate) { publishStep(passo) }
-                        }
+                        val intent = secretary.classify("${entrada.comando} ${resolved.currentPrompt}")
+                        designateSecretaryIntent(intent)
+                        val cycle = controller.executeObjective(
+                            resolved.toBrainObjective(),
+                            "cmd-${entrada.slug}-${System.currentTimeMillis()}",
+                            onPasso = { passo -> viewModelScope.launch(Dispatchers.Main.immediate) { publishStep(passo) } },
+                            intent = intent
+                        )
                         val promptActionId = cycle.passos.firstOrNull { it.capacidade == "prompt.library.write" }?.actionId
                         val content = cycle.resposta ?: "Plano concluído: ${cycle.aprovado}"
                         val capability = cycle.passos.lastOrNull { it.resultado != null }?.capacidade

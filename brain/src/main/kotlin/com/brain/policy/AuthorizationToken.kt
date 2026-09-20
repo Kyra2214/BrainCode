@@ -1,5 +1,7 @@
 package com.brain.policy
 
+import com.brain.secretary.DoorScope
+
 /**
  * Opaque proof that a PolicyDecision was issued by PolicyBroker and that all
  * execution-relevant fields still match the broker-issued decision.
@@ -19,7 +21,8 @@ class AuthorizationToken private constructor(
     private val budget: Map<String, Long>,
     private val expiresAt: String,
     private val limitsApplied: Boolean,
-    private val authorizedAccountIds: Set<String>
+    private val authorizedAccountIds: Set<String>,
+    private val doorScope: DoorScope?
 ) {
     fun matches(decision: PolicyDecision): Boolean =
         decisionId == decision.decisionId &&
@@ -36,7 +39,8 @@ class AuthorizationToken private constructor(
             budget == decision.budget &&
             expiresAt == decision.expiresAt &&
             limitsApplied == decision.limitsApplied &&
-            authorizedAccountIds == decision.authorizedAccountIds
+            authorizedAccountIds == decision.authorizedAccountIds &&
+            doorScope == decision.doorScope
 
     companion object {
         internal fun issue(decision: PolicyDecision): AuthorizationToken =
@@ -55,7 +59,8 @@ class AuthorizationToken private constructor(
                 budget = decision.budget.toMap(),
                 expiresAt = decision.expiresAt,
                 limitsApplied = decision.limitsApplied,
-                authorizedAccountIds = decision.authorizedAccountIds.toSet()
+                authorizedAccountIds = decision.authorizedAccountIds.toSet(),
+                doorScope = decision.doorScope
             )
     }
 }

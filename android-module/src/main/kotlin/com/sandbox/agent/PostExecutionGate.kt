@@ -86,7 +86,15 @@ class PostExecutionGate(private val memory: LayeredMemory) {
                 findings = baseCritique.findings + CritiqueFinding("research.unused", "fontes de pesquisa disponíveis não refletidas no resultado", FindingSeverity.MEDIUM)
             )
         } else baseCritique
-        val revision: RevisionDecision = review.review(critiqueInput, critique)
+        val reviewedRevision = review.review(critiqueInput, critique)
+        val revision: RevisionDecision = if (!verification.passed && reviewedRevision.action == RevisionAction.ACCEPT) {
+            RevisionDecision(
+                action = RevisionAction.REVISE,
+                reason = "verification falhou e exige nova execução",
+                targetCriteria = verification.checks.filterNot { it.passed }.map { it.criterionId },
+                maxAttempts = 2
+            )
+        } else reviewedRevision
         val completed = mapOf(
             ReadinessStageName.IMPLEMENTATION to (cycle.passos.isNotEmpty() && cycle.passos.all { it.status == StatusPasso.APROVADO }),
             ReadinessStageName.TESTS to verification.passed,
