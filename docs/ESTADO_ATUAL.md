@@ -8,7 +8,7 @@ Capability Registry/Discovery, PolicyBroker, ActionGateway, Dispatcher, Agents b
 
 A UI possui estados de planejamento, execução, verificação, crítica, revisão, correção, reexecução, PASS/BLOCKED/FAILED/READY.
 
-Roofts 0.3–0.5 estão preservados e 0.6 está instalado separadamente.
+RooftS é uma entidade única composta pelas camadas 0.3–0.6. As camadas 0.3–0.5 permanecem preservadas e 0.6 / Agent Skills está instalada como camada do mesmo RooftS.
 
 ## 2.4 Context Engineering
 
