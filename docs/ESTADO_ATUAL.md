@@ -61,3 +61,14 @@ A decisão D1 permanece na opção A: APIs e contas externas seguem bloqueadas n
 - `:brain:test :android-module:test :app:testDebugUnitTest` passou.
 - `bash scripts/architecture-gate.sh` e `git diff --check` passaram.
 - CI remoto, readiness/E2E e consolidação formal da Porta 1 ainda são gates do commit desta fase.
+
+## Fase 3 — Porta 2: Prompt
+
+O fluxo formal de `Door.PROMPT` foi coberto com corpus de entrada, follow-up e `NO_WEB`. A entrega por `prompt.library.write`/`prompt.library.generate` foi testada como terminal, sem `workspace.*` ou `sandbox.*`; o Prompt Creator existente permanece responsável por biblioteca, pesquisa, crítica, melhoria e fallback local.
+
+### Evidências locais executadas
+
+- `PromptDoorCorpusTest` passou.
+- `PromptDoorTerminalStateTest` passou.
+- A regressão completa do Prompt Creator permanece incluída no gate global da fase.
+- CI remoto, E2E/readiness e consolidação formal da Porta 2 ainda são gates do commit desta fase.

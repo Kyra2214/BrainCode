@@ -95,14 +95,14 @@ Não iniciar a integração de APIs externas antes de Porta 1 e Porta 2 estarem 
 
 ### Marco 5.2 — Porta 2: Prompt — ~88%
 
-[ ] formalizar entrada da Porta 2 pelo Secretário.
-[ ] preservar Prompt Agent/Creator, pesquisa Web, biblioteca, crítica, otimização e validação já existentes.
-[ ] Web permitida conforme Policy.
-[ ] APIs externas continuam bloqueadas.
+[x] formalizar entrada da Porta 2 pelo Secretário.
+[x] preservar Prompt Agent/Creator, pesquisa Web, biblioteca, crítica, otimização e validação já existentes.
+[x] Web permitida conforme Policy.
+[x] APIs externas continuam bloqueadas.
 [ ] permitir conversa controlada com a Porta 1 quando contexto for necessário.
-[ ] garantir que concluir um prompt não inicie criação/desenvolvimento/execução automaticamente.
-[ ] consolidar regras e permissões próprias da Porta 2.
-[ ] bateria de testes funcional + regressão.
+[x] garantir que concluir um prompt não inicie criação/desenvolvimento/execução automaticamente.
+[x] consolidar regras e permissões próprias da Porta 2.
+[x] bateria de testes funcional + regressão.
 [ ] CI/E2E/readiness final da Porta 2.
 [ ] declarar Porta 2 consolidada somente com evidência verde.
 

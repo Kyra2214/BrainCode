@@ -126,6 +126,8 @@ A Porta 2 **pode usar Web** para referências, técnicas, informações atuais o
 
 Quando o prompt estiver concluído, o fluxo termina. Isso não inicia automaticamente execução ou desenvolvimento. Uma nova ordem do usuário pode abrir outra porta.
 
+Na implementação, a entrega usa `prompt.library.write` (com alias `prompt.library.generate`) e permanece terminal. Follow-ups como “melhore este prompt” continuam em `Door.PROMPT`; `NO_WEB` remove a etapa `network.research` antes da entrega.
+
 ## 6. Porta 3 — Criação / Desenvolvimento
 
 É o fluxo completo de construção de software/projetos.
