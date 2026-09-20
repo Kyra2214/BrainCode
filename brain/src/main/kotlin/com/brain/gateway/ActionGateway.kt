@@ -8,6 +8,7 @@ import com.brain.policy.PolicyContext
 import com.brain.policy.PolicyDecision
 import java.time.Instant
 import com.brain.research.ResearchResult
+import com.brain.prompt.PromptReasoningTrace
 import com.brain.observability.ExecutionTrace
 import com.brain.observability.TraceStage
 
@@ -39,6 +40,8 @@ data class ActionExecution(
     val provenance: List<String> = emptyList(),
     /** Fontes estruturadas usadas pela ação; ficam separadas do conteúdo exibível. */
     val researchSources: List<ResearchResult> = emptyList(),
+    /** Trace estruturado do prompt, separado do texto entregue ao gerador. */
+    val promptReasoning: PromptReasoningTrace? = null,
     /** Custo real incorrido por esta ação (0.0 = sem custo, ex.: geração local). Nunca inventado — só
      *  preenchido por executores que sabem o custo real (ex.: escalonamento para IA paga). */
     val custo: Double = 0.0

@@ -8,6 +8,7 @@ import com.brain.policy.PolicyDecision
 import com.brain.prompt.LocalPromptCreatorAgent
 import com.brain.prompt.PromptCreatorAgent
 import com.brain.prompt.PromptCriado
+import com.brain.prompt.PromptReasoningTrace
 import com.brain.prompt.PromptLibrary
 import com.brain.prompt.PromptOutcomeTracker
 import com.brain.prompt.PromptOutcomeTrackers
@@ -189,7 +190,7 @@ class PromptGenerationExecutor(
         authorizedAccountIds: Set<String>
     ): ActionExecution {
         val scoreInicial = PromptQualityValidator.validar(pedido.instrucao, pedido.promptAnterior, com.brain.prompt.PromptDomain.classificar(pedido.instrucao), reasoningEngine.analyze(pedido.instrucao).requirements)
-        val (textoFinal, origem, scoreFinal, aiUsada) = escalonar(
+        val (textoFinal, origem, scoreFinal, aiUsada, reasoningFinal) = escalonar(
             pedido.instrucao,
             PromptCriado(pedido.promptAnterior, com.brain.prompt.PromptDomain.classificar(pedido.instrucao), "usuario:prompt-anterior"),
             scoreInicial,
@@ -201,7 +202,7 @@ class PromptGenerationExecutor(
         outcomeTracker.markUsed(actionId, saveGeneratedPrompt(pedido.instrucao, textoFinal))
         return ActionExecution(
             success = true,
-            result = "$prefixo (qualidade ${(scoreFinal.total * 100).toInt()}%):\n\n$textoFinal",
+            result = "$prefixo (estimativa heurística interna — qualidade ${(scoreFinal.total * 100).toInt()}%):\n\n$textoFinal",
             evidence = evidenciasBase + listOfNotNull(
                 "prompt-creator:origem:$origem",
                 "prompt-quality:total:${"%.2f".format(scoreFinal.total)}",
@@ -209,7 +210,8 @@ class PromptGenerationExecutor(
                 if (aiUsada) "prompt-generation:custo-tier:${improver.custoDaUltimaMelhoria()}" else null
             ),
             provenance = provenance(capability),
-            custo = if (aiUsada) improver.custoDaUltimaMelhoria().paraCustoNumerico() else 0.0
+            custo = if (aiUsada) improver.custoDaUltimaMelhoria().paraCustoNumerico() else 0.0,
+            promptReasoning = reasoningFinal
         )
     }
 
@@ -225,7 +227,7 @@ class PromptGenerationExecutor(
         authorizedAccountIds: Set<String>
     ): ActionExecution {
         val scoreInicial = PromptQualityValidator.validar(objetivo, criado.texto, criado.dominio, reasoningEngine.analyze(objetivo).requirements)
-        val (textoEscalonado, origem, scoreFinal, aiUsada) = escalonar(objetivo, criado, scoreInicial, contextoPesquisa, authorizedAccountIds)
+        val (textoEscalonado, origem, scoreFinal, aiUsada, reasoningFinal) = escalonar(objetivo, criado, scoreInicial, contextoPesquisa, authorizedAccountIds)
         val textoFinal = textoEscalonado
         val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
         val savedId = saveGeneratedPrompt(objetivo, textoFinal)
@@ -240,7 +242,7 @@ class PromptGenerationExecutor(
 
         return ActionExecution(
             success = true,
-            result = "$prefixo (qualidade ${(scoreFinal.total * 100).toInt()}%):\n\n$textoFinal$notaIa",
+            result = "$prefixo (estimativa heurística interna — qualidade ${(scoreFinal.total * 100).toInt()}%):\n\n$textoFinal$notaIa",
             evidence = evidenciasBase + listOfNotNull(
                 candidatoBiblioteca?.let { "prompt-library:${it.id}" },
                 "prompt-creator:origem:$origem",
@@ -251,7 +253,8 @@ class PromptGenerationExecutor(
                 if (aiUsada) "prompt-generation:custo-tier:${improver.custoDaUltimaMelhoria()}" else null
             ),
             provenance = provenance(capability),
-            custo = if (aiUsada) improver.custoDaUltimaMelhoria().paraCustoNumerico() else 0.0
+            custo = if (aiUsada) improver.custoDaUltimaMelhoria().paraCustoNumerico() else 0.0,
+            promptReasoning = reasoningFinal
         )
     }
 
@@ -263,7 +266,7 @@ class PromptGenerationExecutor(
         contextoPesquisa: String?,
         authorizedAccountIds: Set<String>
     ): EscalonamentoResultado {
-        if (!scoreInicial.abaixoDoPadrao) return EscalonamentoResultado(criado.texto, criado.origem, scoreInicial, false)
+        if (!scoreInicial.abaixoDoPadrao) return EscalonamentoResultado(criado.texto, criado.origem, scoreInicial, false, criado.reasoning)
 
         // Escalonamento para IA é condicionado a uma conta explicitamente autorizada.
         // Implementações de rede só podem escalar quando existe uma conta autorizada.
@@ -277,17 +280,17 @@ class PromptGenerationExecutor(
         }
         if (viaIa != null) {
             val scoreIa = PromptQualityValidator.validar(pedido, viaIa, criado.dominio, reasoningEngine.analyze(pedido).requirements)
-            if (scoreIa.total >= scoreInicial.total) return EscalonamentoResultado(viaIa, "${criado.origem}+ia-especialista", scoreIa, true)
+            if (scoreIa.total >= scoreInicial.total) return EscalonamentoResultado(viaIa, "${criado.origem}+ia-especialista", scoreIa, true, criado.reasoning)
         }
 
         val reasoning = reasoningEngine.analyze(pedido)
         val revisao = revisionEngine.revise(reasoning, criado.texto)
         val scoreLocal = revisao.critique.score
-        return if (scoreLocal.total >= scoreInicial.total) EscalonamentoResultado(revisao.prompt, "local:revision-engine:${revisao.revisions}", scoreLocal, false)
-        else EscalonamentoResultado(criado.texto, criado.origem, scoreInicial, false)
+        return if (scoreLocal.total >= scoreInicial.total) EscalonamentoResultado(revisao.prompt, "local:revision-engine:${revisao.revisions}", scoreLocal, false, criado.reasoning.merge(revisao.reasoning))
+        else EscalonamentoResultado(criado.texto, criado.origem, scoreInicial, false, criado.reasoning)
     }
 
-    private data class EscalonamentoResultado(val texto: String, val origem: String, val score: PromptQualityScore, val aiUsada: Boolean)
+    private data class EscalonamentoResultado(val texto: String, val origem: String, val score: PromptQualityScore, val aiUsada: Boolean, val reasoning: PromptReasoningTrace)
 
     private data class PedidoDeMelhoria(val instrucao: String, val promptAnterior: String)
 

@@ -54,9 +54,11 @@ class WebResearchExecutor(
     }
 
     private fun montarResumo(resultados: List<ResearchResult>): String = buildString {
-        append("Pesquisa web concluída com ${resultados.size} fonte(s). ")
-        append("As fontes foram preservadas como evidência interna e exibidas separadamente na UI: ")
-        append(resultados.joinToString("; ") { "${it.title} (${it.source})" })
+        append("Pesquisa web concluída com ${resultados.size} fonte(s). Evidências relevantes: ")
+        append(resultados.joinToString("; ") {
+            val trecho = it.relevantContent.trim().replace(Regex("\\s+"), " ").take(280)
+            "${it.title} (${it.source})${if (trecho.isNotBlank()) ": $trecho" else ""}"
+        })
     }.trim()
 
     private fun evidenciaDe(r: ResearchResult): String =

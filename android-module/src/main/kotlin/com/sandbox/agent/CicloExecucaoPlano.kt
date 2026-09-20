@@ -20,6 +20,7 @@ import com.brain.router.DynamicFreeApiCatalog
 import com.brain.router.RoutingDecision
 import com.brain.router.RoutingProfile
 import com.brain.research.ResearchResult
+import com.brain.prompt.PromptReasoningTrace
 import com.brain.behavior.CritiqueResult
 import com.brain.behavior.CritiqueStatus
 import com.brain.behavior.ReadinessReport
@@ -49,7 +50,8 @@ data class ResultadoPasso(
      * reconhecer o tipo do resultado sem duplicar a lógica do Planner. */
     val capacidade: String? = null,
     val researchSources: List<ResearchResult> = emptyList(),
-    val executionEvidence: List<String> = emptyList()
+    val executionEvidence: List<String> = emptyList(),
+    val promptReasoning: PromptReasoningTrace? = null
 )
 
 data class ResultadoCiclo(
@@ -64,6 +66,7 @@ data class ResultadoCiclo(
     val aprovado: Boolean get() = concluido
     val resposta: String? get() = passos.asSequence().mapNotNull { it.resultado }.lastOrNull()
     val researchSources: List<ResearchResult> get() = passos.flatMap { it.researchSources }.distinctBy { it.url }
+    val promptReasoning: PromptReasoningTrace? get() = passos.mapNotNull { it.promptReasoning }.reduceOrNull { a, b -> a.merge(b) }
 }
 
 data class ResultadoPosExecucao(
@@ -230,7 +233,8 @@ class CicloExecucaoPlano(
                 custo = dispatch.gateway?.execution?.custo ?: 0.0,
                 capacidade = passo.capacidade,
                 researchSources = dispatch.gateway?.execution?.researchSources ?: emptyList(),
-                executionEvidence = dispatch.gateway?.execution?.evidence ?: emptyList()
+                executionEvidence = dispatch.gateway?.execution?.evidence ?: emptyList(),
+                promptReasoning = dispatch.gateway?.execution?.promptReasoning
             )
         }
         sandbox.abrirSessao(authorization).use { sessao ->

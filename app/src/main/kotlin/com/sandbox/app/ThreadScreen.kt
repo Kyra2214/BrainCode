@@ -84,6 +84,7 @@ sealed interface ThreadEvent {
         val promptActionId: String? = null,
         val contentType: GeneratedContentType = detectGeneratedContentType(text),
         val researchSources: List<ResearchSourceUi> = emptyList(),
+        val promptReasoning: PromptReasoningUi? = null,
         val validationWarning: String? = null,
         val validationPassed: Boolean? = null
     ) : ThreadEvent
@@ -202,7 +203,7 @@ fun ThreadScreen(viewModel: SandboxViewModel, onOpenSettings: () -> Unit = {}, o
 /** The index prevents duplicate-content events from colliding in LazyColumn. */
 private fun eventKey(event: ThreadEvent, index: Int): String = "$index:${when (event) {
     is ThreadEvent.User -> "user:${event.text.hashCode()}"
-    is ThreadEvent.Agent -> "agent:${event.text.hashCode()}:${event.researchSources.size}"
+    is ThreadEvent.Agent -> "agent:${event.text.hashCode()}:${event.researchSources.size}:${event.promptReasoning?.hashCode()}"
     is ThreadEvent.Terminal -> "terminal:${event.execution?.executionId ?: event.result.hashCode()}"
     is ThreadEvent.Approval -> "approval:${event.id}"
     is ThreadEvent.Report -> "report:${event.title}:${event.body.hashCode()}"
@@ -310,6 +311,7 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
         is ThreadEvent.Agent -> Column(modifier = Modifier.fillMaxWidth().combinedClickable(onClickLabel = "Citar resposta", onLongClickLabel = "Citar resposta", onClick = { viewModel.quoteEvent(event) }, onLongClick = { viewModel.quoteEvent(event) }), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             GeneratedContentCard(event = event, onCopy = ::copy)
             if (event.researchSources.isNotEmpty()) ResearchSourcesCard(event.researchSources)
+            event.promptReasoning?.let { PromptReasoningCard(it) }
             event.promptActionId?.takeIf { event.contentType == GeneratedContentType.PROMPT }?.let { actionId ->
                 var feedbackDado by remember(actionId) { mutableStateOf<Boolean?>(null) }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -360,6 +362,25 @@ private fun GeneratedContentCard(event: ThreadEvent.Agent, onCopy: (String) -> U
             }
             if (structured) SelectionContainer { Text(content, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) }
             else Text(content, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+@Composable
+private fun PromptReasoningCard(reasoning: PromptReasoningUi) {
+    var expanded by rememberSaveable(reasoning) { mutableStateOf(false) }
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            TextButton(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxWidth().semantics { contentDescription = if (expanded) "Recolher raciocínio do prompt" else "Expandir raciocínio do prompt" }) {
+                Text("Raciocínio do prompt · ver detalhes ${if (expanded) "▾" else "▸"}")
+            }
+            if (expanded) {
+                Text("Intenção: ${reasoning.intent}", style = MaterialTheme.typography.bodySmall)
+                if (reasoning.mandatoryElements.isNotEmpty()) Text("Elementos obrigatórios: ${reasoning.mandatoryElements.joinToString("; ")}", style = MaterialTheme.typography.bodySmall)
+                if (reasoning.evidence.isNotEmpty()) Text("Evidências: ${reasoning.evidence.joinToString("; ")}", style = MaterialTheme.typography.bodySmall)
+                if (reasoning.assumptions.isNotEmpty()) Text("Suposições: ${reasoning.assumptions.joinToString("; ")}", style = MaterialTheme.typography.bodySmall)
+                if (reasoning.revisions.isNotEmpty()) Text("Revisões: ${reasoning.revisions.joinToString("; ")}", style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
 }

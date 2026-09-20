@@ -12,6 +12,14 @@ data class ResearchSourceUi(
     val summary: String
 )
 
+data class PromptReasoningUi(
+    val intent: String,
+    val mandatoryElements: List<String>,
+    val evidence: List<String>,
+    val assumptions: List<String>,
+    val revisions: List<String>
+)
+
 /**
  * Extrai somente o conteúdo produzido, removendo o envelope operacional do Brain.
  * Não altera o texto bruto usado para renderização de código/Markdown.

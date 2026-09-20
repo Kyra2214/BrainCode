@@ -75,6 +75,7 @@ data class ChatMessage(
     val promptActionId: String? = null,
     val contentType: GeneratedContentType = GeneratedContentType.TEXT,
     val researchSources: List<ResearchSourceUi> = emptyList(),
+    val promptReasoning: PromptReasoningUi? = null,
     val validationWarning: String? = null,
     val validationPassed: Boolean? = null
 )
@@ -752,7 +753,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         val content = cycle.resposta ?: "Plano concluído: ${cycle.aprovado}"
                         val capability = cycle.passos.lastOrNull { it.resultado != null }?.capacidade
                         val evidence = cycle.passos.flatMap { it.executionEvidence }
-                        ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability, evidence), researchSources = cycle.researchSources.map { it.toUiSource() }, validationWarning = postExecutionWarning(cycle), validationPassed = cycle.aprovado)
+                        ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability, evidence), researchSources = cycle.researchSources.map { it.toUiSource() }, promptReasoning = cycle.promptReasoning?.toUiReasoning(), validationWarning = postExecutionWarning(cycle), validationPassed = cycle.aprovado)
                     } else {
                         ChatMessage(ChatRole.ERROR, "Brain indisponível enquanto o sandbox não está pronto. Prepare o sandbox e envie novamente.")
                     }
@@ -770,7 +771,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 val cyclePassed = response.validationPassed == true
                 brainUiStage = if (cyclePassed) BrainUiStage.READY else BrainUiStage.FAILED
             }
-            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content, response.promptActionId, response.contentType, response.researchSources, response.validationWarning, response.validationPassed) else ThreadEvent.System(response.content))
+            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content, response.promptActionId, response.contentType, response.researchSources, response.promptReasoning, response.validationWarning, response.validationPassed) else ThreadEvent.System(response.content))
         }
     }
     /** Entrada única do composer Codex-style: texto livre ou comando operacional. */
@@ -827,7 +828,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         val content = cycle.resposta ?: "Plano concluído: ${cycle.aprovado}"
                         val capability = cycle.passos.lastOrNull { it.resultado != null }?.capacidade
                         val evidence = cycle.passos.flatMap { it.executionEvidence }
-                        ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability, evidence), researchSources = cycle.researchSources.map { it.toUiSource() }, validationWarning = postExecutionWarning(cycle), validationPassed = cycle.aprovado)
+                        ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability, evidence), researchSources = cycle.researchSources.map { it.toUiSource() }, promptReasoning = cycle.promptReasoning?.toUiReasoning(), validationWarning = postExecutionWarning(cycle), validationPassed = cycle.aprovado)
                     } else {
                         ChatMessage(ChatRole.ERROR, "Brain indisponível enquanto o sandbox não está pronto. Prepare o sandbox e envie novamente.")
                     }
@@ -835,10 +836,11 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     .getOrElse { ChatMessage(ChatRole.ERROR, "Brain não conseguiu responder ao comando ${entrada.comando}: ${it.message ?: it.javaClass.simpleName}") }
             }
             chatMessages.add(response); chatRunning = false
-            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content, response.promptActionId, response.contentType, response.researchSources, response.validationWarning, response.validationPassed) else ThreadEvent.System(response.content))
+            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content, response.promptActionId, response.contentType, response.researchSources, response.promptReasoning, response.validationWarning, response.validationPassed) else ThreadEvent.System(response.content))
         }
     }
     private fun com.brain.research.ResearchResult.toUiSource() = ResearchSourceUi(title, source, url, relevantContent.take(240))
+    private fun com.brain.prompt.PromptReasoningTrace.toUiReasoning() = PromptReasoningUi(intent, mandatoryElements, evidence, assumptions, revisions)
 
     private fun publishStep(passo: ResultadoPasso) {
         brainUiStage = when (passo.status) {

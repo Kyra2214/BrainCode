@@ -28,11 +28,13 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
             PromptDomain.CODIGO -> componsIrCodigo(pedido, contexto, contextoPesquisa)
             PromptDomain.TEXTO -> componsIrTexto(pedido, contexto, contextoPesquisa)
         }
+        val evidence = evidenciasDaPesquisa(contextoPesquisa)
         return PromptCriado(
             texto = texto,
             dominio = dominio,
             origem = if (contexto != null) "local:adaptado-de:${contexto.id}" else "local:criado-do-zero",
-            componentesDetectados = detectarComponentesImagem(textoBase).filterValues { it != null }.keys
+            componentesDetectados = detectarComponentesImagem(textoBase).filterValues { it != null }.keys,
+            reasoning = tracePara(pedido, textoBase, evidence)
         )
     }
 
@@ -54,7 +56,13 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
         if ("clareza" in pontosFracos) {
             melhorado = melhorado.replace(Regex("\\s{2,}"), " ").trim()
         }
-        return PromptCriado(melhorado.trim(), dominio, "local:melhoria-heuristica")
+        val evidence = evidenciasDaPesquisa(contextoPesquisa)
+        return PromptCriado(
+            melhorado.trim(), dominio, "local:melhoria-heuristica",
+            reasoning = tracePara(pedidoOriginal, pedidoOriginal, evidence).copy(
+                revisions = pontosFracos.toList().sorted()
+            )
+        )
     }
 
     /** Refina pedidos concretos sem chamar IA: substitui o ambiente e acrescenta elementos pedidos. */
@@ -101,7 +109,7 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
             append("Nível de realismo: $realismo. Qualidade: $qualidade.")
         }
         val referencia = if (contexto != null) "\n\nReferência da biblioteca considerada (${contexto.id}): adaptado ao pedido acima." else ""
-        return base + referencia + diretrizesDaPesquisa(contextoPesquisa)
+        return base + referencia
     }
 
     /** Extrai cada componente só quando há evidência textual — nunca inventa o que o usuário não disse. */
@@ -225,7 +233,7 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
         val iluminacao = componentes["iluminacao"] ?: padraoImagem("iluminacao")
         val estilo = componentes["estilo"] ?: "estilo cinematográfico"
         val base = "Vídeo com $sujeito. Movimento de câmera: $movimento. Duração: $duracao. Iluminação: $iluminacao. Estilo visual: $estilo."
-        return base + diretrizesDaPesquisa(contextoPesquisa)
+        return base
     }
 
     // ---------------- TEXTO ----------------
@@ -241,7 +249,6 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
             appendLine("REFERÊNCIA")
             appendLine("Baseado no template ${contexto.id}, adaptado ao pedido acima.")
         }
-        append(diretrizesDaPesquisa(contextoPesquisa))
     }.trim()
 
     // ---------------- CODIGO ----------------
@@ -254,23 +261,30 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
         appendLine("- Preservar a arquitetura existente do projeto.")
         appendLine("- Cobrir o caso descrito com testes quando aplicável.")
         appendLine("- Não introduzir dependências desnecessárias.")
-        append(diretrizesDaPesquisa(contextoPesquisa))
     }.trim()
 
-    /** Converte evidência de pesquisa em orientação de execução; URLs e fontes não entram no prompt. */
-    private fun diretrizesDaPesquisa(contextoPesquisa: String?): String {
+    /** Extrai evidências reais para o trace; nunca cria um fallback genérico nem polui o prompt final. */
+    private fun evidenciasDaPesquisa(contextoPesquisa: String?): List<String> {
         val bruto = contextoPesquisa?.trim().orEmpty()
-        if (bruto.isBlank()) return ""
+        if (bruto.isBlank()) return emptyList()
         val lower = bruto.lowercase(Locale.ROOT)
-        val insights = buildList {
-            if ("ilumina" in lower || "luz" in lower || "sombra" in lower) add("use iluminação equilibrada e controle as sombras")
-            if ("fotorreal" in lower || "fotograf" in lower || "realismo" in lower) add("preserve coerência fotográfica e detalhes realistas")
-            if ("composi" in lower || "enquadr" in lower) add("organize o enquadramento com hierarquia visual clara")
-            if ("cor" in lower || "paleta" in lower) add("mantenha uma paleta de cores coerente com o objetivo")
-            if (isEmpty()) add("aplique as evidências pesquisadas de forma coerente com a intenção do pedido")
-        }
-        val insight = insights.joinToString("; ")
-        if (insight.isBlank()) return ""
-        return "\n\nDIRETRIZES SEMÂNTICAS DERIVADAS DA PESQUISA:\nAplique estas evidências ao resultado, preservando a intenção do pedido: $insight"
+        return buildList {
+            if ("ilumina" in lower || "luz" in lower || "sombra" in lower) add("iluminação, luz e controle de sombras")
+            if ("fotorreal" in lower || "fotograf" in lower || "realismo" in lower) add("coerência fotográfica e detalhes realistas")
+            if ("composi" in lower || "enquadr" in lower) add("enquadramento e hierarquia visual")
+            if (Regex("\\b(cor|cores|paleta|cromática)\\b").containsMatchIn(lower)) add("paleta e coerência de cores")
+            Regex("(?i)\\b(?:contraste|textura|profundidade de campo|bokeh|perspectiva|temperatura de cor)\\b[^.;,]{0,80}")
+                .findAll(bruto).map { it.value.trim() }.forEach { add(it) }
+        }.distinct()
+    }
+
+    private fun tracePara(pedido: String, textoBase: String, evidence: List<String>): PromptReasoningTrace {
+        val componentes = detectarComponentesImagem(textoBase).filterValues { it != null }.map { "${it.key}: ${it.value}" }
+        return PromptReasoningTrace(
+            intent = PromptDomain.classificar(pedido).name.lowercase(Locale.ROOT),
+            mandatoryElements = componentes,
+            evidence = evidence,
+            assumptions = if (componentes.isEmpty()) listOf("componentes visuais ausentes foram preenchidos por padrões determinísticos") else emptyList()
+        )
     }
 }
