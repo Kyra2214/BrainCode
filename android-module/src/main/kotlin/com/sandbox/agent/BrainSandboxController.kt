@@ -340,7 +340,11 @@ class BrainSandboxController(
             emit(
                 attemptRunId,
                 "post-execution",
-                if (finalResult.aprovado) "ValidatedLearningRecorded" else "PostExecutionBlocked",
+                when {
+                    !finalResult.aprovado -> "PostExecutionBlocked"
+                    postExecution.learningRecorded -> "ValidatedLearningRecorded"
+                    else -> "ExecutionValidated"
+                },
                 mapOf(
                     "verification" to postExecution.verification.status.name,
                     "critic" to postExecution.critique.status.name,
