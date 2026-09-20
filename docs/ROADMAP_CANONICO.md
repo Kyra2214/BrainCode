@@ -124,7 +124,7 @@ Não iniciar a integração de APIs externas antes de Porta 1 e Porta 2 estarem 
 [ ] fechar fluxo: pesquisa → requisitos → arquitetura → plano → aprovação → roadmap → divisão de tarefas → especialistas → integração → revisão → testes → entrega.
 [ ] conectar a futura camada de APIs/providers às especialidades conforme Policy.
 [ ] fechar segunda opinião e retorno ao responsável quando houver erro.
-[ ] consolidar Git autorizado / entrega ZIP.
+[x] consolidar Git autorizado / entrega ZIP.
 [x] bateria de testes funcional + regressão.
 [ ] CI/E2E/readiness final da Porta 3.
 [ ] declarar Porta 3 consolidada somente com evidência verde.

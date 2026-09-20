@@ -170,6 +170,8 @@ No futuro, a Porta 3 poderá usar APIs/providers especializados.
 
 Na implementação atual, `CreatePhaseMachine` e `SecretaryState` persistem a sequência de criação e exigem aprovação explícita antes de `APPROVED`. Até esse ponto, `DoorPolicy` bloqueia `workspace.*` e `sandbox.*`. O catálogo bounded declara os especialistas previstos com provenance local, mas não embute provider ou LLM próprio.
 
+Após a aprovação, `TarefaStateMachine` governa prompt, execução, QA, aprovação ou correção. A entrega publica um recibo local e usa `LocalDeliveryPackager` para produzir um ZIP verificável; Git permanece sujeito à autorização do workspace e APIs externas seguem bloqueadas.
+
 ## 7. Fluxo da criação
 
 A criação não começa necessariamente com código:

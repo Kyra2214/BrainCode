@@ -9,6 +9,7 @@ import com.brain.discovery.ExplorerSource
 import com.brain.discovery.ExplorerLicense
 import com.brain.discovery.OpenSourceStatus
 import com.brain.delivery.DeliveryReceipt
+import com.brain.delivery.LocalDeliveryPackager
 import com.brain.delivery.ObservableDelivery
 import com.brain.events.BrainEvent
 import com.brain.events.EventStore
@@ -33,9 +34,6 @@ import com.brain.workflow.WorkflowRunResult
 import com.brain.workflow.WorkflowStepResult
 import java.io.File
 import java.time.Instant
-import java.io.FileInputStream
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 
 /**
  * Fachada Android para os subsistemas Brain locais e persistentes.
@@ -158,16 +156,7 @@ class BrainIntegrationFacade(private val context: Context, private val stateDir:
     fun packageLocalDelivery(root: File, runId: String): File {
         publishLocalDelivery(root, runId)
         val output = File(File(stateDir, "deliveries"), "$runId.zip")
-        output.parentFile?.mkdirs()
-        ZipOutputStream(output.outputStream().buffered()).use { zip ->
-            root.walkTopDown().filter { it.isFile && it != output }.forEach { file ->
-                val relative = file.relativeTo(root).path.replace(File.separatorChar, '/')
-                zip.putNextEntry(ZipEntry(relative))
-                FileInputStream(file).use { input -> input.copyTo(zip) }
-                zip.closeEntry()
-            }
-        }
-        return output
+        return LocalDeliveryPackager.packageRoot(root, output)
     }
 
     fun discoverBuiltInCandidate(): com.brain.discovery.ExplorerPipelineResult = discovery.run(

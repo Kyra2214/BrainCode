@@ -83,3 +83,14 @@ O fluxo formal de `Door.PROMPT` foi coberto com corpus de entrada, follow-up e `
 - `CreateApprovalTest` passou: zero escrita antes de APPROVED e uma execução controlada após aprovação.
 - Regressão completa, architecture gate e diff check passaram.
 - Delivery ZIP, integração/revisão final, CI remoto e APK continuam gates posteriores; nenhum APK é entregue nesta subfase.
+
+## Fase 4.1 — integração, tarefas e delivery local
+
+O fluxo de tarefas existente foi coberto até QA/aprovação/correção, e `DefaultPromptGenerator` permanece a fonte local para prompts por roadmap. `LocalDeliveryPackager` agora centraliza o ZIP verificável no Brain Core; a facade Android publica primeiro o recibo local e então cria o arquivo, sem rede ou provider.
+
+### Evidências locais executadas
+
+- `TarefaDeliveryFlowTest` passou.
+- `LocalDeliveryPackagerTest` passou e verificou `README.md`, código e exclusão do próprio ZIP.
+- `:app:compileDebugKotlin` passou após a extração do empacotador.
+- APK ainda não foi gerado/entregue; falta o gate final de regressão/CI e a verificação do APK final.
