@@ -221,7 +221,7 @@ class BrainSandboxController(
             manifest = WorkflowManifest("brain-plan", "1.0.0", listOf(WorkflowNode("plan", "brain.plan", retryLimit = 0))),
             authorize = { it == "brain.plan" },
             execute = { node, attempt ->
-                cycle = executeWithEvents(plan, runId) { attemptPlan, attemptRunId ->
+                cycle = executeWithEvents(plan, runId, reasoning.requirements) { attemptPlan, attemptRunId ->
                     bridge.authorizeAndExecute(attemptPlan, attemptRunId, actor) { passo ->
                         emit(
                             attemptRunId,
@@ -288,7 +288,12 @@ class BrainSandboxController(
     fun registrarFeedbackDePrompt(actionId: String, positivo: Boolean): Boolean =
         promptOutcomeTracker?.recordUserFeedback(actionId, positivo) ?: false
 
-    private fun executeWithEvents(plan: PlanoExecucao, runId: String, action: (PlanoExecucao, String) -> ResultadoCiclo): ResultadoCiclo {
+    private fun executeWithEvents(
+        plan: PlanoExecucao,
+        runId: String,
+        requirements: List<String> = emptyList(),
+        action: (PlanoExecucao, String) -> ResultadoCiclo
+    ): ResultadoCiclo {
         emit(runId, "plan", "PlanCreated", mapOf("steps" to plan.passos.size.toString()))
         var currentPlan = plan
         var attempt = 1
@@ -323,7 +328,11 @@ class BrainSandboxController(
             // gerado nunca contém as palavras "artefato" ou "produzido"), travando QA e
             // RELEASE em readiness=BLOCKED mesmo com verification=PASSED e critique
             // sem findings de conteúdo reais.
-            val postExecution = postExecutionGate.evaluate(currentPlan, result)
+            val postExecution = postExecutionGate.evaluate(
+                plan = currentPlan,
+                cycle = result,
+                requirements = requirements
+            )
             val finalResult = result.copy(
                 runId = runId,
                 posExecucao = postExecution.copy(revisionAttempts = revisionAttempts.toList())
