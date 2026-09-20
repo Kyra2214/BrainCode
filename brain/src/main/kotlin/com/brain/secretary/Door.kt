@@ -62,6 +62,30 @@ data class OrderIntent(
     }
 }
 
+/** Máquina determinística da Porta 3; não permite saltos nem execução antes de APPROVED. */
+object CreatePhaseMachine {
+    private val ordered = listOf(
+        CreatePhase.DISCUSSION, CreatePhase.REQUIREMENTS, CreatePhase.ARCHITECTURE,
+        CreatePhase.PLAN, CreatePhase.APPROVED, CreatePhase.EXECUTION,
+        CreatePhase.INTEGRATION, CreatePhase.REVIEW, CreatePhase.TESTS, CreatePhase.DELIVERY
+    )
+
+    fun next(current: CreatePhase): CreatePhase? = ordered.getOrNull(ordered.indexOf(current) + 1)
+
+    fun canTransition(current: CreatePhase, target: CreatePhase, explicitApproval: Boolean = false): Boolean {
+        val currentIndex = ordered.indexOf(current)
+        val targetIndex = ordered.indexOf(target)
+        if (currentIndex < 0 || targetIndex != currentIndex + 1) return false
+        return target != CreatePhase.APPROVED || explicitApproval
+    }
+
+    fun transition(intent: OrderIntent, target: CreatePhase, explicitApproval: Boolean = false): OrderIntent {
+        require(intent.door == Door.CREATE) { "somente a Porta 3 possui máquina de fases" }
+        require(canTransition(intent.phase, target, explicitApproval)) { "transição inválida: ${intent.phase} -> $target" }
+        return intent.copy(phase = target, scope = intent.scope.copy(phase = target))
+    }
+}
+
 data class SecretaryState(
     val currentIntent: OrderIntent? = null,
     val history: List<OrderIntent> = emptyList()
@@ -70,6 +94,21 @@ data class SecretaryState(
         currentIntent = intent,
         history = (history + intent).takeLast(MAX_HISTORY)
     )
+
+    fun transitionTo(target: CreatePhase, explicitApproval: Boolean = false): SecretaryState {
+        val current = requireNotNull(currentIntent) { "não há intenção ativa para transicionar" }
+        return designate(CreatePhaseMachine.transition(current, target, explicitApproval))
+    }
+
+    fun approve(): SecretaryState {
+        var state = this
+        val current = requireNotNull(currentIntent) { "não há intenção ativa para aprovar" }.phase
+        if (current == CreatePhase.APPROVED || current >= CreatePhase.EXECUTION) return this
+        while (state.currentIntent?.phase != CreatePhase.PLAN) {
+            state = state.transitionTo(requireNotNull(CreatePhaseMachine.next(state.currentIntent!!.phase)))
+        }
+        return state.transitionTo(CreatePhase.APPROVED, explicitApproval = true)
+    }
 
     companion object {
         private const val MAX_HISTORY = 32

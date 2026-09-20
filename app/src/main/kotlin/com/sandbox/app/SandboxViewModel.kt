@@ -883,7 +883,17 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     val controller = brainController
                     if (controller != null && phase == SandboxPhase.Ready) {
                         val resolved = resolveConversation(prompt)
-                        val intent = secretary.classify(resolved.currentPrompt)
+                        val existingIntent = sessions.firstOrNull { it.id == activeSessionId }?.secretaryState?.currentIntent
+                        val intent = if (existingIntent?.door == Door.CREATE && secretary.isApproval(prompt)) {
+                            val approvedState = sessions.firstOrNull { it.id == activeSessionId }?.secretaryState?.approve()
+                                ?: SecretaryState()
+                            val id = activeSessionId
+                            if (id != null) {
+                                sessions = sessions.map { session -> if (session.id == id) session.copy(secretaryState = approvedState, updatedAt = System.currentTimeMillis()) else session }
+                                persistSessions()
+                            }
+                            requireNotNull(approvedState.currentIntent)
+                        } else secretary.classify(resolved.currentPrompt)
                         designateSecretaryIntent(intent)
                         brainUiStage = BrainUiStage.EXECUTANDO
                         val cycle = controller.executeObjective(

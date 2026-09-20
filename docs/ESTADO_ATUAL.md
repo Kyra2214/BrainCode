@@ -72,3 +72,14 @@ O fluxo formal de `Door.PROMPT` foi coberto com corpus de entrada, follow-up e `
 - `PromptDoorTerminalStateTest` passou.
 - A regressão completa do Prompt Creator permanece incluída no gate global da fase.
 - CI remoto, E2E/readiness e consolidação formal da Porta 2 ainda são gates do commit desta fase.
+
+## Fase 4.0 — Porta 3: máquina, aprovação e especialistas bounded
+
+`CreatePhaseMachine` e `SecretaryState.approve()` registram a sequência `DISCUSSION → REQUIREMENTS → ARCHITECTURE → PLAN → APPROVED` e bloqueiam saltos ou execução prematura. O `SandboxViewModel` reconhece aprovação explícita para uma intenção CREATE ativa e persiste o novo estado antes de executar. `BuiltInAgentDefinitions.boundedSpecialists()` declara os 11 especialistas previstos com provenance local e sem provider próprio.
+
+### Evidências locais executadas
+
+- `CreatePhaseMachineTest` e `BuiltInSpecialistsTest` passaram.
+- `CreateApprovalTest` passou: zero escrita antes de APPROVED e uma execução controlada após aprovação.
+- Regressão completa, architecture gate e diff check passaram.
+- Delivery ZIP, integração/revisão final, CI remoto e APK continuam gates posteriores; nenhum APK é entregue nesta subfase.

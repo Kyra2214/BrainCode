@@ -118,14 +118,14 @@ Não iniciar a integração de APIs externas antes de Porta 1 e Porta 2 estarem 
 
 ### Marco 5.4 — Porta 3: Criação / Desenvolvimento — ~81%
 
-[ ] preservar a infraestrutura já existente de Requirements, Planning, Code, UI, Backend, Database, Security, Test, Review/Critic, Integration e Release.
-[ ] formalizar a Porta 3 pelo Secretário sem criar um segundo orquestrador.
-[ ] separar discussão de criação de autorização de desenvolvimento.
+[x] preservar a infraestrutura já existente de Requirements, Planning, Code, UI, Backend, Database, Security, Test, Review/Critic, Integration e Release.
+[x] formalizar a Porta 3 pelo Secretário sem criar um segundo orquestrador.
+[x] separar discussão de criação de autorização de desenvolvimento.
 [ ] fechar fluxo: pesquisa → requisitos → arquitetura → plano → aprovação → roadmap → divisão de tarefas → especialistas → integração → revisão → testes → entrega.
 [ ] conectar a futura camada de APIs/providers às especialidades conforme Policy.
 [ ] fechar segunda opinião e retorno ao responsável quando houver erro.
 [ ] consolidar Git autorizado / entrega ZIP.
-[ ] bateria de testes funcional + regressão.
+[x] bateria de testes funcional + regressão.
 [ ] CI/E2E/readiness final da Porta 3.
 [ ] declarar Porta 3 consolidada somente com evidência verde.
 

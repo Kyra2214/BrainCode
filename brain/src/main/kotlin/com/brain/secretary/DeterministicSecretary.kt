@@ -18,7 +18,7 @@ class DeterministicSecretary {
         val phase = when (door) {
             Door.CHAT -> CreatePhase.CHAT
             Door.PROMPT -> CreatePhase.PROMPT
-            Door.CREATE -> if (isApproval(normalized)) CreatePhase.APPROVED else CreatePhase.DISCUSSION
+            Door.CREATE -> if (isApprovalSignal(normalized)) CreatePhase.APPROVED else CreatePhase.DISCUSSION
         }
         val scope = DoorScope(
             door = door,
@@ -28,6 +28,8 @@ class DeterministicSecretary {
         )
         return OrderIntent(original, door, phase, restrictions, scope, explicit = isPrompt(normalized) || isCreation(normalized))
     }
+
+    fun isApproval(prompt: String): Boolean = isApprovalSignal(prompt.trim().lowercase())
 
     private fun restrictions(text: String): Set<Restriction> = buildSet {
         if (IntentNegation.hasNegatedOccurrence(text, WEB_TERMS)) add(Restriction.NO_WEB)
@@ -51,7 +53,7 @@ class DeterministicSecretary {
             IntentNegation.hasAllowedOccurrence(text, "criar", "crie", "desenvolv", "implementar", "implemente", "constru"))
     }
 
-    private fun isApproval(text: String): Boolean = IntentNegation.hasAllowedOccurrence(
+    private fun isApprovalSignal(text: String): Boolean = IntentNegation.hasAllowedOccurrence(
         text,
             "pode começar", "pode iniciar", "comece o desenvolvimento", "inicie o desenvolvimento", "pode desenvolver", "pode implementar", "implemente", "execute o plano", "execute os testes", "pode executar"
     )
