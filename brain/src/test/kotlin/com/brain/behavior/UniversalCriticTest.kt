@@ -28,4 +28,13 @@ class UniversalCriticTest {
         val input = CritiqueInput("prompt", listOf("foguete", "céu estrelado"), result = "foguete no céu estrelado")
         assertEquals(CritiqueStatus.PASS, UniversalCritic().evaluate(input).status)
     }
+
+    @Test fun `nao marca requisito visual equivalente como ausente`() {
+        val input = CritiqueInput(
+            "criar prompt de uma imagem de um foguete decolando",
+            listOf("a imagem de um foguete decolando"),
+            result = "Ilustração digital detalhada de um foguete decolando, com composição equilibrada."
+        )
+        assertEquals(CritiqueStatus.PASS, UniversalCritic().evaluate(input).status)
+    }
 }

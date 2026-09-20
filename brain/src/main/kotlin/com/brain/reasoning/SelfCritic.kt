@@ -3,6 +3,7 @@ package com.brain.reasoning
 import com.brain.prompt.PromptDomain
 import com.brain.prompt.PromptQualityScore
 import com.brain.prompt.PromptQualityValidator
+import com.brain.behavior.RequirementMatcher
 import java.util.Locale
 
 data class CritiqueResult(
@@ -22,18 +23,12 @@ class SelfCritic(
         val score = validator(state.objective, result, state.domain)
         val lower = result.lowercase(Locale.ROOT)
         val attended = state.requirements
-            .filter { requirementPresent(it.text, lower) }
+            .filter { RequirementMatcher.isPresent(it.text, lower) }
             .map { it.text }
         val missing = state.requirements
-            .filterNot { requirementPresent(it.text, lower) }
+            .filterNot { RequirementMatcher.isPresent(it.text, lower) }
             .map { it.text }
         return CritiqueResult(score, attended, missing)
     }
 
-    private fun requirementPresent(requirement: String, result: String): Boolean {
-        val normalized = requirement.lowercase(Locale.ROOT)
-        if (normalized in result) return true
-        val tokens = normalized.split(Regex("[^\\p{L}\\p{Nd}]+" )).filter { it.length >= 4 }
-        return tokens.isNotEmpty() && tokens.all { it in result }
-    }
 }

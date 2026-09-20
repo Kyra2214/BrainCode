@@ -15,10 +15,10 @@ class UniversalCritic {
         val findings = mutableListOf<CritiqueFinding>()
         if (input.objective.isBlank()) findings += CritiqueFinding("objective.empty", "objetivo vazio", FindingSeverity.BLOCKING)
         if (input.result.isBlank()) findings += CritiqueFinding("result.empty", "resultado vazio", FindingSeverity.BLOCKING)
-        input.requirements.filterNot { requirementPresent(it, input.result) }.forEach {
+        input.requirements.filterNot { RequirementMatcher.isPresent(it, input.result) }.forEach {
             findings += CritiqueFinding("requirement.missing", "requisito ausente: $it", FindingSeverity.HIGH, it)
         }
-        input.constraints.filter { it.startsWith("must:") }.filterNot { requirementPresent(it.removePrefix("must:"), input.result) }.forEach {
+        input.constraints.filter { it.startsWith("must:") }.filterNot { RequirementMatcher.isPresent(it.removePrefix("must:"), input.result) }.forEach {
             findings += CritiqueFinding("constraint.violated", "restrição não demonstrada: $it", FindingSeverity.BLOCKING)
         }
         if (input.highRisk && input.evidence.none { it.verified }) {
@@ -32,14 +32,6 @@ class UniversalCritic {
         return CritiqueResult(status, findings, input.requirements)
     }
 
-    private fun requirementPresent(requirement: String, result: String): Boolean {
-        val normalized = requirement.trim().lowercase()
-        val lower = result.lowercase()
-        if (normalized.isBlank()) return true
-        if (normalized in lower) return true
-        val tokens = normalized.split(Regex("[^\\p{L}\\p{Nd}]+" )).filter { it.length >= 4 }
-        return tokens.isNotEmpty() && tokens.all { it in lower }
-    }
 }
 
 class DoubtDrivenReview {
