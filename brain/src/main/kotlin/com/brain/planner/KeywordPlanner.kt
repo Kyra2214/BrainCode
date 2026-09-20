@@ -40,7 +40,10 @@ class KeywordFunctionSplitter : FunctionSplitter {
                 "pesquisar", "network.research", "evidência de pesquisa disponível",
                 // A consulta usa só o que o usuário pediu agora; o texto do artefato anterior
                 // ("Referências resolvidas") só atrapalha a busca.
-                parametros = listOf(texto.substringBefore("\nReferências resolvidas:").trim().ifBlank { texto }),
+                parametros = listOf(
+                    if (promptVisual) ResearchQuery.paraPromptVisual(texto)
+                    else texto.substringBefore("\nReferências resolvidas:").trim().ifBlank { texto }
+                ),
                 papel = PapelPipeline.PLANEJAMENTO, riskClass = RiskClass.MEDIUM
             )
         }

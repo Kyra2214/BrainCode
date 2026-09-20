@@ -250,17 +250,17 @@ class PromptGenerationExecutor(
         val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
         val semMudanca = textoFinal.trim() == pedido.promptAnterior.trim()
         val prefixo = when {
-            semMudanca -> "Não consegui aplicar as alterações pedidas localmente e nenhuma IA estava disponível — mantive o prompt anterior"
+            semMudanca -> "Não consegui aplicar as alterações pedidas com as regras locais — mantive o prompt anterior"
             aiUsada -> "Melhorei o prompt com apoio de IA especialista"
             else -> "Melhorei o prompt com o Prompt Creator local"
         }
-        val notaIaPedida = if (pedeIa && !aiUsada) "\n\n(Você pediu uma melhoria com IA, mas ela não está disponível agora — apliquei as regras locais.)" else ""
         outcomeTracker.markUsed(actionId, saveGeneratedPrompt(pedido.instrucao, textoFinal))
         return ActionExecution(
             success = true,
-            result = "$prefixo (estimativa heurística interna — qualidade ${(scoreFinal.total * 100).toInt()}%):\n\n$textoFinal$notaIaPedida",
+            result = "$prefixo (estimativa heurística interna — qualidade ${(scoreFinal.total * 100).toInt()}%):\n\n$textoFinal",
             evidence = evidenciasBase + listOfNotNull(
                 if (pedeIa) "prompt-improvement:gatilho-ia" else null,
+                if (pedeIa && !aiUsada) "prompt-improvement:ia-indisponivel-entregue-local" else null,
                 "prompt-creator:origem:$origem",
                 "prompt-quality:total:${"%.2f".format(scoreFinal.total)}",
                 "prompt-generation-latency-ms:$elapsedMs",
@@ -295,15 +295,15 @@ class PromptGenerationExecutor(
             aiUsada -> "Não encontrei prompt compatível na biblioteca. Criei um prompt localmente e refinei com IA especialista"
             else -> "Não encontrei prompt compatível na biblioteca. Criei um prompt novo localmente"
         }
-        val notaIa = if (!aiUsada && scoreFinal.abaixoDoPadrao) "\n\n(Melhoria por IA não está disponível no momento — entreguei o melhor resultado local possível.)" else ""
 
         return ActionExecution(
             success = true,
-            result = "$prefixo (estimativa heurística interna — qualidade ${(scoreFinal.total * 100).toInt()}%):\n\n$textoFinal$notaIa",
+            result = "$prefixo (estimativa heurística interna — qualidade ${(scoreFinal.total * 100).toInt()}%):\n\n$textoFinal",
             evidence = evidenciasBase + listOfNotNull(
                 candidatoBiblioteca?.let { "prompt-library:${it.id}" },
                 "prompt-creator:origem:$origem",
                 "prompt-quality:total:${"%.2f".format(scoreFinal.total)}",
+                if (!aiUsada && scoreFinal.abaixoDoPadrao) "prompt-generation:ia-indisponivel-entregue-local" else null,
                 "prompt-library:saved-before-response",
                 "prompt-library:id:$savedId",
                 "prompt-generation-latency-ms:$elapsedMs",

@@ -117,22 +117,33 @@ class LocalPromptCreatorAgentTest {
         assertTrue(texto.startsWith("Ilustração digital"))
     }
 
-    @Test fun `pesquisa refina luz e lente somente com termos trazidos pelas fontes`() {
+    @Test fun `pesquisa refina a luz somente com termo trazido pelas fontes e visao de longe usa teleobjetiva`() {
         val original = "Ilustração digital detalhada de um foguete decolando, ambientado em um cenário coerente. " +
             "Composição: equilibrada. Iluminação: natural. " +
             "Câmera e lente: câmera fotográfica padrão, lente com distância focal neutra (por volta de 50mm), profundidade de campo moderada."
         val pedido = "vamos melhorar ele quero ele num deserto ao por do sol com a visão de uma plataforma de longe"
 
-        val comPesquisa = agent.melhorarLocalmente(
-            original, pedido, emptySet(),
-            "Fotógrafos usam golden hour para luz dourada; uma teleobjetiva comprime a distância entre plataforma e foguete."
-        )
+        val comPesquisa = agent.melhorarLocalmente(original, pedido, emptySet(), "Fotógrafos usam golden hour para luz dourada.")
         assertTrue(comPesquisa.texto.contains("golden hour"))
-        assertTrue(comPesquisa.texto.contains("teleobjetiva"))
-        assertFalse(comPesquisa.texto.contains("distância focal neutra"))
 
         val semPesquisa = agent.melhorarLocalmente(original, pedido, emptySet(), null)
         assertFalse(semPesquisa.texto.contains("golden hour"))
-        assertTrue(semPesquisa.texto.contains("distância focal neutra"))
+        // regra local (sem pesquisa): objeto distante não combina com lente neutra de 50mm
+        assertTrue(semPesquisa.texto.contains("teleobjetiva"))
+        assertFalse(semPesquisa.texto.contains("distância focal neutra"))
+    }
+
+    @Test fun `ilustracao nao recebe camera fotografica nem realismo fotografico`() {
+        val texto = agent.criar("Crie um prompt de um foguete decolando").texto
+        assertTrue(texto.startsWith("Ilustração digital"))
+        assertFalse(texto.contains("Câmera e lente"))
+        assertFalse(texto.contains("fotográfic"))
+    }
+
+    @Test fun `ilustracao que vira fotorrealista ganha linha de camera`() {
+        val ilustracao = agent.criar("Crie um prompt de um foguete decolando").texto
+        val foto = agent.melhorarLocalmente(ilustracao, "muda para fotorrealista", emptySet()).texto
+        assertTrue(foto.startsWith("Fotografia fotorrealista"))
+        assertTrue(foto.contains("Câmera e lente"))
     }
 }

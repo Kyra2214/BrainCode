@@ -279,7 +279,7 @@ class PromptGenerationExecutorTest {
         assertTrue(execution.result.orEmpty().lowercase().contains("visão de uma plataforma de longe"))
     }
 
-    @Test fun `gatilho sem IA disponivel avisa e entrega o resultado local`() {
+    @Test fun `gatilho sem IA disponivel entrega o resultado local sem aviso no texto`() {
         val objetivo = "Objetivo atual: refaça ele no deserto ao por do sol\n" +
             "Referências resolvidas:\n- artefato anterior: $promptAnteriorFoguete"
 
@@ -287,7 +287,8 @@ class PromptGenerationExecutorTest {
         val resultado = execution.result.orEmpty()
 
         assertTrue(execution.success)
-        assertTrue(resultado.contains("ela não está disponível agora"))
+        assertFalse("IA pode estar desligada por escolha: sem aviso no texto", resultado.contains("não está disponível"))
+        assertTrue(execution.evidence.contains("prompt-improvement:ia-indisponivel-entregue-local"))
         assertTrue(resultado.lowercase().contains("deserto"))
     }
 

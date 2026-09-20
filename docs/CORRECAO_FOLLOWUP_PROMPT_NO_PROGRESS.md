@@ -61,3 +61,16 @@ Validar com JDK 17: `./gradlew :brain:test :app:testDebugUnitTest`.
 - **Fiação:** `SandboxViewModel` criava o `BrainSandboxController` sem `authorizedAccountIds` (vazio). Com isso a política
   nunca autorizava conta e o `GatewayPromptImprover` jamais era chamado. Agora os providers do catálogo
   (`android:<providerId>`) são autorizados; quem responde depende da chave cadastrada.
+
+## Adendo 4: qualidade local (IA desligada por escolha)
+Observado no APK (commit d1ae623, IA indisponível): follow-up PASS e prompt correto, mas:
+- **Sem aviso de IA no texto.** A IA pode estar desligada por escolha; o fato fica só na evidência
+  (`prompt-improvement:ia-indisponivel-entregue-local` / `prompt-generation:ia-indisponivel-entregue-local`).
+- **Pesquisa irrelevante** ("Reformulador de Texto", frases do Pensador): a consulta era a frase crua do usuário.
+  `ResearchQuery.paraPromptVisual` monta assunto do prompt anterior + pedido atual (sem palavras de conversa) +
+  "fotografia composição iluminação".
+- **Prompt contraditório:** "Ilustração digital" + "câmera fotográfica padrão" + "realismo fotográfico". Ilustração agora
+  não recebe linha de câmera nem realismo fotográfico; ao virar fotorrealista, ganha a linha de câmera.
+- **Visão de longe** com lente neutra de 50mm: regra local troca por teleobjetiva (sem depender da pesquisa).
+- A nota "qualidade NN%" da melhoria é medida contra a frase do usuário (curta), por isso pode ser menor que a do prompt
+  original; não é comparável entre geração e melhoria.

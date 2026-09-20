@@ -88,8 +88,8 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
 
     /**
      * Usa a pesquisa web só para refinar o que o usuário JÁ pediu, com termo técnico que a própria fonte
-     * trouxe (nunca inventa fatos): luz de golden hour para pôr do sol/entardecer e lente teleobjetiva
-     * para visão de longe. Sem pesquisa, ou sem esses termos nas fontes, o prompt não muda.
+     * trouxe (nunca inventa fatos): luz de golden hour para pôr do sol/entardecer. Sem pesquisa, ou sem esse
+     * termo nas fontes, o prompt não muda.
      */
     private fun refinarComPesquisa(prompt: String, lowerInstrucao: String, contextoPesquisa: String?): String {
         val pesquisa = contextoPesquisa.orEmpty().lowercase(Locale.ROOT)
@@ -98,11 +98,6 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
         val pediuLuzDourada = Regex("p[oô]r do sol|entardecer|crep[uú]sculo").containsMatchIn(lowerInstrucao)
         if (pediuLuzDourada && ("golden hour" in pesquisa || "hora dourada" in pesquisa) && "golden hour" !in resultado.lowercase(Locale.ROOT)) {
             resultado = resultado.replace("luz dourada do ", "luz dourada de golden hour, no ")
-        }
-        val pediuDeLonge = Regex("de longe|ao longe|à distância|a distância|distante").containsMatchIn(lowerInstrucao)
-        if (pediuDeLonge && Regex("teleobjetiva|telephoto|lente longa|long lens").containsMatchIn(pesquisa)) {
-            val lente = if ("teleobjetiva" in pesquisa) "lente teleobjetiva, compressão de planos" else "lente teleobjetiva (telephoto), compressão de planos"
-            resultado = Regex("(?i)lente com distância focal neutra(?:\\s*\\([^)]*\\))?").replace(resultado) { lente }
         }
         return resultado
     }
@@ -134,6 +129,11 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
         resultado = Regex("(?i)(N[ií]vel de realismo:\\s*)[^.]+")
             .replace(resultado) { it.groupValues[1] + "fotorrealista, com texturas e iluminação de fotografia real" }
         if ("fotorrealista" !in resultado.lowercase(Locale.ROOT)) resultado = "$resultado Estilo: fotografia fotorrealista."
+        // Prompt de ilustração não tem linha de câmera; ao virar fotografia ele precisa de uma.
+        if (!resultado.contains("Câmera e lente:", ignoreCase = true) && resultado.contains("Nível de realismo:")) {
+            val camera = "Câmera e lente: ${padraoImagem("camera")}, ${padraoImagem("lente")}, ${padraoImagem("profundidade")}. "
+            resultado = resultado.replaceFirst("Nível de realismo:", camera + "Nível de realismo:")
+        }
         return resultado
     }
 
@@ -148,7 +148,10 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
         if (frase.lowercase(Locale.ROOT) in prompt.lowercase(Locale.ROOT)) return prompt
         val novaComposicao = "plano geral aberto, $frase, com o assunto principal ainda em destaque"
         val comComposicao = Regex("(?i)(Composição:\\s*)[^.]+").replace(prompt) { it.groupValues[1] + novaComposicao }
-        return if (comComposicao != prompt) comComposicao else "${prompt.trimEnd()} Composição: $novaComposicao."
+        val resultado = if (comComposicao != prompt) comComposicao else "${prompt.trimEnd()} Composição: $novaComposicao."
+        // Visão de longe com lente "neutra de 50mm" é contraditória: objeto distante pede lente longa.
+        return Regex("(?i)lente com distância focal neutra(?:\\s*\\([^)]*\\))?")
+            .replace(resultado) { "lente teleobjetiva, compressão de planos" }
     }
 
     // ---------------- IMAGEM ----------------
@@ -165,17 +168,22 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
         val ambiente = ambienteSplit ?: componentes["ambiente"] ?: pesquisa["ambiente"] ?: padraoImagem("ambiente")
         val composicao = componentes["composicao"] ?: pesquisa["composicao"] ?: padraoImagem("composicao")
         val iluminacao = componentes["iluminacao"] ?: pesquisa["iluminacao"] ?: padraoImagem("iluminacao")
+        // Coerência estilo x técnica: câmera/lente/realismo fotográfico só entram em prompt de fotografia
+        // (ou quando o usuário pediu câmera/lente/profundidade). Ilustração não leva "câmera fotográfica padrão".
+        val fotografico = Regex("fotograf|fotorreal").containsMatchIn(estilo.lowercase(Locale.ROOT))
+        val cameraExplicita = listOf("camera", "lente", "profundidade").any { componentes[it] != null }
         val camera = componentes["camera"] ?: padraoImagem("camera")
         val lente = componentes["lente"] ?: padraoImagem("lente")
         val profundidade = componentes["profundidade"] ?: padraoImagem("profundidade")
-        val realismo = componentes["realismo"] ?: padraoImagem("realismo")
+        val realismo = componentes["realismo"]
+            ?: if (fotografico) padraoImagem("realismo") else "acabamento de ilustração digital, cores ricas e volumes bem definidos"
         val qualidade = componentes["qualidade"] ?: padraoImagem("qualidade")
 
         val base = buildString {
             append("${estilo.replaceFirstChar { it.uppercase(Locale.ROOT) }} de $sujeito, ambientado em $ambiente. ")
             append("Composição: $composicao. ")
             append("Iluminação: $iluminacao. ")
-            append("Câmera e lente: $camera, $lente, $profundidade. ")
+            if (fotografico || cameraExplicita) append("Câmera e lente: $camera, $lente, $profundidade. ")
             append("Nível de realismo: $realismo. Qualidade: $qualidade.")
         }
         val referencia = if (contexto != null) "\n\nReferência da biblioteca considerada (${contexto.id}): adaptado ao pedido acima." else ""
@@ -206,7 +214,7 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
         "camera" -> "câmera fotográfica padrão"
         "lente" -> "lente com distância focal neutra (por volta de 50mm)"
         "profundidade" -> "profundidade de campo moderada"
-        "realismo" -> "nível de realismo fotográfico"
+        "realismo" -> "fotográfico, com texturas e proporções naturais"
         "qualidade" -> "alta definição, sem artefatos visuais"
         else -> "conforme o contexto do pedido"
     }
