@@ -1,9 +1,13 @@
 # BrainCode 2.3 — Plano Total de Consolidação e Evolução
 
 **Status:** PLANO OFICIAL DE EXECUÇÃO  
-**Data:** 2026-09-19  
+**Data:** 2026-09-20  
 **Repositório:** `Kyra2214/BrainCode`  
 **Objetivo:** transformar o BrainCode em um agente que compreende intenção, planeja, executa, verifica, critica, corrige e só então conclui.
+
+**HEAD consolidado:** fa4dfa1ec2643d1d9b0d9a6f5b0eb36df8  
+**Estado da consolidação:** pós-execução Android integrado; requisitos do Reasoning agora chegam também ao UniversalCritic; fallback direto do chat fora do ciclo está removido.  
+**Fora do escopo 2.3:** Roofts 0.6 runtime, retrieval universal/semântico, hardening OS-level e leases/fencing.
 
 ---
 
