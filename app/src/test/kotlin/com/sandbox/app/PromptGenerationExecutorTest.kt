@@ -73,7 +73,7 @@ class PromptGenerationExecutorTest {
         override fun criar(pedido: String, contexto: PromptTemplate?, contextoPesquisa: String?): PromptCriado =
             PromptCriado("x", PromptDomain.IMAGEM, "test:fraco")
         override fun melhorarLocalmente(promptAtual: String, pedidoOriginal: String, pontosFracos: Set<String>, contextoPesquisa: String?): PromptCriado =
-            PromptCriado("x", PromptDomain.IMAGEM, "test:fraco")
+            PromptCriado(promptAtual, PromptDomain.IMAGEM, "test:fraco")
     }
 
     private val iaIndisponivel = PromptImprover { _, _ -> error("nenhuma API configurada") }
@@ -122,7 +122,7 @@ class PromptGenerationExecutorTest {
     @Test fun `com IA disponivel o resultado da IA e usado quando melhora o score`() {
         val library = FakePromptLibrary()
         val iaFuncional = PromptImprover { atual, _ ->
-            "Fotografia profissional detalhada: $atual Composição cuidadosamente balanceada, iluminação de estúdio " +
+            "Fotografia profissional detalhada de uma xícara de café: $atual Composição cuidadosamente balanceada, iluminação de estúdio " +
                 "de três pontos, lente 85mm, profundidade de campo rasa, altíssima definição e riqueza de detalhes realistas."
         }
         val execution = executor(library, iaFuncional, criadorFraco).execute(request("crie um prompt de uma xícara de café"), capability, decision)
@@ -139,7 +139,7 @@ class PromptGenerationExecutorTest {
         val library = FakePromptLibrary()
         val iaPaga = object : PromptImprover {
             override fun melhorar(promptAtual: String, pedidoOriginal: String): String =
-                "Fotografia profissional detalhada: $promptAtual Composição cuidadosamente balanceada, iluminação de estúdio " +
+                "Fotografia profissional detalhada de uma xícara de café: $promptAtual Composição cuidadosamente balanceada, iluminação de estúdio " +
                     "de três pontos, lente 85mm, profundidade de campo rasa, altíssima definição e riqueza de detalhes realistas."
             override fun custoDaUltimaMelhoria(): CostClass = CostClass.MEDIUM
         }
