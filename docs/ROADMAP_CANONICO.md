@@ -14,8 +14,8 @@ Este é o roadmap operacional. Documentos de fases anteriores são históricos.
 [x] AuthorizedPlan e caminho Android canônico.
 [x] PostExecutionGate: Verification → Critic → Revision → Readiness → Learning.
 [x] EventStore/BehaviorTrace.
-[x] Roofts 0.3–0.5 preservados.
-[x] Roofts 0.6 instalado como payload independente.
+[x] RooftS consolidado como uma entidade com camadas 0.3–0.6, preservando os artefatos existentes.
+[x] RooftS 0.6 / Agent Skills instalado como camada do mesmo RooftS, ainda sem integração comportamental.
 
 ## Marco 2.4 — Context Engineering
 
