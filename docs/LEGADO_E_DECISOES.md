@@ -11,7 +11,7 @@ ActionGateway é a fronteira de execução.
 Android usa BrainSandboxController → BrainSandboxExecutionBridge → CicloExecucaoPlano.
 ResultadoCiclo.aprovado depende do pós-ciclo completo.
 ContextPack é dado tipado; contexto externo não possui autoridade.
-Roofts 0.3–0.5 são preservados; Roofts 0.6 está instalado mas não é runtime de Skills.
+RooftS é uma entidade única com camadas 0.3–0.6; as camadas 0.3–0.5 são preservadas e RooftS 0.6 / Agent Skills está instalado, mas ainda não é runtime ativo de Skills.
 Projetos externos não viram dependências automaticamente.
 
 ## Legado
