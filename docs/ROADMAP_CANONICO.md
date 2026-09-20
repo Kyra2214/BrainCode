@@ -65,3 +65,76 @@ Preferir implementação upstream madura quando puder ser incorporada corretamen
 [ ] recuperação de tarefas longas.
 
 Regra: primeiro wiring real, evidência, testes, E2E e readiness; depois expansão.
+
+
+## Marco 5 — Consolidação das 3 Portas e Agente Secretário
+
+**Estado da auditoria real em 20/09/2026:** Porta 1 ≈ 72%, Porta 2 ≈ 88%, Porta 3 ≈ 81%. Essas porcentagens são estimativas de maturidade funcional/integração, não percentual de linhas de código e não devem ser tratadas como testes de aprovação.
+
+### Regra de execução do roadmap
+
+A evolução das portas será sequencial:
+
+**Porta 1 → consolidar e validar → Porta 2 → consolidar e validar → integração de APIs → finalizar Porta 3.**
+
+Não iniciar a integração de APIs externas antes de Porta 1 e Porta 2 estarem consolidadas. A Porta 3 já possui aproximadamente 81% da infraestrutura funcional necessária; portanto, não será reconstruída nem congelada. Os componentes existentes serão preservados e os ~19% restantes serão fechados depois da consolidação das Portas 1 e 2 e da camada de APIs.
+
+### Marco 5.1 — Porta 1: Chat / Plano — ~72%
+
+[ ] formalizar o Secretário como entrada determinística para a Porta 1.
+[ ] separar claramente Chat/Plano das capacidades de Prompt e Criação.
+[ ] preservar conversa, contexto, memória, análise, planejamento e Web.
+[ ] Web permitida conforme Policy.
+[ ] APIs externas bloqueadas nesta fase.
+[ ] impedir vazamento de intenção para pesquisa, produção ou execução quando a ordem/restrição do usuário não permitir.
+[ ] consolidar regras de negação/restrição no planejamento.
+[ ] validar transições de estado e permissões da Porta 1.
+[ ] bateria de testes funcional + regressão.
+[ ] CI/E2E/readiness final da Porta 1.
+[ ] declarar Porta 1 consolidada somente com evidência verde.
+
+### Marco 5.2 — Porta 2: Prompt — ~88%
+
+[ ] formalizar entrada da Porta 2 pelo Secretário.
+[ ] preservar Prompt Agent/Creator, pesquisa Web, biblioteca, crítica, otimização e validação já existentes.
+[ ] Web permitida conforme Policy.
+[ ] APIs externas continuam bloqueadas.
+[ ] permitir conversa controlada com a Porta 1 quando contexto for necessário.
+[ ] garantir que concluir um prompt não inicie criação/desenvolvimento/execução automaticamente.
+[ ] consolidar regras e permissões próprias da Porta 2.
+[ ] bateria de testes funcional + regressão.
+[ ] CI/E2E/readiness final da Porta 2.
+[ ] declarar Porta 2 consolidada somente com evidência verde.
+
+### Marco 5.3 — Integração de APIs externas — após Portas 1 e 2
+
+[ ] somente iniciar quando Porta 1 e Porta 2 estiverem formalmente consolidadas.
+[ ] criar camada de Provider/API sem contaminar o Brain Core.
+[ ] definir registro, descoberta, autorização, seleção e limites de providers.
+[ ] manter Web disponível nas três portas.
+[ ] APIs inicialmente bloqueadas por Policy até autorização explícita do fluxo.
+[ ] preparar especialização futura da Porta 3 por provider/API.
+[ ] testes de segurança, contrato, fallback, quota e observabilidade.
+
+### Marco 5.4 — Porta 3: Criação / Desenvolvimento — ~81%
+
+[ ] preservar a infraestrutura já existente de Requirements, Planning, Code, UI, Backend, Database, Security, Test, Review/Critic, Integration e Release.
+[ ] formalizar a Porta 3 pelo Secretário sem criar um segundo orquestrador.
+[ ] separar discussão de criação de autorização de desenvolvimento.
+[ ] fechar fluxo: pesquisa → requisitos → arquitetura → plano → aprovação → roadmap → divisão de tarefas → especialistas → integração → revisão → testes → entrega.
+[ ] conectar a futura camada de APIs/providers às especialidades conforme Policy.
+[ ] fechar segunda opinião e retorno ao responsável quando houver erro.
+[ ] consolidar Git autorizado / entrega ZIP.
+[ ] bateria de testes funcional + regressão.
+[ ] CI/E2E/readiness final da Porta 3.
+[ ] declarar Porta 3 consolidada somente com evidência verde.
+
+### Critério de conclusão do Marco 5
+
+O Marco 5 somente será considerado concluído quando:
+
+1. Porta 1 estiver consolidada e validada.
+2. Porta 2 estiver consolidada e validada.
+3. A camada de APIs estiver integrada e validada.
+4. Porta 3 estiver consolidada e validada.
+5. CI/E2E/readiness apresentarem evidência correspondente no HEAD final.
