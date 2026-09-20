@@ -221,7 +221,7 @@ class BrainSandboxController(
             manifest = WorkflowManifest("brain-plan", "1.0.0", listOf(WorkflowNode("plan", "brain.plan", retryLimit = 0))),
             authorize = { it == "brain.plan" },
             execute = { node, attempt ->
-                cycle = executeWithEvents(plan, runId, reasoning.requirements) { attemptPlan, attemptRunId ->
+                cycle = executeWithEvents(plan, runId, reasoning.requirements.map { it.text }) { attemptPlan, attemptRunId ->
                     bridge.authorizeAndExecute(attemptPlan, attemptRunId, actor) { passo ->
                         emit(
                             attemptRunId,
