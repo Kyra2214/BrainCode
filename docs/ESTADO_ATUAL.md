@@ -104,3 +104,7 @@ Uma auditoria posterior encontrou que a aprovação da criação estava apenas n
 - CI `35536050052` passou com testes JVM/Android, lint e build/upload do APK.
 - UI E2E `35536055182` passou no emulador, incluindo `creationJourneyRequiresApprovalBeforeWorkspaceExecution`.
 - Commit validado: `f859426373dffdfdb0d7a6f13da205a61964c0d1`.
+
+### Reabertura e correção da Fase 2 — Porta 1
+
+Uma auditoria identificou que a Porta 1 ainda não tinha um Planning Agent materializando um artefato persistente e que o `NEEDS_CLARIFICATION` ainda não era um contrato verificável de pergunta via `chat.respond`. A correção adiciona `PlanningAgent`, `PlanningArtifact` e `FilePlanningArtifactStore`, além de `ClarificationQuestion`, evento `ClarificationRequested` e evidência `chat:clarification-question`. Os testes unitários e a integração Android desses caminhos passaram localmente; CI, UI E2E e readiness permanecem pendentes para o novo HEAD.

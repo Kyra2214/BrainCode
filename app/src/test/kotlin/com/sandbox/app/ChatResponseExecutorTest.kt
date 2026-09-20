@@ -72,11 +72,22 @@ class ChatResponseExecutorTest {
         assertTrue(result.provenance.contains("source:dependency:network.research"))
     }
 
-    private fun request(prompt: String, research: String? = null): ActionRequest = ActionRequest(
+    @Test
+    fun `needs clarification produz pergunta via chat respond`() {
+        val result = ChatResponseExecutor().execute(
+            request("Qual estilo visual você prefere?", clarification = true), capability, decision
+        )
+
+        assertTrue(result.success)
+        assertTrue(result.result!!.contains("esclarecimento"))
+        assertTrue(result.evidence.contains("chat:clarification-question"))
+    }
+
+    private fun request(prompt: String, research: String? = null, clarification: Boolean = false): ActionRequest = ActionRequest(
         actionId = "chat-test",
         actor = "android-app",
         capability = "chat.respond",
-        parameters = buildMap { put("parameter.0", prompt); research?.let { put("parameter.1", it) } },
+        parameters = buildMap { put("parameter.0", prompt); research?.let { put("parameter.1", it) }; if (clarification) put("parameter.clarification", "clarification.status=NEEDS_CLARIFICATION") },
         context = PolicyContext("run-chat", "chat", "android-app")
     )
 }

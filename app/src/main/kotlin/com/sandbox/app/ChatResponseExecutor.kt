@@ -27,8 +27,13 @@ class ChatResponseExecutor(
         val lower = prompt.lowercase(Locale.ROOT)
         val evidence = mutableListOf<String>("chat:local-only", "chat:read-only")
         val research = request.parameters["parameter.1"]?.trim().orEmpty()
+        val isClarification = request.parameters.values.any { it.startsWith("clarification.status=NEEDS_CLARIFICATION") }
         val context = contextProvider()
         val response = when {
+            isClarification -> {
+                evidence += "chat:clarification-question"
+                "Preciso de um esclarecimento antes de continuar: $prompt"
+            }
             asksTime(lower) -> {
                 evidence += "chat:clock:${clock.instant()}"
                 "Agora são ${DateTimeFormatter.ofPattern("HH:mm", Locale("pt", "BR")).withZone(clock.zone).format(clock.instant())}."

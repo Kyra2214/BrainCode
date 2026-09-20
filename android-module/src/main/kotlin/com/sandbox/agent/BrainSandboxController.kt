@@ -40,6 +40,8 @@ import com.brain.retrieval.RetrievalQuery
 import com.brain.reasoning.ReasoningEngine
 import com.brain.behavior.PlanningGate
 import com.brain.behavior.RequirementGate
+import com.brain.behavior.GateStatus
+import com.brain.behavior.ClarificationQuestion
 import com.brain.behavior.BehaviorDiagnostics
 import com.brain.behavior.EventStoreBehaviorTraceSink
 import com.brain.behavior.VerificationResult
@@ -53,6 +55,9 @@ import com.brain.secretary.OrderIntent
 import com.brain.secretary.Door
 import com.brain.secretary.CreatePhase
 import com.brain.core.CreationWorkflowPlanner
+import com.brain.planning.FilePlanningArtifactStore
+import com.brain.planning.PlanningArtifact
+import com.brain.planning.PlanningAgent
 import java.io.File
 import java.time.Instant
 import kotlin.coroutines.Continuation
@@ -83,6 +88,7 @@ class BrainSandboxController(
     private val behaviorDiagnostics = BehaviorDiagnostics(EventStoreBehaviorTraceSink(events, "android-local"))
     private val dynamicCapabilityProviders = capabilityProviders
     private val approvals = FileApprovalStore(File(rootfsDir.parentFile ?: rootfsDir, "approvals.jsonl"))
+    private val planningArtifacts = FilePlanningArtifactStore(File(rootfsDir.parentFile ?: rootfsDir, "planning-artifacts.jsonl"))
     private val sandbox = Sandbox(runtime = runtime, rootfsDir = rootfsDir)
     private val capabilities = CapabilityRegistry(
         listOf(
@@ -178,6 +184,8 @@ class BrainSandboxController(
 
     fun approve(approvalId: String): Boolean = approvals.decide(approvalId, approved = true)?.status == com.brain.policy.ApprovalStatus.APPROVED
 
+    fun planningArtifact(runId: String): PlanningArtifact? = planningArtifacts.get(runId)
+
     fun approvalDemoPlan(): PlanoExecucao = PlanoExecucao(
         objetivo = "executar plano de demonstração com aprovação humana",
         passos = listOf(
@@ -211,17 +219,18 @@ class BrainSandboxController(
             )
         }
         val reasoning = reasoningEngine.analyze(objective)
+        val references = objective.lineSequence().filter { it.startsWith("Referências resolvidas:", ignoreCase = true) }.toList()
+        val planningArtifact = PlanningAgent().plan(runId, reasoning, references)
+        planningArtifacts.save(planningArtifact)
+        emit(runId, "planning", "PlanningArtifactCreated", mapOf("artifactId" to planningArtifact.artifactId, "status" to planningArtifact.status.name, "requirements" to planningArtifact.requirements.size.toString(), "pending" to planningArtifact.pending.size.toString(), "references" to planningArtifact.references.size.toString()))
         val requirementGateResult = requirementGate.evaluate(reasoning)
         if (!requirementGateResult.isSuccessful) {
-            if (intent?.door == com.brain.secretary.Door.CHAT) {
-                val clarification = buildString {
-                    append("Para continuar a conversa, preciso esclarecer alguns pontos:\n")
-                    requirementGateResult.issues.forEach { append("- ").append(it.message).append('\n') }
-                    append("Pedido original: ").append(objective)
-                }
+            if (requirementGateResult.status == GateStatus.NEEDS_CLARIFICATION && intent?.door == com.brain.secretary.Door.CHAT) {
+                val clarification = ClarificationQuestion.from(objective, requirementGateResult.issues)
+                emit(runId, "requirements", "ClarificationRequested", mapOf("missing" to clarification.missingRequirements.joinToString("|"), "question" to clarification.question))
                 val clarificationPlan = PlanoExecucao(
                     objective,
-                    listOf(PassoPlano("clarificar", "chat.respond", "pergunta de esclarecimento não vazia", parametros = listOf(clarification)))
+                    listOf(PassoPlano("clarificar", "chat.respond", "pergunta de esclarecimento não vazia", parametros = listOf(clarification.question, "clarification.status=NEEDS_CLARIFICATION", "clarification.missing=${clarification.missingRequirements.joinToString("|")}")))
                 )
                 return executeWithEvents(clarificationPlan, runId, emptyList()) { attemptPlan, attemptRunId ->
                     bridge.authorizeAndExecute(attemptPlan, attemptRunId, actor, doorScope = intent.scope)

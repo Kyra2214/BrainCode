@@ -79,7 +79,7 @@ A evolução das portas será sequencial:
 
 Não iniciar a integração de APIs externas antes de Porta 1 e Porta 2 estarem consolidadas. A Porta 3 já possui aproximadamente 81% da infraestrutura funcional necessária; portanto, não será reconstruída nem congelada. Os componentes existentes serão preservados e os ~19% restantes serão fechados depois da consolidação das Portas 1 e 2 e da camada de APIs.
 
-### Marco 5.1 — Porta 1: Chat / Plano — ~72%
+### Marco 5.1 — Porta 1: Chat / Plano — ~92%
 
 [x] formalizar o Secretário como entrada determinística para a Porta 1.
 [x] separar claramente Chat/Plano das capacidades de Prompt e Criação.
@@ -90,8 +90,10 @@ Não iniciar a integração de APIs externas antes de Porta 1 e Porta 2 estarem 
 [x] consolidar regras de negação/restrição no planejamento.
 [x] validar transições de estado e permissões da Porta 1.
 [x] bateria de testes funcional + regressão.
-[ ] CI/E2E/readiness final da Porta 1.
-[ ] declarar Porta 1 consolidada somente com evidência verde.
+[x] Planning Agent materializa e persiste PlanningArtifact com ideia, requisitos, decisões, pendências e referências.
+[x] RequirementGate `NEEDS_CLARIFICATION` gera ClarificationQuestion e passo `chat.respond` com pergunta explícita.
+[ ] CI/E2E/readiness final da Porta 1 no mesmo HEAD.
+[ ] declarar Porta 1 consolidada somente após CI/E2E/readiness verdes no mesmo HEAD.
 
 ### Marco 5.2 — Porta 2: Prompt — ~88%
 
