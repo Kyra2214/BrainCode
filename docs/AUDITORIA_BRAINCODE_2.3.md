@@ -1,7 +1,7 @@
 # Auditoria BrainCode 2.3 — Atualização
 
 **Data:** 2026-09-20  
-**HEAD auditado:** fa4dfa1ec2643d1d9b0d9a6f5b0eb36df8dd6fd8
+**HEAD auditado:** e068876a19ef59c75d8e9ceb4b607288be22e897
 
 ## Estado atual
 
@@ -31,7 +31,17 @@ O caminho atual do `SandboxViewModel` não chama diretamente `BrainApiGateway.co
 
 Portanto não existe uma segunda rota que possa apresentar uma resposta de provider como execução validada sem passar pelos gates do Brain.
 
-### 3. Documentação
+### 3. Semântica dos eventos de pós-execução
+
+O evento emitido pelo `BrainSandboxController` agora distingue validação de execução de registro de aprendizado:
+
+- `PostExecutionBlocked` quando a execução não é aprovada;
+- `ValidatedLearningRecorded` somente quando a execução é aprovada **e** `learningRecorded == true`;
+- `ExecutionValidated` quando a execução é aprovada, mas não houve novo registro de aprendizado.
+
+Isso evita declarar aprendizado validado quando o `Readiness` aprovou a execução sem registrar aprendizado.
+
+### 4. Documentação
 
 `ESTADO_ATUAL.md`, esta auditoria e a arquitetura/roadmap devem refletir o HEAD atual. Roofts 0.6 continua instalado como payload independente, mas deliberadamente não integrado ao runtime. Retrieval universal/semântico, hardening OS-level e leases/fencing continuam marcos posteriores.
 
