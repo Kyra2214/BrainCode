@@ -71,7 +71,7 @@ class PromptGenerationExecutorTest {
 
     private val criadorFraco = object : PromptCreatorAgent {
         override fun criar(pedido: String, contexto: PromptTemplate?, contextoPesquisa: String?): PromptCriado =
-            PromptCriado("x", PromptDomain.IMAGEM, "test:fraco")
+            PromptCriado("xícara", PromptDomain.IMAGEM, "test:fraco")
         override fun melhorarLocalmente(promptAtual: String, pedidoOriginal: String, pontosFracos: Set<String>, contextoPesquisa: String?): PromptCriado =
             PromptCriado(promptAtual, PromptDomain.IMAGEM, "test:fraco")
     }
