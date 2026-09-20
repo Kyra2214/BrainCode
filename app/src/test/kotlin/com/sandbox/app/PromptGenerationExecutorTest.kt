@@ -13,6 +13,9 @@ import com.brain.policy.PolicyDecision
 import com.brain.capability.CostClass
 import com.brain.prompt.PromptLibrary
 import com.brain.prompt.PromptTemplate
+import com.brain.prompt.PromptCreatorAgent
+import com.brain.prompt.PromptCriado
+import com.brain.prompt.PromptDomain
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import org.junit.Assert.assertEquals
@@ -60,10 +63,18 @@ class PromptGenerationExecutorTest {
         context = PolicyContext(runId = "r1", taskId = "t1", actor = "test")
     )
 
-    private fun executor(library: PromptLibrary, improver: PromptImprover) = PromptGenerationExecutor(
+    private fun executor(library: PromptLibrary, improver: PromptImprover, creator: PromptCreatorAgent? = null) = PromptGenerationExecutor(
         promptLibrary = library,
-        improver = improver
+        improver = improver,
+        creator = creator ?: com.brain.prompt.LocalPromptCreatorAgent()
     )
+
+    private val criadorFraco = object : PromptCreatorAgent {
+        override fun criar(pedido: String, contexto: PromptTemplate?, contextoPesquisa: String?): PromptCriado =
+            PromptCriado("x", PromptDomain.IMAGEM, "test:fraco")
+        override fun melhorarLocalmente(promptAtual: String, pedidoOriginal: String, pontosFracos: Set<String>, contextoPesquisa: String?): PromptCriado =
+            PromptCriado("x", PromptDomain.IMAGEM, "test:fraco")
+    }
 
     private val iaIndisponivel = PromptImprover { _, _ -> error("nenhuma API configurada") }
 
@@ -114,7 +125,7 @@ class PromptGenerationExecutorTest {
             "Fotografia profissional detalhada: $atual Composição cuidadosamente balanceada, iluminação de estúdio " +
                 "de três pontos, lente 85mm, profundidade de campo rasa, altíssima definição e riqueza de detalhes realistas."
         }
-        val execution = executor(library, iaFuncional).execute(request("crie um prompt de uma xícara de café"), capability, decision)
+        val execution = executor(library, iaFuncional, criadorFraco).execute(request("crie um prompt de uma xícara de café"), capability, decision)
 
         assertTrue(execution.success)
         assertTrue("origem deveria indicar uso de IA especialista", execution.evidence.any { it.contains("ia-especialista") })
@@ -132,7 +143,7 @@ class PromptGenerationExecutorTest {
                     "de três pontos, lente 85mm, profundidade de campo rasa, altíssima definição e riqueza de detalhes realistas."
             override fun custoDaUltimaMelhoria(): CostClass = CostClass.MEDIUM
         }
-        val execution = executor(library, iaPaga).execute(request("crie um prompt de uma xícara de café"), capability, decision)
+        val execution = executor(library, iaPaga, criadorFraco).execute(request("crie um prompt de uma xícara de café"), capability, decision)
 
         assertTrue(execution.success)
         assertTrue("origem deveria indicar uso de IA especialista", execution.evidence.any { it.contains("ia-especialista") })
@@ -156,7 +167,7 @@ class PromptGenerationExecutorTest {
         val iaFuncional = PromptImprover { atual, _ -> recebeuPromptAnterior = atual.contains("versão anterior do prompt"); "$atual, agora com mais detalhes de composição e iluminação de estúdio profissional." }
         val objetivoResolvido = "Objetivo atual: melhore esse prompt\n" +
             "Referências resolvidas:\n- artefato anterior: versão anterior do prompt gerado para o pedido"
-        val execution = executor(library, iaFuncional).execute(request(objetivoResolvido), capability, decision)
+        val execution = executor(library, iaFuncional, criadorFraco).execute(request(objetivoResolvido), capability, decision)
 
         assertTrue(execution.success)
         assertTrue(recebeuPromptAnterior)
@@ -175,7 +186,7 @@ class PromptGenerationExecutorTest {
         val objetivoResolvido = "Objetivo atual: vamos melhorar quero esse foguete no deserto ao entardecer a imagem e de uma plataforma ao longe\n" +
             "Referências resolvidas:\n- artefato anterior: Fotografia fotorrealista de um foguete espacial decolando, com iluminação cinematográfica"
 
-        val execution = executor(library, iaFuncional).execute(request(objetivoResolvido), capability, decision)
+        val execution = executor(library, iaFuncional, criadorFraco).execute(request(objetivoResolvido), capability, decision)
 
         assertTrue(execution.success)
         assertTrue(execution.result.orEmpty().contains("Melhorei"))
