@@ -38,7 +38,9 @@ class KeywordFunctionSplitter : FunctionSplitter {
         if (!normalizado.contains("criar documento") && pesquisaNecessaria) {
             passos += PassoPlano(
                 "pesquisar", "network.research", "evidência de pesquisa disponível",
-                parametros = listOf(texto),
+                // A consulta usa só o que o usuário pediu agora; o texto do artefato anterior
+                // ("Referências resolvidas") só atrapalha a busca.
+                parametros = listOf(texto.substringBefore("\nReferências resolvidas:").trim().ifBlank { texto }),
                 papel = PapelPipeline.PLANEJAMENTO, riskClass = RiskClass.MEDIUM
             )
         }

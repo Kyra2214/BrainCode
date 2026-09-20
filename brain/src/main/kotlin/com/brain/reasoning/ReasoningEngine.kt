@@ -47,9 +47,23 @@ class ReasoningEngine {
             lower.contains("prompt") -> ReasoningIntent.CREATE_PROMPT
             else -> ReasoningIntent.GENERAL_TEXT
         }
-        val discovered = requirementDiscovery.discover(objective, domain)
-        val decisions = assumptionManager.decide(objective, domain, discovered.explicit)
-        val missing = if (isRefinement(lower)) emptyList() else discovered.missing + decisions.blocked
+        val discoveredFull = requirementDiscovery.discover(objective, domain)
+        // "Referências resolvidas" carrega o texto do artefato anterior. Ele não é pedido do usuário:
+        // requisitos, slots e restrições vêm só do que o usuário escreveu agora. Senão palavras do
+        // prompt antigo (ex.: "fotográfico" -> estilo "fotorrealista") viram requisitos falsos.
+        val focoDoPedido = objective.substringBefore("\nReferências resolvidas:")
+        val discovered = if (focoDoPedido.length == objective.length) discoveredFull else {
+            val foco = requirementDiscovery.discover(focoDoPedido, domain)
+            discoveredFull.copy(
+                explicit = foco.explicit,
+                slots = foco.slots,
+                constraints = foco.constraints,
+                dependencies = foco.dependencies
+            )
+        }
+        // Bloqueios/lacunas continuam usando a leitura completa (o sujeito pode estar só no artefato anterior).
+        val decisions = assumptionManager.decide(objective, domain, discoveredFull.explicit)
+        val missing = if (isRefinement(lower)) emptyList() else discoveredFull.missing + decisions.blocked
         return ReasoningState(
             objective,
             intent,
@@ -64,10 +78,14 @@ class ReasoningEngine {
     }
 
     private fun isRefinement(lower: String): Boolean = lower.containsAny(
-        "mude", "muda", "troque", "troca", "adicione", "adiciona", "substitua", "substitui", "melhore", "melhora", "otimize", "otimiza"
+        "mude", "muda", "troque", "troca", "adicione", "adiciona", "substitua", "substitui", "melhore", "melhora", "otimize", "otimiza",
+        "refaça", "refaca", "refaz", "aprimore", "capriche", "reescreva", "faça melhor", "faca melhor", "faz melhor"
     )
 
-    private fun isExplicitImprovement(lower: String): Boolean = lower.containsAny("melhore", "melhora", "otimize", "otimiza", "mais profissional", "reformule")
+    private fun isExplicitImprovement(lower: String): Boolean = lower.containsAny(
+        "melhore", "melhora", "otimize", "otimiza", "mais profissional", "reformule",
+        "refaça", "refaca", "refaz", "aprimore", "capriche", "reescreva", "faça melhor", "faca melhor", "faz melhor"
+    )
 
     private fun String.containsAny(vararg terms: String): Boolean = terms.any { it in this }
 }

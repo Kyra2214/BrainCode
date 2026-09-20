@@ -14,9 +14,14 @@ object RequirementMatcher {
         "figura", "figuras", "cena", "cenas", "visual", "visuais"
     )
 
+    /** Minúsculas e sem acentos: "por do sol" (como o usuário digita) casa com "pôr do sol" (como o prompt escreve). */
+    private fun fold(texto: String): String =
+        java.text.Normalizer.normalize(texto.lowercase(java.util.Locale.ROOT), java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+
     fun isPresent(requirement: String, result: String): Boolean {
-        val normalized = requirement.trim().lowercase(java.util.Locale.ROOT)
-        val lower = result.lowercase(java.util.Locale.ROOT)
+        val normalized = fold(requirement.trim())
+        val lower = fold(result)
         if (normalized.isBlank() || normalized in lower) return true
 
         val tokens = normalized

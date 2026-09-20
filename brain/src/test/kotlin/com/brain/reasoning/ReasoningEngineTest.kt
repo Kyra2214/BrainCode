@@ -30,4 +30,14 @@ class ReasoningEngineTest {
         assertEquals(ReasoningIntent.IMPROVE_PROMPT, engine.analyze("melhore profissionalmente este prompt").intent)
         assertEquals(ReasoningIntent.REFINE_PROMPT, engine.analyze("troque o fundo para deserto").intent)
     }
+
+    @Test
+    fun `texto do artefato anterior nao vira requisito do pedido atual`() {
+        val state = engine.analyze(
+            "Objetivo atual: muda para deserto\n" +
+                "Referências resolvidas:\n- artefato anterior: Ilustração digital de um foguete. Nível de realismo: fotográfico."
+        )
+        assertTrue(state.requirements.any { it.text == "deserto" })
+        assertTrue("\"fotográfico\" do prompt antigo não é pedido do usuário", state.requirements.none { it.text == "fotorrealista" })
+    }
 }

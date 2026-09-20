@@ -1,5 +1,6 @@
 package com.sandbox.app
 
+import com.brain.behavior.RequirementMatcher
 import com.brain.capability.CapabilityDefinition
 import com.brain.gateway.ActionExecution
 import com.brain.gateway.ActionExecutor
@@ -8,6 +9,7 @@ import com.brain.policy.PolicyDecision
 import com.brain.prompt.LocalPromptCreatorAgent
 import com.brain.prompt.PromptCreatorAgent
 import com.brain.prompt.PromptCriado
+import com.brain.prompt.PromptDomain
 import com.brain.prompt.PromptReasoningTrace
 import com.brain.prompt.PromptLibrary
 import com.brain.prompt.PromptOutcomeTracker
@@ -95,6 +97,7 @@ class GatewayPromptImprover(private val gateway: BrainApiGateway, private val ma
             Você é o especialista de engenharia de prompts do BrainCode.
             Reescreva somente o prompt existente, preservando rigorosamente a intenção original.
             Não mude o assunto, não invente requisitos e não adicione explicações.
+            Aplique ao prompt atual as alterações pedidas no pedido original (cenário, horário, estilo, ponto de vista), mantendo o assunto e tudo que não foi alterado.
             A validação determinística encontrou estes pontos fracos: ${pontosFracos.ifEmpty { setOf("qualidade geral") }.joinToString(", ")}.
             Feedback de revisão obrigatório: ${pontosFracos.filter { it.startsWith("revision-feedback:") }.joinToString(" | ").ifBlank { "nenhum" }}.
             Evidências de pesquisa disponíveis (use somente o que for relevante, sem inventar fatos): ${contextoPesquisa?.take(2500).orEmpty().ifBlank { "nenhuma" }}
@@ -229,21 +232,35 @@ class PromptGenerationExecutor(
         actionId: String,
         authorizedAccountIds: Set<String>
     ): ActionExecution {
-        val scoreInicial = PromptQualityValidator.validar(pedido.instrucao, pedido.promptAnterior, com.brain.prompt.PromptDomain.classificar(pedido.instrucao), reasoningEngine.analyze(pedido.instrucao).requirements)
+        // O domínio vem do prompt anterior também: "muda para deserto ao longe" sozinho não diz "imagem",
+        // mas o artefato que está sendo ajustado diz.
+        val dominio = PromptDomain.classificar("${pedido.instrucao}\n${pedido.promptAnterior}")
+        val scoreInicial = PromptQualityValidator.validar(pedido.instrucao, pedido.promptAnterior, dominio, reasoningEngine.analyze(pedido.instrucao).requirements)
+        // Gatilho: "melhore ele", "faça melhor", "refaça"... -> a IA é acionada de fato (depois das regras
+        // locais e da pesquisa), em vez de só como último recurso quando a nota local é baixa.
+        val pedeIa = ImprovementVocabulary.pedeIA(pedido.instrucao)
         val (textoFinal, origem, scoreFinal, aiUsada, reasoningFinal) = escalonar(
             pedido.instrucao,
-            PromptCriado(pedido.promptAnterior, com.brain.prompt.PromptDomain.classificar(pedido.instrucao), "usuario:prompt-anterior"),
+            PromptCriado(pedido.promptAnterior, dominio, "usuario:prompt-anterior"),
             scoreInicial,
             contextoPesquisa,
-            authorizedAccountIds
+            authorizedAccountIds,
+            forcarIa = pedeIa
         )
         val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
-        val prefixo = if (aiUsada) "Melhorei o prompt com apoio de IA especialista" else "Melhorei o prompt com o Prompt Creator local"
+        val semMudanca = textoFinal.trim() == pedido.promptAnterior.trim()
+        val prefixo = when {
+            semMudanca -> "Não consegui aplicar as alterações pedidas localmente e nenhuma IA estava disponível — mantive o prompt anterior"
+            aiUsada -> "Melhorei o prompt com apoio de IA especialista"
+            else -> "Melhorei o prompt com o Prompt Creator local"
+        }
+        val notaIaPedida = if (pedeIa && !aiUsada) "\n\n(Você pediu uma melhoria com IA, mas ela não está disponível agora — apliquei as regras locais.)" else ""
         outcomeTracker.markUsed(actionId, saveGeneratedPrompt(pedido.instrucao, textoFinal))
         return ActionExecution(
             success = true,
-            result = "$prefixo (estimativa heurística interna — qualidade ${(scoreFinal.total * 100).toInt()}%):\n\n$textoFinal",
+            result = "$prefixo (estimativa heurística interna — qualidade ${(scoreFinal.total * 100).toInt()}%):\n\n$textoFinal$notaIaPedida",
             evidence = evidenciasBase + listOfNotNull(
+                if (pedeIa) "prompt-improvement:gatilho-ia" else null,
                 "prompt-creator:origem:$origem",
                 "prompt-quality:total:${"%.2f".format(scoreFinal.total)}",
                 "prompt-generation-latency-ms:$elapsedMs",
@@ -298,15 +315,23 @@ class PromptGenerationExecutor(
         )
     }
 
-    /** Local -> RevisionEngine -> IA somente como último recurso; nunca lança. */
+    /**
+     * Local -> RevisionEngine -> IA somente como último recurso; nunca lança.
+     *
+     * Regra importante: uma melhoria local que APLICOU o que o usuário pediu nunca é descartada
+     * só porque a nota heurística não chegou a 90%. Antes, sem IA disponível, o executor devolvia
+     * o texto original (o mesmo prompt do turno anterior) e o loop de revisão terminava em
+     * `revision.no-progress`.
+     */
     private fun escalonar(
         pedido: String,
         criado: PromptCriado,
         scoreInicial: PromptQualityScore,
         contextoPesquisa: String?,
-        authorizedAccountIds: Set<String>
+        authorizedAccountIds: Set<String>,
+        forcarIa: Boolean = false
     ): EscalonamentoResultado {
-        if (!scoreInicial.abaixoDoPadrao) return EscalonamentoResultado(criado.texto, criado.origem, scoreInicial, false, criado.reasoning)
+        if (!scoreInicial.abaixoDoPadrao && !forcarIa) return EscalonamentoResultado(criado.texto, criado.origem, scoreInicial, false, criado.reasoning)
 
         // Entrega 1: toda a correção determinística vem antes de qualquer rede.
         // A IA permanece apenas como último recurso, condicionada a autorização.
@@ -316,19 +341,63 @@ class PromptGenerationExecutor(
         val local = creator.melhorarLocalmente(criado.texto, pedido, pontos, contextoPesquisa)
         val revisao = revisionEngine.revise(reasoning, local.texto)
         val scoreLocal = revisao.critique.score
-        if (!scoreLocal.abaixoDoPadrao && scoreLocal.total >= scoreInicial.total) {
-            return EscalonamentoResultado(revisao.prompt, "local:revision-engine:${revisao.revisions}", scoreLocal, false, criado.reasoning.merge(revisao.reasoning))
+        // Requisitos que a crítica (ou o feedback da tentativa anterior) apontou como ausentes.
+        val exigidos = (revisao.critique.missingRequirements + requisitosDoFeedback(feedback)).distinct()
+
+        if (!forcarIa && !scoreLocal.abaixoDoPadrao && scoreLocal.total >= scoreInicial.total) {
+            val textoAceito = garantirRequisitos(revisao.prompt, criado.dominio, exigidos)
+            val scoreAceito = if (textoAceito == revisao.prompt) scoreLocal
+                else PromptQualityValidator.validar(pedido, textoAceito, criado.dominio, reasoning.requirements)
+            return EscalonamentoResultado(textoAceito, "local:revision-engine:${revisao.revisions}", scoreAceito, false, criado.reasoning.merge(revisao.reasoning))
         }
         val viaIa = if (!improver.requerContaAutorizada() || authorizedAccountIds.isNotEmpty()) {
-            runCatching { improver.melhorar(local.texto, pedido, pontos, authorizedAccountIds, contextoPesquisa) }
+            // Com gatilho, a IA recebe o prompt já ajustado pelas regras locais (menos trabalho, menos tokens).
+            val baseParaIa = if (forcarIa) revisao.prompt else local.texto
+            runCatching { improver.melhorar(baseParaIa, pedido, pontos, authorizedAccountIds, contextoPesquisa) }
                 .getOrNull()
                 ?.takeIf { it.isNotBlank() }
         } else null
+        if (viaIa != null && forcarIa) {
+            // Pedido explícito de melhoria com IA: o resultado da IA é o entregue; o que o usuário pediu e a IA
+            // omitiu volta de forma determinística (imagem/vídeo).
+            val todos = (exigidos + reasoning.requirements.map { it.text }).distinct()
+            val textoIa = garantirRequisitos(viaIa, criado.dominio, todos)
+            val scoreIa = PromptQualityValidator.validar(pedido, textoIa, criado.dominio, reasoning.requirements)
+            return EscalonamentoResultado(textoIa, "${criado.origem}+ia-especialista", scoreIa, true, criado.reasoning)
+        }
         if (viaIa != null) {
             val scoreIa = PromptQualityValidator.validar(pedido, viaIa, criado.dominio, reasoning.requirements)
             if (scoreIa.total >= scoreLocal.total) return EscalonamentoResultado(viaIa, "${criado.origem}+ia-especialista", scoreIa, true, criado.reasoning)
         }
+
+        // Sem IA (ou IA sem ganho): entrega a melhor versão LOCAL se ela de fato aplicou algo do pedido.
+        val textoLocal = garantirRequisitos(revisao.prompt, criado.dominio, exigidos)
+        val scoreLocalFinal = if (textoLocal == revisao.prompt) scoreLocal
+            else PromptQualityValidator.validar(pedido, textoLocal, criado.dominio, reasoning.requirements)
+        val faltavamAntes = reasoning.requirements.count { !RequirementMatcher.isPresent(it.text, criado.texto) }
+        val faltamAgora = reasoning.requirements.count { !RequirementMatcher.isPresent(it.text, textoLocal) }
+        val mudou = textoLocal.trim() != criado.texto.trim()
+        if (mudou && (faltamAgora < faltavamAntes || scoreLocalFinal.total >= scoreInicial.total)) {
+            return EscalonamentoResultado(textoLocal, "local:revision-engine:${revisao.revisions}+alteracoes-do-pedido", scoreLocalFinal, false, criado.reasoning.merge(revisao.reasoning))
+        }
         return EscalonamentoResultado(criado.texto, criado.origem, scoreInicial, false, criado.reasoning)
+    }
+
+    /** "revision-feedback:requirement.missing: requisito ausente: deserto" -> "deserto". */
+    private fun requisitosDoFeedback(feedback: Set<String>): List<String> = feedback.mapNotNull { linha ->
+        Regex("(?i)requisito ausente:\\s*(.+)$").find(linha)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+    }
+
+    /**
+     * Último recurso determinístico para imagem/vídeo: o que o USUÁRIO pediu e ainda não aparece no
+     * prompt entra explicitamente (nunca texto inventado). Código/texto ficam de fora porque seus
+     * "requisitos" incluem rótulos sintéticos (ex.: "interface/aplicativo").
+     */
+    private fun garantirRequisitos(texto: String, dominio: PromptDomain, requisitos: List<String>): String {
+        if (dominio != PromptDomain.IMAGEM && dominio != PromptDomain.VIDEO) return texto
+        val faltantes = requisitos.filterNot { RequirementMatcher.isPresent(it, texto) }
+        if (faltantes.isEmpty()) return texto
+        return texto.trimEnd() + "\n\nElementos exigidos no pedido: " + faltantes.joinToString("; ") + "."
     }
 
     private data class EscalonamentoResultado(val texto: String, val origem: String, val score: PromptQualityScore, val aiUsada: Boolean, val reasoning: PromptReasoningTrace)
@@ -350,7 +419,8 @@ class PromptGenerationExecutor(
         val instrucao = if (objetivo.startsWith("Objetivo atual: ")) {
             objetivo.removePrefix("Objetivo atual: ").substringBefore("\n").trim()
         } else objetivo.substringBefore("\n").trim()
-        val anterior = objetivo.substring(idxArtefato + marcadorArtefato.length).trim()
+        // O artefato pode ter vindo com o invólucro de apresentação ("Encontrei um prompt... qualidade 81%"); ele não é prompt.
+        val anterior = PromptEnvelope.extrairPrompt(objetivo.substring(idxArtefato + marcadorArtefato.length))
         if (instrucao.isBlank() || anterior.isBlank()) return null
         return PedidoDeMelhoria(instrucao, anterior)
     }

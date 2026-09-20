@@ -46,6 +46,7 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
     ): PromptCriado {
         val dominio = PromptDomain.classificar(pedidoOriginal)
         var melhorado = aplicarAlteracoesConcretas(promptAtual.trim(), pedidoOriginal)
+        melhorado = refinarComPesquisa(melhorado, pedidoOriginal.lowercase(Locale.ROOT), contextoPesquisa)
         if ("especificidade" in pontosFracos || "presença de elementos" in pontosFracos) {
             val faltantes = detectarComponentesImagem("$promptAtual $pedidoOriginal $contextoPesquisa")
                 .filterValues { it == null }.keys
@@ -79,7 +80,75 @@ class LocalPromptCreatorAgent : PromptCreatorAgent {
         if ("meteoro" in lower && !resultado.lowercase(Locale.ROOT).contains("meteoro")) {
             resultado += " Vários meteoros caindo cruzam o céu ao fundo."
         }
+        resultado = aplicarEstiloFotorrealista(resultado, lower)
+        resultado = aplicarHorarioDoDia(resultado, lower)
+        resultado = aplicarPontoDeVista(resultado, instrucao)
         return resultado
+    }
+
+    /**
+     * Usa a pesquisa web só para refinar o que o usuário JÁ pediu, com termo técnico que a própria fonte
+     * trouxe (nunca inventa fatos): luz de golden hour para pôr do sol/entardecer e lente teleobjetiva
+     * para visão de longe. Sem pesquisa, ou sem esses termos nas fontes, o prompt não muda.
+     */
+    private fun refinarComPesquisa(prompt: String, lowerInstrucao: String, contextoPesquisa: String?): String {
+        val pesquisa = contextoPesquisa.orEmpty().lowercase(Locale.ROOT)
+        if (pesquisa.isBlank()) return prompt
+        var resultado = prompt
+        val pediuLuzDourada = Regex("p[oô]r do sol|entardecer|crep[uú]sculo").containsMatchIn(lowerInstrucao)
+        if (pediuLuzDourada && ("golden hour" in pesquisa || "hora dourada" in pesquisa) && "golden hour" !in resultado.lowercase(Locale.ROOT)) {
+            resultado = resultado.replace("luz dourada do ", "luz dourada de golden hour, no ")
+        }
+        val pediuDeLonge = Regex("de longe|ao longe|à distância|a distância|distante").containsMatchIn(lowerInstrucao)
+        if (pediuDeLonge && Regex("teleobjetiva|telephoto|lente longa|long lens").containsMatchIn(pesquisa)) {
+            val lente = if ("teleobjetiva" in pesquisa) "lente teleobjetiva, compressão de planos" else "lente teleobjetiva (telephoto), compressão de planos"
+            resultado = Regex("(?i)lente com distância focal neutra(?:\\s*\\([^)]*\\))?").replace(resultado) { lente }
+        }
+        return resultado
+    }
+
+    /**
+     * "ao pôr do sol" / "entardecer" / "crepúsculo": vira luz no campo Iluminação e entra no ambiente.
+     * O termo é escrito com a grafia correta ("por do sol" -> "pôr do sol"); a crítica ignora acentos.
+     */
+    private fun aplicarHorarioDoDia(prompt: String, lowerInstrucao: String): String {
+        val termo = Regex("p[oô]r do sol|entardecer|crep[uú]sculo").find(lowerInstrucao)?.value ?: return prompt
+        val nome = if (termo.startsWith("p")) "pôr do sol" else termo
+        if (nome in prompt.lowercase(Locale.ROOT)) return prompt
+        val luz = "luz dourada do $nome, sombras longas e céu alaranjado"
+        var resultado = Regex("(?i)(Iluminação:\\s*)[^.]+").replace(prompt) { it.groupValues[1] + luz }
+        if (resultado == prompt) resultado = "${prompt.trimEnd()} Iluminação: $luz."
+        return Regex("(?i)(ambientado em [^.]+)").replace(resultado) { "${it.groupValues[1]} ao $nome" }
+    }
+
+    /**
+     * "fotorrealista": troca o estilo de abertura ("Ilustração digital detalhada de ...") e o campo de
+     * realismo. Sem isso, um follow-up "muda para fotorrealista" deixava o prompt como ilustração.
+     */
+    private fun aplicarEstiloFotorrealista(prompt: String, lowerInstrucao: String): String {
+        val pediu = Regex("fotorreal|fotogr[aá]fic|hiper-?realis").containsMatchIn(lowerInstrucao)
+        val negou = Regex("(?:não|nao|sem)\\s+(?:seja\\s+|ser\\s+)?(?:fotorreal|fotogr)").containsMatchIn(lowerInstrucao)
+        if (!pediu || negou || "fotorrealista" in prompt.lowercase(Locale.ROOT)) return prompt
+        var resultado = Regex("(?i)^\\s*(ilustra[çc][ãa]o digital detalhada|ilustra[çc][ãa]o digital|ilustra[çc][ãa]o|pintura digital|desenho digital|arte digital)\\b")
+            .replace(prompt, "Fotografia fotorrealista")
+        resultado = Regex("(?i)(N[ií]vel de realismo:\\s*)[^.]+")
+            .replace(resultado) { it.groupValues[1] + "fotorrealista, com texturas e iluminação de fotografia real" }
+        if ("fotorrealista" !in resultado.lowercase(Locale.ROOT)) resultado = "$resultado Estilo: fotografia fotorrealista."
+        return resultado
+    }
+
+    /**
+     * "visão de uma plataforma de longe" / "visto de longe" / "plataforma ao longe": vira composição
+     * explícita, preservando a frase do usuário (é ela que a crítica procura no resultado).
+     */
+    private fun aplicarPontoDeVista(prompt: String, instrucao: String): String {
+        val comObjeto = Regex("(?i)\\b((?:vis[ãa]o|vista|visto|enquadrad[oa]|imagem|foto)\\s+(?:de|d[aeo]s?)\\s+(?:um[a]?\\s+|o\\s+|a\\s+)?[\\p{L}\\d\\- ]{2,60}?\\s+(?:de longe|ao longe|à distância|a distância|distante))")
+        val semObjeto = Regex("(?i)\\b((?:vis[ãa]o|vista|visto)\\s+(?:de longe|ao longe|à distância|a distância|distante))")
+        val frase = (comObjeto.find(instrucao) ?: semObjeto.find(instrucao))?.groupValues?.get(1)?.trim() ?: return prompt
+        if (frase.lowercase(Locale.ROOT) in prompt.lowercase(Locale.ROOT)) return prompt
+        val novaComposicao = "plano geral aberto, $frase, com o assunto principal ainda em destaque"
+        val comComposicao = Regex("(?i)(Composição:\\s*)[^.]+").replace(prompt) { it.groupValues[1] + novaComposicao }
+        return if (comComposicao != prompt) comComposicao else "${prompt.trimEnd()} Composição: $novaComposicao."
     }
 
     // ---------------- IMAGEM ----------------

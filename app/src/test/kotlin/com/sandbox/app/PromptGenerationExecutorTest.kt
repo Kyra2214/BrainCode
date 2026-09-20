@@ -207,4 +207,101 @@ class PromptGenerationExecutorTest {
         assertTrue(execution.result.orEmpty().contains("prompt ou a imagem anterior"))
         assertTrue(execution.evidence.contains("prompt-checklist:aguardando-esclarecimento"))
     }
+
+    // Regressão do print: follow-up com o artefato anterior embrulhado ("Encontrei um prompt... 81%"),
+    // sem IA disponível. Antes o executor devolvia o prompt antigo, idêntico -> revision.no-progress.
+    @Test fun `melhoria sem IA aplica fotorrealista deserto e visao de longe e nao devolve o prompt antigo`() {
+        val anterior = "Ilustração digital detalhada de um foguete decolando, ambientado em um cenário coerente com o assunto, " +
+            "sem elementos que não foram pedidos. Composição: enquadramento equilibrado, assunto em destaque no terço de composição. " +
+            "Iluminação: iluminação natural e equilibrada realçando volumes e texturas. " +
+            "Nível de realismo: nível de realismo fotográfico. Qualidade: alta definição, sem artefatos visuais."
+        val objetivoResolvido = "Objetivo atual: muda para fotorrealista no deserto com visão de uma plataforma de longe\n" +
+            "Referências resolvidas:\n- artefato anterior: Encontrei um prompt de referência na biblioteca e adaptei ao seu pedido " +
+            "(estimativa heurística interna — qualidade 81%):\n\n$anterior"
+
+        val execution = executor(FakePromptLibrary(), iaIndisponivel).execute(request(objetivoResolvido), capability, decision)
+        val resultado = execution.result.orEmpty()
+
+        assertTrue(execution.success)
+        assertTrue(resultado.lowercase().contains("fotorrealista"))
+        assertTrue(resultado.lowercase().contains("deserto"))
+        assertTrue(resultado.lowercase().contains("visão de uma plataforma de longe"))
+        assertFalse("o invólucro do turno anterior não pode ser reaproveitado como prompt",
+            resultado.substringAfter("):").contains("Encontrei um prompt de referência"))
+    }
+
+    @Test fun `melhoria sem IA e sem regra local diz que nao aplicou em vez de fingir melhoria`() {
+        val objetivoResolvido = "Objetivo atual: melhore esse prompt\n" +
+            "Referências resolvidas:\n- artefato anterior: versão anterior do prompt gerado para o pedido"
+        val execution = executor(FakePromptLibrary(), iaIndisponivel, criadorFraco).execute(request(objetivoResolvido), capability, decision)
+
+        assertTrue(execution.success)
+        assertTrue(execution.result.orEmpty().contains("mantive o prompt anterior"))
+    }
+
+    @Test fun `frase real do usuario sem IA entrega deserto por do sol e visao de longe`() {
+        val anterior = "Ilustração digital detalhada de um foguete decolando, ambientado em um cenário coerente com o assunto, " +
+            "sem elementos que não foram pedidos. Composição: enquadramento equilibrado, assunto em destaque no terço de composição. " +
+            "Iluminação: iluminação natural e equilibrada realçando volumes e texturas. " +
+            "Nível de realismo: nível de realismo fotográfico. Qualidade: alta definição, sem artefatos visuais."
+        val objetivoResolvido = "Objetivo atual: vamos melhorar ele quero ele num deserto ao por do sol com a visão de uma plataforma de longe\n" +
+            "Referências resolvidas:\n- artefato anterior: Encontrei um prompt de referência na biblioteca e adaptei ao seu pedido " +
+            "(estimativa heurística interna — qualidade 81%):\n\n$anterior"
+
+        val execution = executor(FakePromptLibrary(), iaIndisponivel).execute(request(objetivoResolvido), capability, decision)
+        val resultado = execution.result.orEmpty().lowercase()
+
+        assertTrue(execution.success)
+        assertTrue(resultado.contains("deserto"))
+        assertTrue(resultado.contains("pôr do sol"))
+        assertTrue(resultado.contains("visão de uma plataforma de longe"))
+        assertFalse(resultado.substringAfter("):").contains("encontrei um prompt de referência"))
+    }
+
+    private val promptAnteriorFoguete = "Ilustração digital detalhada de um foguete decolando, ambientado em um cenário coerente com o assunto, " +
+        "sem elementos que não foram pedidos. Composição: enquadramento equilibrado, assunto em destaque no terço de composição. " +
+        "Iluminação: iluminação natural e equilibrada realçando volumes e texturas. Qualidade: alta definição, sem artefatos visuais."
+
+    @Test fun `gatilho melhore ele aciona a IA mesmo com regras locais aplicaveis`() {
+        var chamadas = 0
+        var recebeu = ""
+        val ia = PromptImprover { atual, _ -> chamadas++; recebeu = atual; "$atual Detalhes extras de textura e atmosfera de deserto ao pôr do sol." }
+        val objetivo = "Objetivo atual: melhore ele quero ele num deserto ao por do sol com a visão de uma plataforma de longe\n" +
+            "Referências resolvidas:\n- artefato anterior: $promptAnteriorFoguete"
+
+        val execution = executor(FakePromptLibrary(), ia).execute(request(objetivo), capability, decision)
+
+        assertTrue(execution.success)
+        assertEquals(1, chamadas)
+        assertTrue("a IA deve receber o prompt já ajustado pelas regras locais", recebeu.contains("ambientado em deserto"))
+        assertTrue(execution.result.orEmpty().contains("apoio de IA especialista"))
+        assertTrue(execution.evidence.contains("prompt-improvement:gatilho-ia"))
+        assertTrue(execution.result.orEmpty().lowercase().contains("visão de uma plataforma de longe"))
+    }
+
+    @Test fun `gatilho sem IA disponivel avisa e entrega o resultado local`() {
+        val objetivo = "Objetivo atual: refaça ele no deserto ao por do sol\n" +
+            "Referências resolvidas:\n- artefato anterior: $promptAnteriorFoguete"
+
+        val execution = executor(FakePromptLibrary(), iaIndisponivel).execute(request(objetivo), capability, decision)
+        val resultado = execution.result.orEmpty()
+
+        assertTrue(execution.success)
+        assertTrue(resultado.contains("ela não está disponível agora"))
+        assertTrue(resultado.lowercase().contains("deserto"))
+    }
+
+    @Test fun `conta nao autorizada impede chamada da IA que exige autorizacao`() {
+        var chamadas = 0
+        val iaComConta = object : PromptImprover {
+            override fun melhorar(promptAtual: String, pedidoOriginal: String): String { chamadas++; return promptAtual }
+            override fun requerContaAutorizada(): Boolean = true
+        }
+        val objetivo = "Objetivo atual: melhore ele\nReferências resolvidas:\n- artefato anterior: $promptAnteriorFoguete"
+
+        val execution = executor(FakePromptLibrary(), iaComConta).execute(request(objetivo), capability, decision)
+
+        assertTrue(execution.success)
+        assertEquals(0, chamadas)
+    }
 }

@@ -653,6 +653,10 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     prepared,
                     File(dir, "rootfs"),
                     apiKeyAvailable = { hasApiKeyInCatalog() },
+                    // Sem isto a política nunca autorizava conta nenhuma e o GatewayPromptImprover (API) jamais era
+                    // chamado. Autoriza os providers do catálogo; quem realmente responde é definido pela chave
+                    // cadastrada (provider sem chave é marcado indisponível pelo BrainApiGateway).
+                    authorizedAccountIds = apiProviders.map { "android:${it.id}" }.toSet(),
                     promptLibrary = promptLibrary,
                     capabilityProviders = listOf(
                         PluginCatalogCapabilityProvider(statusOf = { id -> statusCache[id]?.state })

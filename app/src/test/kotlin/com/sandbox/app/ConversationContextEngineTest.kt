@@ -1,5 +1,6 @@
 package com.sandbox.app
 
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -101,5 +102,20 @@ class ConversationContextEngineTest {
         assertTrue(resolved.context.requirements.isEmpty())
         assertTrue(resolved.context.decisions.isEmpty())
         assertTrue(resolved.context.artifacts.isEmpty())
+    }
+
+    // O envelope removido continha a palavra "prompt", que roteava o follow-up para o gerador de prompts.
+    @Test
+    fun `follow-up de artefato gerado pelo gerador de prompts continua marcado como prompt`() {
+        val prompt = "Ilustração digital detalhada de um foguete decolando, ambientado em um cenário coerente com o assunto. Qualidade: alta definição."
+        val history = listOf(
+            ChatMessage(ChatRole.USER, "crie um prompt de um foguete decolando"),
+            ChatMessage(ChatRole.ASSISTANT, "Encontrei um prompt de referência na biblioteca e adaptei ao seu pedido (estimativa heurística interna — qualidade 81%):\n\n$prompt")
+        )
+        val resolved = engine.resolve(history, "vamos melhorar ele quero ele num deserto ao por do sol com a visão de uma plataforma de longe")
+
+        assertTrue(resolved.objective.contains("tipo da referência: prompt"))
+        assertTrue(resolved.objective.contains("artefato anterior: $prompt"))
+        assertFalse(resolved.objective.contains("estimativa heurística"))
     }
 }

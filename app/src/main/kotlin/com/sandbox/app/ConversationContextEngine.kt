@@ -40,9 +40,20 @@ class ConversationContextEngine {
         val decisions = latestDecisions(rawDecisions, discarded)
         val requirements = compact(all.filter { REQUIREMENT_MARKERS.any { marker -> it.lowercase().contains(marker) } }
             .filterNot { discarded.any { rejected -> overlaps(it, rejected) } })
-        val artifacts = compact(assistantText.filter(::isArtifact), 12000)
+        // O artefato é só o prompt/entrega — sem o invólucro "Encontrei um prompt ... (qualidade 81%):".
+        val artifacts = compact(assistantText.map(PromptEnvelope::extrairPrompt).filter(::isArtifact), 12000)
         val references = if (REFERENCE_PATTERN.containsMatchIn(prompt.lowercase()) || artifacts.lastOrNull()?.let { overlaps(prompt, it) } == true) {
-            listOfNotNull(idea?.let { "ideia: $it" }, artifacts.lastOrNull()?.let { "artefato anterior: $it" })
+            // Sem o invólucro, o artefato deixou de conter a palavra "prompt", e era ela que roteava o follow-up
+            // para o gerador de prompts (e para a pesquisa). Marcamos o tipo explicitamente, ANTES do artefato
+            // e sem a expressão "artefato anterior:" (o executor localiza o artefato por esse marcador).
+            val artefatoEraPrompt = assistantText
+                .lastOrNull { isArtifact(PromptEnvelope.extrairPrompt(it)) }
+                ?.let(PromptEnvelope::temInvolucro) == true
+            listOfNotNull(
+                idea?.let { "ideia: $it" },
+                if (artefatoEraPrompt) "tipo da referência: prompt" else null,
+                artifacts.lastOrNull()?.let { "artefato anterior: $it" }
+            )
         } else emptyList()
         val context = ConversationContext(idea, requirements, decisions, discarded, pending, artifacts, references)
         return ResolvedObjective(prompt, context, buildObjective(prompt, context))

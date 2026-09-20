@@ -44,6 +44,7 @@ class RequirementDiscovery {
         if (lower.containsAny("iluminação cinematográfica", "iluminacao cinematografica")) slot("iluminação", "cinematográfica", RequirementKind.STYLE)
         if (lower.containsAny("céu estrelado", "ceu estrelado")) slot("ambiente", "céu estrelado ao fundo", RequirementKind.ENVIRONMENT)
         if ("deserto" in lower) slot("ambiente", "deserto", RequirementKind.ENVIRONMENT)
+        Regex("p[oô]r do sol|entardecer|crep[uú]sculo").find(lower)?.let { slot("iluminação", it.value, RequirementKind.STYLE) }
         if (lower.containsAny("meteoro", "meteorito")) slot("elementos", "meteoros caindo", RequirementKind.ACTION)
         extractSubject(normalized)?.let { slot("sujeito", it, RequirementKind.SUBJECT) }
 
