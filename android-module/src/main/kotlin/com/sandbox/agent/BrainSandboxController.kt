@@ -388,7 +388,7 @@ class BrainSandboxController(
                 return finalResult
             }
             if (attempt == MAX_EXECUTION_ATTEMPTS) {
-                val best = candidates.minByOrNull { (_, gate) -> gate.critique.findings.sumOf { finding -> when (finding.severity) {
+                val best = candidates.minByOrNull { (_, gate) -> gate.critique.findings.sumBy { finding -> when (finding.severity) {
                     com.brain.behavior.FindingSeverity.BLOCKING -> 1000
                     com.brain.behavior.FindingSeverity.HIGH -> 100
                     com.brain.behavior.FindingSeverity.MEDIUM -> 10
