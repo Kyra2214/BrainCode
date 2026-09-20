@@ -175,7 +175,7 @@ class AndroidSandboxFactory(private val context: Context) {
         return runtime
     }
 
-    /** Copies the complete, not-yet-integrated Roofts 0.6 payload into the guest. */
+    /** Adds the RooftS 0.6 / Agent Skills layer to an already materialized RooftS 0.3–0.5 base. */
     private fun installRoofts06() {
         if (isRoofts06Installed()) return
         val sourceRoot = "roofts/0.6"
