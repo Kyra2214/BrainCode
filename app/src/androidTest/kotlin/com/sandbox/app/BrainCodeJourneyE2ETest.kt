@@ -123,7 +123,7 @@ class BrainCodeJourneyE2ETest {
 
     @Test
     fun missingRequirementBecomesClarificationQuestion() {
-        send("Crie uma imagem")
+        send("Quero discutir uma ideia de imagem")
         composeRule.waitUntil(timeoutMillis = 120_000) {
             composeRule.onAllNodesWithText("sujeito principal", substring = true, useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty()
