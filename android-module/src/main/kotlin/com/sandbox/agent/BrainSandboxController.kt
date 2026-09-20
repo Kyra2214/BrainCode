@@ -313,10 +313,17 @@ class BrainSandboxController(
                     }
                 }
             }
-            val requirements = currentPlan.passos.flatMap { step ->
-                step.acceptanceCriteria.map { it.description }
-            }
-            val postExecution = postExecutionGate.evaluate(currentPlan, result, requirements)
+            // Nota: `acceptanceCriteria.description` (ex.: "artefato produzido",
+            // "evidência de pesquisa disponível") são rótulos de processo, verificados
+            // via evidência em VerificationCheck (ver PostExecutionGate.checks acima).
+            // Eles NÃO são requisitos de conteúdo e nunca devem ser buscados
+            // literalmente no texto da resposta final — o UniversalCritic.requirements
+            // é para isso, não para reaproveitar rótulos internos do plano. Reutilizá-los
+            // aqui gerava falsos positivos "requirement.missing" (o texto do prompt
+            // gerado nunca contém as palavras "artefato" ou "produzido"), travando QA e
+            // RELEASE em readiness=BLOCKED mesmo com verification=PASSED e critique
+            // sem findings de conteúdo reais.
+            val postExecution = postExecutionGate.evaluate(currentPlan, result)
             val finalResult = result.copy(
                 runId = runId,
                 posExecucao = postExecution.copy(revisionAttempts = revisionAttempts.toList())
