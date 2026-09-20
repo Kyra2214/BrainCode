@@ -1,6 +1,6 @@
 # BrainCode — Estado Atual
 
-HEAD funcional da auditoria: caf0d3960e8fde5fbc7bbd193a6dc15d9217ce1f.
+HEAD funcional da auditoria: fa4dfa1ec2643d1d9b0d9a6f5b0eb36df8dd6fd8.
 
 ## Consolidado
 
@@ -22,16 +22,14 @@ Planner.kt já tentava fazer PlanoExecucao.copy(contextPack=...), mas PlanoExecu
 
 Commit caf0d396 corrigiu o contrato: PlanoExecucao agora possui contextPack e os Tasks derivados preservam esse contexto.
 
-## Parcial/backlog
+## Fechamento 2.3 / estado atual
 
-1. testes focados finais da mudança 2.4;
-2. CI completo;
-3. E2E completo em emulador/dispositivo;
-4. readiness final;
-5. testes arquiteturais contra caminhos paralelos;
-6. executor universal de retrievalHints;
-7. deduplicação/versionamento de conhecimento;
-8. hardening OS-level e SSRF/DNS rebinding;
-9. durable jobs com leases/fencing completos.
+A consolidação comportamental da 2.3 está integrada no caminho Android: Reasoning → RequirementGate → Planner → Policy → Dispatcher/ActionGateway → execução → PostExecutionGate (Verification → UniversalCritic → Revision/Fix → Readiness → ValidatedLearning).
 
-Não declarar CI/E2E verdes sem execução comprovada.
+Correção aplicada neste HEAD: os requisitos descobertos pelo Reasoning agora são propagados explicitamente ao PostExecutionGate/UniversalCritic, além de continuarem alimentando o Planner.
+
+O chat não usa fallback direto para provider quando o Sandbox não está pronto: a UI retorna estado de indisponibilidade e pede a preparação do Sandbox. Portanto não existe uma segunda semântica de “resposta validada” fora do caminho universal.
+
+Roofts 0.6 permanece instalado como payload independente e deliberadamente **não integrado ao runtime**. Retrieval universal/semântico, hardening OS-level e leases/fencing continuam backlog de marcos posteriores.
+
+CI/E2E devem ser considerados somente após execução comprovada no HEAD deste documento.
