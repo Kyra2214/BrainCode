@@ -22,7 +22,7 @@ class BrainSandboxControllerDoorTest {
                 runtime = runtime,
                 rootfsDir = root,
                 capabilityExecutors = mapOf(
-                    "sandbox.diagnose" to ActionExecutor { _, _, _ -> ActionExecution(true, result = "resposta local", evidence = listOf("local:chat")) }
+                    "chat.respond" to ActionExecutor { _, _, _ -> ActionExecution(true, result = "resposta local", evidence = listOf("local:chat")) }
                 )
             )
             val intent = DeterministicSecretary().classify("Estou pensando em criar um aplicativo")

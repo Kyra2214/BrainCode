@@ -1,6 +1,6 @@
 # BrainCode — Estado Atual
 
-HEAD funcional da auditoria: fa4dfa1ec2643d1d9b0d9a6f5b0eb36df8dd6fd8.
+HEAD funcional da auditoria: será atualizado após o commit da Fase 2.
 
 ## Consolidado
 
@@ -48,4 +48,16 @@ A decisão D1 permanece na opção A: APIs e contas externas seguem bloqueadas n
 - `BrainSandboxControllerDoorTest` passou e comprovou que uma intenção CHAT não produz passos `workspace.write` ou `sandbox.code`.
 - `:app:compileDebugKotlin` passou com JDK 17 e Android SDK 34.
 - O teste `WebResearchIntegrationTest` já falhava no HEAD anterior por bloqueios do PostExecutionGate em fixtures fake; ele não foi usado como evidência de regressão da Fase 1.
-- A Fase 1 ainda não é marcada como consolidada. CI remoto, readiness completo e a correção das falhas preexistentes permanecem gates posteriores deste módulo.
+- A Fase 1 foi consolidada no commit `14d8d11`; o CI remoto `35529958633` passou com testes, lint e upload do APK.
+
+## Fase 2 — Porta 1: Chat / Plano
+
+`chat.respond` foi registrado como capability local e o `DoorAwareSplitter` passou a produzir o passo conversacional para intenções `CHAT`, mantendo `network.research` como dependência apenas quando a Policy permite. O `ChatResponseExecutor` responde data/hora local, contexto da sessão em modo somente leitura e resumos de pesquisa recebidos como evidência; não chama API, provider, shell, workspace ou execução.
+
+### Evidências locais executadas
+
+- `ChatDoorLeakCorpusTest` e `ChatResponseExecutorTest` passaram.
+- `BrainSandboxControllerChatTest` e `BrainSandboxControllerDoorTest` passaram.
+- `:brain:test :android-module:test :app:testDebugUnitTest` passou.
+- `bash scripts/architecture-gate.sh` e `git diff --check` passaram.
+- CI remoto, readiness/E2E e consolidação formal da Porta 1 ainda são gates do commit desta fase.

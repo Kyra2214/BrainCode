@@ -82,6 +82,21 @@ class DoorAwareSplitter(
     override fun split(objetivo: String): List<PassoPlano> = split(secretary.classify(objetivo), objetivo)
 
     fun split(intent: OrderIntent, objetivo: String = intent.originalPrompt): List<PassoPlano> {
+        if (intent.door == com.brain.secretary.Door.CHAT) {
+            val legacyCandidates = legacy.split(objetivo)
+            val research = legacyCandidates.firstOrNull { it.capacidade == "network.research" }
+                ?.takeIf { DoorPolicy.allows(intent.scope, it.capacidade) }
+            val response = PassoPlano(
+                id = "responder",
+                capacidade = "chat.respond",
+                criterioSucesso = "resposta conversacional não vazia",
+                parametros = listOf(objetivo),
+                dependeDe = listOfNotNull(research?.id),
+                papel = PapelPipeline.PLANEJAMENTO,
+                riskClass = RiskClass.LOW
+            )
+            return listOfNotNull(research, response)
+        }
         val candidates = legacy.split(objetivo)
         val allowed = candidates.filter { DoorPolicy.allows(intent.scope, it.capacidade) }
         if (allowed.isEmpty()) return listOf(

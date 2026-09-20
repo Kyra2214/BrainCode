@@ -81,15 +81,15 @@ Não iniciar a integração de APIs externas antes de Porta 1 e Porta 2 estarem 
 
 ### Marco 5.1 — Porta 1: Chat / Plano — ~72%
 
-[ ] formalizar o Secretário como entrada determinística para a Porta 1.
-[ ] separar claramente Chat/Plano das capacidades de Prompt e Criação.
-[ ] preservar conversa, contexto, memória, análise, planejamento e Web.
-[ ] Web permitida conforme Policy.
-[ ] APIs externas bloqueadas nesta fase.
-[ ] impedir vazamento de intenção para pesquisa, produção ou execução quando a ordem/restrição do usuário não permitir.
-[ ] consolidar regras de negação/restrição no planejamento.
-[ ] validar transições de estado e permissões da Porta 1.
-[ ] bateria de testes funcional + regressão.
+[x] formalizar o Secretário como entrada determinística para a Porta 1.
+[x] separar claramente Chat/Plano das capacidades de Prompt e Criação.
+[x] preservar conversa, contexto, memória, análise, planejamento e Web.
+[x] Web permitida conforme Policy.
+[x] APIs externas bloqueadas nesta fase.
+[x] impedir vazamento de intenção para pesquisa, produção ou execução quando a ordem/restrição do usuário não permitir.
+[x] consolidar regras de negação/restrição no planejamento.
+[x] validar transições de estado e permissões da Porta 1.
+[x] bateria de testes funcional + regressão.
 [ ] CI/E2E/readiness final da Porta 1.
 [ ] declarar Porta 1 consolidada somente com evidência verde.
 

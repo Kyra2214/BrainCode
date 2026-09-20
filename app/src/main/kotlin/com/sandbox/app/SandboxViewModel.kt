@@ -727,6 +727,11 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         listOf(DuckDuckGoWebResearchProvider(), WikipediaWebResearchProvider())
                     )
                 )
+                val chatResponseExecutor = ChatResponseExecutor(
+                    contextProvider = {
+                        sessions.firstOrNull { it.id == activeSessionId }?.conversationContext ?: ConversationContext()
+                    }
+                )
                 brainController = BrainSandboxController(
                     prepared,
                     File(dir, "rootfs"),
@@ -744,7 +749,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         "prompt.library.generate" to promptGenerationExecutor,
                         "prompt.library.write" to promptGenerationExecutor,
                         "sandbox.info" to webResearchExecutor,
-                        "network.research" to webResearchExecutor
+                        "network.research" to webResearchExecutor,
+                        "chat.respond" to chatResponseExecutor
                     ),
                     events = FileEventStore(File(dir, "brain/chat-events.jsonl"))
                 )

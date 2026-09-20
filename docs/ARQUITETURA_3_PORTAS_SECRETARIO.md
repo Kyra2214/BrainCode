@@ -92,6 +92,8 @@ Permissões conceituais:
 
 A conversa pode evoluir e acumular contexto sem iniciar automaticamente o desenvolvimento.
 
+No caminho Android, a Porta 1 é materializada pelo passo `chat.respond`, executado localmente pelo `ChatResponseExecutor`. O `DoorAwareSplitter` pode colocar `network.research` antes desse passo quando a pesquisa é permitida; o resultado da pesquisa chega como dependência e mantém as fontes estruturadas no ciclo. O executor conversacional somente lê contexto, relógio local e evidências autorizadas: não chama provider, não escreve workspace e não executa código.
+
 ## 5. Porta 2 — Prompt
 
 É dedicada à criação, análise e refinamento de prompts.

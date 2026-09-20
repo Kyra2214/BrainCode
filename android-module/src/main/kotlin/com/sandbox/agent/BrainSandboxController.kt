@@ -89,6 +89,7 @@ class BrainSandboxController(
             capability("sandbox.build", emptySet()),
             capability("sandbox.test", setOf("sandbox.code")),
             capability("sandbox.diagnose", setOf("brain.analyze")),
+            capability("chat.respond", emptySet()),
             capability("sandbox.clean", emptySet())
         ) + capabilityProviders.flatMap { it.capabilities().toList() }
     )
@@ -202,6 +203,20 @@ class BrainSandboxController(
         val reasoning = reasoningEngine.analyze(objective)
         val requirementGateResult = requirementGate.evaluate(reasoning)
         if (!requirementGateResult.isSuccessful) {
+            if (intent?.door == com.brain.secretary.Door.CHAT) {
+                val clarification = buildString {
+                    append("Para continuar a conversa, preciso esclarecer alguns pontos:\n")
+                    requirementGateResult.issues.forEach { append("- ").append(it.message).append('\n') }
+                    append("Pedido original: ").append(objective)
+                }
+                val clarificationPlan = PlanoExecucao(
+                    objective,
+                    listOf(PassoPlano("clarificar", "chat.respond", "pergunta de esclarecimento não vazia", parametros = listOf(clarification)))
+                )
+                return executeWithEvents(clarificationPlan, runId, emptyList()) { attemptPlan, attemptRunId ->
+                    bridge.authorizeAndExecute(attemptPlan, attemptRunId, actor, doorScope = intent.scope)
+                }
+            }
             return blockedCycle(
                 PlanoExecucao(objective, listOf(PassoPlano("requirements", "brain.requirements", "requisitos resolvidos"))),
                 runId,
