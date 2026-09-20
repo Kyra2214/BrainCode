@@ -2,6 +2,7 @@ package com.brain.planner
 
 import kotlin.coroutines.startCoroutine
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -37,6 +38,47 @@ class FunctionSplitterTest {
 
         assertTrue(called)
         assertEquals("custom.capability", plan.passos.single().capacidade)
+    }
+
+    @Test
+    fun `nega pesquisa nas formas nao sem e evite`() {
+        assertEquals(listOf("network.research"), KeywordFunctionSplitter().split("pesquise referências").map { it.capacidade })
+        listOf("não pesquise referências", "sem pesquisar referências", "evite pesquisar referências").forEach { objetivo ->
+            assertFalse(objetivo, "network.research" in KeywordFunctionSplitter().split(objetivo).map { it.capacidade })
+        }
+    }
+
+    @Test
+    fun `nega producao e execucao sem remover autorizacoes positivas`() {
+        assertFalse("workspace.write" in KeywordFunctionSplitter().split("não crie um documento").map { it.capacidade })
+        assertFalse("workspace.write" in KeywordFunctionSplitter().split("sem escrever código").map { it.capacidade })
+        assertTrue("sandbox.code" in KeywordFunctionSplitter().split("execute os testes").map { it.capacidade })
+        assertFalse("sandbox.code" in KeywordFunctionSplitter().split("não execute os testes").map { it.capacidade })
+        assertFalse("sandbox.code" in KeywordFunctionSplitter().split("sem executar").map { it.capacidade })
+    }
+
+    @Test
+    fun `combinacoes preservam acoes positivas e bloqueiam as negadas`() {
+        val pesquisaSemExecucao = KeywordFunctionSplitter().split("pesquise e não execute")
+        assertEquals(listOf("network.research"), pesquisaSemExecucao.map { it.capacidade })
+
+        val execucaoSemPesquisa = KeywordFunctionSplitter().split("não pesquise e execute o teste local")
+        assertEquals(listOf("sandbox.code"), execucaoSemPesquisa.map { it.capacidade })
+
+        val pesquisaProducaoSemExecucao = KeywordFunctionSplitter().split("pesquise, produza o artefato, mas não execute")
+        assertEquals(listOf("network.research", "workspace.write"), pesquisaProducaoSemExecucao.map { it.capacidade })
+    }
+
+    @Test
+    fun `regressao do chat nao cria plano executavel para acoes negadas`() = suspendPlan {
+        val plan = KeywordPlanner().planejar(
+            "Explique, sem pesquisar na internet e sem executar nenhuma ação, qual skill do Agent Skills seria apropriada"
+        )
+
+        assertEquals(listOf("brain.analyze"), plan.passos.map { it.capacidade })
+        assertFalse(plan.passos.any { it.capacidade == "network.research" })
+        assertFalse(plan.passos.any { it.capacidade == "workspace.write" })
+        assertFalse(plan.passos.any { it.capacidade == "sandbox.code" })
     }
 
     private fun suspendPlan(block: suspend () -> Unit) {

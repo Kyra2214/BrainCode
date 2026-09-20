@@ -4,7 +4,7 @@ import com.brain.execution.RiskClass
 import com.brain.prompt.PromptDomain
 import com.brain.reasoning.ReasoningState
 import com.brain.router.PapelPipeline
-import com.brain.text.TermMatcher
+import com.brain.text.IntentNegation
 
 /** Decompõe objetivo em funções declarativas; não autoriza nem executa. */
 fun interface FunctionSplitter {
@@ -18,15 +18,15 @@ class KeywordFunctionSplitter : FunctionSplitter {
         require(texto.isNotBlank()) { "objetivo não pode ser vazio" }
         val normalizado = texto.lowercase()
         val passos = mutableListOf<PassoPlano>()
-        val pedidoLiteralDePrompt = TermMatcher.containsAnyWhole(normalizado, "prompt", "template de prompt")
+        val pedidoLiteralDePrompt = IntentNegation.hasAllowedOccurrence(normalizado, "prompt", "template de prompt")
         // Pedidos de transformação de foto frequentemente dizem apenas o que a IA deve
         // fazer ("transforme minha imagem", "vou enviar uma foto"), sem usar a palavra
         // "prompt". Eles ainda precisam cair no Prompt Creator, não no fallback de análise
         // local que pode executar sandbox.info.
         val pedidoVisualDePrompt = PromptDomain.classificar(normalizado) == PromptDomain.IMAGEM &&
-            TermMatcher.containsAnyStem(normalizado, "transform", "alter", "modific", "edita", "conver", "recri", "aplic")
+            IntentNegation.hasAllowedOccurrence(normalizado, "transform", "alter", "modific", "edita", "conver", "recri", "aplic")
         val pedidoDePrompt = pedidoLiteralDePrompt || pedidoVisualDePrompt
-        val pesquisaExplicita = TermMatcher.containsAnyStem(normalizado,
+        val pesquisaExplicita = IntentNegation.hasAllowedOccurrence(normalizado,
                 "pesquis", "analis", "investig", "compar", "encontr", "document",
                 "mais atual", "mais recentes", "mudanças recentes", "técnicas atuais"
             )
@@ -47,7 +47,7 @@ class KeywordFunctionSplitter : FunctionSplitter {
                 papel = PapelPipeline.PLANEJAMENTO, riskClass = RiskClass.MEDIUM
             )
         }
-        if (pedidoDePrompt || TermMatcher.containsAnyStem(normalizado, "escrev", "cri", "ger", "document", "relatóri", "relatori", "desenvolv", "constru", "mont", "aplicat", "aplicativo", "sistem", "site", "software")) {
+        if (pedidoDePrompt || IntentNegation.hasAllowedOccurrence(normalizado, "escrev", "cri", "ger", "produz", "document", "relatóri", "relatori", "desenvolv", "constru", "mont", "aplicat", "aplicativo", "sistem", "site", "software")) {
             passos += PassoPlano(
                 "produzir", if (pedidoDePrompt) "prompt.library.write" else "workspace.write", "artefato produzido",
                 parametros = listOf(texto),
@@ -55,7 +55,7 @@ class KeywordFunctionSplitter : FunctionSplitter {
                 riskClass = RiskClass.MEDIUM
             )
         }
-        if (!pedidoDePrompt && TermMatcher.containsAnyStem(normalizado, "códig", "codig", "program", "implement", "compil", "test")) {
+        if (!pedidoDePrompt && IntentNegation.hasAllowedOccurrence(normalizado, "códig", "codig", "program", "implement", "compil", "test", "execut")) {
             passos += PassoPlano(
                 "executar", "sandbox.code", "execução e testes concluídos",
                 dependeDe = passos.map { it.id }, papel = PapelPipeline.EXECUCAO_CODIGO,
