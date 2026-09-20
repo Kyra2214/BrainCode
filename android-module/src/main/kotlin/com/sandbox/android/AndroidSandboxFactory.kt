@@ -122,7 +122,7 @@ class AndroidSandboxFactory(private val context: Context) {
         File(extractedRootfsDir, "opt/roofts/0.6/skills").isDirectory &&
             roofts06Marker.readTextOrNull() == ROOFTS06_COMMIT
 
-    /** Installs only Roofts 0.6 over an already materialized 0.3–0.5 RootFS. */
+    /** Adds the RooftS 0.6 / Agent Skills layer over the already materialized RooftS 0.3–0.5 layers. */
     fun installRoofts06OverExistingRootfs() {
         check(rootfsExtractionValid()) {
             "RootFS 0.3–0.5 ainda não está materializado; prepare o sandbox primeiro."
