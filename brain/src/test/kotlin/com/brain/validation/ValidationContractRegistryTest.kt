@@ -9,9 +9,15 @@ class ValidationContractRegistryTest {
     fun capacitats_reais_recebem_contrato_e_responsavel() {
         val research = ValidationContractRegistry.contractForCapability("research.web")
         assertNotNull(research)
-        assertEquals("agent.research", research.id.substringAfter("self-e2e:"))
+        assertEquals("self-e2e:agent.research", research.id)
         assertEquals("agent.research", ValidationContractRegistry.ownerForCapability("research.web"))
     }
+    @Test
+    fun capacidade_desconhecida_nao_recebe_contrato() {
+        assertEquals(null, ValidationContractRegistry.contractForCapability("mystery.capability"))
+        assertEquals(null, ValidationContractRegistry.ownerForCapability("mystery.capability"))
+    }
+
     @Test
     fun criador_local_de_prompt_recebe_contrato_especifico() {
         val contract = ValidationContractRegistry.contractForCapability("prompt.library.generate")
