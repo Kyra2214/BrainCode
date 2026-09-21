@@ -378,7 +378,12 @@ class BrainSandboxController(
             manifest = WorkflowManifest("brain-plan", "1.0.0", listOf(WorkflowNode("plan", "brain.plan", retryLimit = 0))),
             authorize = { it == "brain.plan" },
             execute = { node, attempt ->
-                cycle = executeWithEvents(plan, runId, reasoning.requirements.map { it.text }, createPhase = planningIntent.phase.name) { attemptPlan, attemptRunId ->
+                val validationRequirements = if (designatedIntent.door == Door.CREATE) {
+                    reasoning.requirements.map { it.text }
+                } else {
+                    emptyList()
+                }
+                cycle = executeWithEvents(plan, runId, validationRequirements, createPhase = planningIntent.phase.name) { attemptPlan, attemptRunId ->
                     bridge.authorizeAndExecute(attemptPlan, attemptRunId, actor, onPasso = { passo ->
                         emit(
                             attemptRunId,

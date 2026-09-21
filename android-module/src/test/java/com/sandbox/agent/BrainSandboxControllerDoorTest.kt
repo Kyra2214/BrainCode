@@ -39,7 +39,7 @@ class BrainSandboxControllerDoorTest {
     }
 
     @Test
-    fun `planning artifact persiste contexto e lacuna bloqueia somente a criacao`() {
+    fun `planning artifact persiste contexto e aprovacao protege somente a criacao`() {
         val root = Files.createTempDirectory("door-planning-").toFile()
         try {
             val runtime = ManagedSandboxRuntime(TestLauncher(root), FileExecutionLogRepository(File(root, "logs")), sessionId = "session-planning")
@@ -55,9 +55,9 @@ class BrainSandboxControllerDoorTest {
             val artifact = requireNotNull(controller.planningArtifact("door-planning"))
 
             assertEquals("Crie um aplicativo", artifact.idea)
-            assertTrue(artifact.pending.isNotEmpty())
-            assertEquals(com.brain.planning.PlanningStatus.NEEDS_CLARIFICATION, artifact.status)
-            assertTrue(cycle.passos.any { it.capacidade == "brain.requirements" })
+            assertTrue(artifact.pending.isEmpty())
+            assertEquals(com.brain.planning.PlanningStatus.READY, artifact.status)
+            assertTrue(cycle.passos.any { it.status == StatusPasso.AGUARDANDO_APROVACAO })
             assertFalse(cycle.passos.any { it.capacidade == "chat.respond" })
             assertTrue(controller.localEvents("door-planning").any { it.type == "PlanningArtifactCreated" })
             assertTrue(controller.localEvents("door-planning").any { it.type == "IntentEnvelopeCreated" && it.payload["route"] == "CREATION" })
