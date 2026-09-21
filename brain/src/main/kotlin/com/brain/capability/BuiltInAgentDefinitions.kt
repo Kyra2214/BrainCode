@@ -39,7 +39,7 @@ object BuiltInAgentDefinitions {
     private fun definition(id: String, name: String, description: String, provided: Set<String>, risk: RiskClass, web: Boolean = false, code: Boolean = false) = CapabilityDefinition(
         id = id, name = name, description = description, category = CapabilityCategory.AGENT,
         ownerId = "brain-builtin", origin = "brain-builtin", providedCapabilities = provided,
-        risk = risk, supportsWeb = web, supportsCode = code, availability = CapabilityAvailability.AVAILABLE,
+        risk = risk, supportsWeb = web, supportsCode = code, availability = CapabilityAvailability.UNAVAILABLE,
         reliability = .8, quality = .8, provenance = listOf(CapabilityProvenance("brain-builtin", "agent-definition"))
     )
 }
