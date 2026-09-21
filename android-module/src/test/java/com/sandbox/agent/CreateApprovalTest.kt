@@ -74,6 +74,36 @@ class CreateApprovalTest {
     }
 
     @Test
+    fun `workspace aprovado nao e negado pela Policy quando o app autoriza contas de API`() {
+        val root = Files.createTempDirectory("create-approval-accounts-").toFile()
+        try {
+            var writes = 0
+            val controller = BrainSandboxController(
+                runtime = ManagedSandboxRuntime(TestLauncher(root), FileExecutionLogRepository(File(root, "logs")), sessionId = "session-create-accounts"),
+                rootfsDir = root,
+                authorizedAccountIds = setOf("android:provider-a"),
+                capabilityExecutors = mapOf(
+                    "workspace.generate" to ActionExecutor { _, _, _ ->
+                        writes++
+                        ActionExecution(true, result = "interface/aplicativo de notas implementado", evidence = listOf("workspace:test"))
+                    }
+                )
+            )
+            val secretary = DeterministicSecretary()
+            val initial = secretary.classify("criar um aplicativo de notas")
+            val approved = SecretaryState().designate(initial).approve().currentIntent!!
+
+            val cycle = controller.executeObjective(initial.originalPrompt, "create-approval-accounts", intent = approved)
+
+            assertFalse("passo negado pela Policy: $cycle", cycle.passos.any { it.status == StatusPasso.NEGADO_PELA_POLICY })
+            assertTrue("cycle=$cycle", cycle.aprovado)
+            assertEquals(1, writes)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `intenção inicial de criação não executa workspace`() {
         val root = Files.createTempDirectory("create-discussion-").toFile()
         try {

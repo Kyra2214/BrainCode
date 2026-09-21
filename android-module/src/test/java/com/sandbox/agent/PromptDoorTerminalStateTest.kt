@@ -41,6 +41,35 @@ class PromptDoorTerminalStateTest {
         }
     }
 
+    @Test
+    fun `porta prompt nao e negada pela Policy quando o app autoriza contas de API`() {
+        val root = Files.createTempDirectory("prompt-accounts-").toFile()
+        try {
+            val controller = BrainSandboxController(
+                runtime = ManagedSandboxRuntime(TestLauncher(root), FileExecutionLogRepository(File(root, "logs")), sessionId = "session-prompt-accounts"),
+                rootfsDir = root,
+                authorizedAccountIds = setOf("android:provider-a"),
+                capabilityExecutors = mapOf(
+                    "prompt.library.write" to ActionExecutor { _, _, _ ->
+                        ActionExecution(true, result = "Prompt final: resumir uma ideia de produto", evidence = listOf("prompt:test"))
+                    },
+                    "prompt.library.generate" to ActionExecutor { _, _, _ ->
+                        ActionExecution(true, result = "Prompt final: resumir uma ideia de produto", evidence = listOf("prompt:test"))
+                    }
+                )
+            )
+            val objective = "Crie um prompt textual para resumir uma ideia de produto"
+            val intent = DeterministicSecretary().classify(objective)
+            val cycle = controller.executeObjective(objective, "prompt-accounts", intent = intent)
+
+            assertFalse("passo negado pela Policy: $cycle", cycle.passos.any { it.status == StatusPasso.NEGADO_PELA_POLICY })
+            assertTrue("cycle=$cycle", cycle.aprovado)
+            assertTrue(cycle.passos.any { it.capacidade == "prompt.library.write" && it.status == StatusPasso.APROVADO })
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
     private class TestLauncher(private val rootDir: File) : SandboxProcessLauncher {
         override fun launch(command: List<String>, workingDir: String): Process {
             val hostDir = File(rootDir, workingDir.removePrefix("/")).apply { mkdirs() }

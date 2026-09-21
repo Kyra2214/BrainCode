@@ -169,7 +169,9 @@ class CicloExecucaoPlano(
                 actor,
                 riskClass = passo.riskClass,
                 networkAllowed = passo.capacidade == "network.research",
-                authorizedAccountIds = authorizedAccountIds,
+                // Com porta designada, só enxerga as contas que a própria porta libera (nenhuma, por padrão).
+                // Repassar a lista global fazia a Policy negar todo passo de porta no app real.
+                authorizedAccountIds = doorScope?.visibleAccounts(authorizedAccountIds) ?: authorizedAccountIds,
                 approval = if (highRisk && passo.id !in approvedSteps) ApprovalRequired.USER else ApprovalRequired.NONE,
                 doorScope = doorScope
             )

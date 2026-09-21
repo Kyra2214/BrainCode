@@ -61,4 +61,20 @@ class GeneratedContentTest {
             )
         )
     }
+
+    @Test
+    fun `esclarecimento da Porta 1 tambem e classificado como esclarecimento`() {
+        assertEquals(
+            GeneratedContentType.CLARIFICATION,
+            detectGeneratedContentType(
+                "Preciso de um esclarecimento antes de continuar: Para continuar, preciso esclarecer: sujeito principal. Qual é a sua preferência?",
+                "chat.respond",
+                listOf("chat:local-only", "chat:read-only", "chat:clarification-question")
+            )
+        )
+        assertEquals(
+            GeneratedContentType.TEXT,
+            detectGeneratedContentType("Agora são 18:30.", "chat.respond", listOf("chat:local-only", "chat:clock:2026-09-20T18:30:00Z"))
+        )
+    }
 }

@@ -39,6 +39,15 @@ data class DoorScope(
         }
     }
 
+    /**
+     * Contas externas que esta porta pode enxergar. Sem liberação explícita da porta, nenhuma:
+     * o app autoriza todos os providers do catálogo globalmente, mas a Policy nega qualquer passo
+     * de uma porta que receba contas que ela não pode usar. Quem monta o PolicyContext deve
+     * passar por aqui em vez de repassar a lista global.
+     */
+    fun visibleAccounts(authorizedAccountIds: Set<String>): Set<String> =
+        if (externalAccountsAllowed) authorizedAccountIds else emptySet()
+
     private fun phaseBelongsToDoor(): Boolean = when (door) {
         Door.CHAT -> phase == CreatePhase.CHAT
         Door.PROMPT -> phase == CreatePhase.PROMPT

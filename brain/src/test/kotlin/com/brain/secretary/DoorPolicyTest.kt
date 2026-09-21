@@ -1,5 +1,6 @@
 package com.brain.secretary
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -47,6 +48,20 @@ class DoorPolicyTest {
         assertFalse(DoorPolicy.allows(scope, "network.research"))
         assertFalse(DoorPolicy.allows(scope, "workspace.write"))
         assertFalse(DoorPolicy.allows(scope, "sandbox.code"))
+    }
+
+    @Test
+    fun `porta so enxerga as contas externas que ela libera`() {
+        val globais = setOf("android:provider-a", "android:provider-b")
+
+        listOf(
+            DoorScope(Door.CHAT, CreatePhase.CHAT),
+            DoorScope(Door.PROMPT, CreatePhase.PROMPT),
+            DoorScope(Door.CREATE, CreatePhase.APPROVED)
+        ).forEach { scope ->
+            assertEquals("porta ${scope.door} não pode herdar a lista global de contas", emptySet<String>(), scope.visibleAccounts(globais))
+        }
+        assertEquals(globais, DoorScope(Door.CHAT, CreatePhase.CHAT, externalAccountsAllowed = true).visibleAccounts(globais))
     }
 
     @Test
