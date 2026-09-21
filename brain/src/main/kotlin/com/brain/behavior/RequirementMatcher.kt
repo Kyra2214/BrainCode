@@ -22,7 +22,16 @@ object RequirementMatcher {
     fun isPresent(requirement: String, result: String): Boolean {
         val normalized = fold(requirement.trim())
         val lower = fold(result)
-        if (normalized.isBlank() || normalized in lower) return true
+        if (normalized.isBlank()) return true
+
+        // Contratos como "interface/aplicativo" representam alternativas:
+        // basta uma das opções estar presente no resultado.
+        val alternatives = normalized.split(Regex("\\s*/\\s*"))
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+        if (alternatives.size > 1) return alternatives.any { isPresent(it, result) }
+
+        if (normalized in lower) return true
 
         val tokens = normalized
             .split(Regex("[^\\p{L}\\p{Nd}]+"))
