@@ -115,6 +115,20 @@ O `ChatResponseExecutor` agora recebe o `NoInferenceConversationEngine`, adapter
 
 O caminho não altera a Porta 1: CHAT continua no fast path e não chama Planner, RequirementGate, Reasoning pesado, CodeAgent ou ResearchAgent para conversa simples. `ResponseComposer` continua sendo o ponto que transforma o resultado em texto e `PostExecutionGate` continua validando a resposta. Pesquisa e dados atuais permanecem no `CapabilityRegistry`/capability externa autorizada; o engine não finge que knowledge estática é dado atual.
 
+## Research Harness e Web Access — implementação incremental
+
+Foi criado o contrato soberano `ResearchRequest`, `ResearchRunResult`, `ResearchCitation`, `ResearchEvidence`, `FailedSource`, `ResearchExecutionMetadata` e `WebProviderSet`. `WebResearchAgent` aplica sanitização, política de rede, allow/block domains, HTTPS, fallback entre SearchProviders, source diversity, citações, evidence, quality/confidence e user-facing fallback sem vazar erro técnico. `WebResearchExecutor` usa esse harness por meio de `LegacySearchProviderAdapter`, portanto o provider existente continua conectado ao Dispatcher/ActionGateway sem criar uma segunda capability.
+
+Foram adicionadas interfaces desacopladas `SearchProvider`, `FetchProvider`, `BrowserProvider` e `ExtractionProvider`. Elas deixam Firecrawl opcional e permitem cache/local providers no futuro. `ResearchSecurityPolicy` detecta prompt injection em conteúdo web e mantém o conteúdo como dado, nunca como Policy ou instrução do Brain. `AgentRegistry` registra os especialistas por contrato, categoria, capability, provenance e licença.
+
+SearchClaw foi usado como referência de harness de pesquisa, plano, quality gate, citações, memória e compactação; firecrawl/web-agent como referência de abstração de ferramentas, skills, schemas e subagentes. Nenhum servidor, CLI/TUI ou runtime externo foi incorporado. SearchClaw e Firecrawl são MIT; o componente no-inference permanece AGPL-3.0 com notice preservado em `app/src/main/assets/no_inference/LICENSE`. O coding agent `cos` segue excluído.
+
+### Evidências da frente de research
+
+- `WebResearchAgentTest` cobre agregação de fontes, citações, evidence, quality, falha parcial, offline e prompt injection.
+- `AgentRegistryTest` comprova resolução por capability/contrato e provenance externo.
+- `:brain:test` passou para os novos contratos e testes focados; build Android/E2E fica para o gate remoto após o commit desta frente.
+
 ### Proveniência, licença e exclusões
 
 A origem é `https://github.com/TheShovel/no-inference`, licenciado sob AGPL-3.0; a cópia da licença foi preservada em `app/src/main/assets/no_inference/LICENSE`. A integração importou apenas recursos conversacionais e o adapter Android. CLI, TUI, servidor, API web, `cos` coding agent, editor, code generator, math solver, integrações externas e infraestrutura de execução do projeto de origem foram deliberadamente excluídos do runtime BrainCode. A distribuição do APK deve manter a oferta de código-fonte e os notices exigidos pela licença AGPL aplicáveis ao componente integrado.

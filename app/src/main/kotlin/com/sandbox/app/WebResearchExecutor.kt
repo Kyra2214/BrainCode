@@ -6,6 +6,10 @@ import com.brain.gateway.ActionExecutor
 import com.brain.gateway.ActionRequest
 import com.brain.policy.PolicyDecision
 import com.brain.research.ResearchResult
+import com.brain.research.ResearchRequest
+import com.brain.research.WebResearchAgent
+import com.brain.research.WebProviderSet
+import com.brain.research.LegacySearchProviderAdapter
 import com.brain.research.WebResearchProvider
 import java.time.format.DateTimeFormatter
 
@@ -19,7 +23,10 @@ import java.time.format.DateTimeFormatter
  */
 class WebResearchExecutor(
     private val provider: WebResearchProvider,
-    private val maxResultados: Int = 3
+    private val maxResultados: Int = 3,
+    private val researchAgent: WebResearchAgent = WebResearchAgent(
+        WebProviderSet(search = listOf(LegacySearchProviderAdapter(provider)))
+    )
 ) : ActionExecutor {
     override fun execute(request: ActionRequest, capability: CapabilityDefinition, decision: PolicyDecision): ActionExecution {
         val query = request.parameters["parameter.0"]?.trim().orEmpty()
@@ -32,14 +39,15 @@ class WebResearchExecutor(
             )
         }
 
-        val outcome = provider.pesquisar(query, maxResultados)
-        val resultados = outcome.getOrNull()
-        if (outcome.isFailure || resultados.isNullOrEmpty()) {
-            val motivo = outcome.exceptionOrNull()?.message ?: "nenhuma fonte relevante encontrada"
+        val output = researchAgent.research(
+            ResearchRequest(query = query, constraints = com.brain.research.ResearchConstraints(maxSources = maxResultados))
+        )
+        val resultados = output.sources
+        if (resultados.isEmpty()) {
             return ActionExecution(
                 success = true,
-                result = "WebResearch indisponível ($motivo). Prosseguindo com conhecimento local — a resposta não usará fontes externas.",
-                evidence = listOf("web-research:indisponivel:${motivo.take(160)}"),
+                result = output.userMessage ?: "Não consegui concluir a pesquisa agora. Prosseguindo com conhecimento local.",
+                evidence = listOf("web-research:indisponivel", "web-research:diagnostic:${output.diagnostic?.take(160).orEmpty()}"),
                 provenance = provenance(capability)
             )
         }
@@ -47,7 +55,7 @@ class WebResearchExecutor(
         return ActionExecution(
             success = true,
             result = montarResumo(resultados),
-            evidence = resultados.map { evidenciaDe(it) },
+            evidence = resultados.map { evidenciaDe(it) } + output.citations.map { "web-research:citation=${it.index}:${it.url}" } + "web-research:quality=${output.sourceQuality}",
             provenance = provenance(capability),
             researchSources = resultados
         )

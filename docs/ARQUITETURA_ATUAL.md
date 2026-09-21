@@ -108,3 +108,13 @@ Para `Door.CHAT` com rota `CONVERSATION`, o caminho canônico é `IntentEnvelope
 O BrainCode continua dono de `CapabilityRegistry`, `PolicyBroker`, `ActionGateway`, memória persistente, EventStore, evidências e readiness. Perguntas de dados atuais continuam sendo classificadas pelo Intent Envelope e encaminhadas à capability apropriada; o engine simbólico não responde clima, cotação ou outro dado mutável a partir de conhecimento estático. O fallback de conversa é neutro e nunca usa o texto de requisitos/planejamento.
 
 Foram importados apenas recursos conversacionais sob `app/src/main/assets/no_inference/`: padrões sociais, aliases, templates explicativos, licença AGPL-3.0 e knowledge base local em português. CLI, TUI, servidor, coding agent `cos`, editor, code generator, math solver e APIs externas ficaram fora do runtime Android.
+
+## 12. Research Harness e Web Access
+
+`network.research` usa o contrato próprio `ResearchRequest → WebResearchAgent → ResearchRunResult`. O contrato separa query, contexto, freshness, constraints, source requirements, max steps e network policy, e a saída separa answer/data, sources, citations, evidence, source quality, confidence, failed sources, diagnostic e execution metadata. `ResponseComposer` recebe somente texto autorizado; diagnóstico técnico continua em Evidence/EventStore/CI e não é resposta principal.
+
+O `WebResearchAgent` é determinístico e provider-agnostic. `SearchProvider`, `FetchProvider`, `BrowserProvider` e `ExtractionProvider` podem ser compostos em `WebProviderSet`; o adapter atual conecta os providers web existentes do BrainCode. SearchClaw contribuiu conceitos de research planning, citações, quality gates, source diversity, context compaction e memory; Firecrawl/web-agent contribuiu conceitos de tool abstraction, skills, schema validation e providers. Nenhum servidor FastAPI, CLI/TUI, runtime Node/Python, Deep Agent, LLM ou API externa desses projetos é obrigatório no APK.
+
+`ResearchSecurityPolicy` trata páginas como dados não confiáveis, detecta prompt injection, limita conteúdo entregue e mantém policy/permissions fora do conteúdo web. URLs passam por sanitização, allow/block domains e exigência HTTPS antes de serem aceitas.
+
+`AgentRegistry` registra especialistas por categoria, contrato, capability, provenance e licença: `conversation.no-inference`, `research.brain-harness` e `web.providers`. O Router continua selecionando por capability/contrato; o nome dos projetos externos não é autoridade de roteamento.
