@@ -146,3 +146,15 @@ O Marco 5 somente será considerado concluído quando:
 ### Registro de execução incremental
 
 O primeiro módulo da Fase 1 foi implementado em `com.brain.secretary`. A classificação determinística, a matriz `DoorPolicy`, o transporte de `DoorScope`, a persistência de `SecretaryState` e a proteção do splitter já possuem testes focados verdes. A Porta 1 não é considerada consolidada enquanto CI remoto, regressão completa, E2E e readiness não apresentarem evidência verde no mesmo HEAD.
+
+
+#### Referência registrada — MeiGen para a Porta 2
+
+[ ] auditar o projeto MeiGen/MeiGen-AI-Design-MCP antes de qualquer incorporação.
+[ ] verificar licença, código real, testes, segurança e compatibilidade.
+[ ] avaliar Prompt Crafter, Gallery/Reference Research, biblioteca de prompts, especialistas/subagentes, Skills, MCP e execução paralela.
+[ ] avaliar geração visual por providers e ComfyUI local como capabilities, não como orquestrador.
+[ ] definir o que será incorporado, adaptado ou usado somente como referência.
+[ ] manter provider/API bloqueado até o Marco 5.3 e autorização da Policy.
+[ ] integrar somente após consolidação formal da Porta 1.
+[ ] na Porta 2, garantir Agent Self-E2E antes do retorno ao Secretário e Door E2E antes da entrega.
