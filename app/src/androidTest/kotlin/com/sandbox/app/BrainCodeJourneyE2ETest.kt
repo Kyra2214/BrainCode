@@ -113,8 +113,17 @@ class BrainCodeJourneyE2ETest {
     fun missingRequirementBecomesClarificationQuestion() {
         send("Quero discutir fotografia")
         composeRule.waitUntil(timeoutMillis = 120_000) {
-            composeRule.onAllNodesWithText("sujeito principal", substring = true, useUnmergedTree = true)
-                .fetchSemanticsNodes().isNotEmpty()
+            val hasClarificationMarker =
+                composeRule.onAllNodesWithText("Esclarecimento", substring = true, useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty() ||
+                composeRule.onAllNodesWithText("Preciso de um esclarecimento", substring = true, useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+            val hasQuestionMarker =
+                composeRule.onAllNodesWithText("sujeito principal", substring = true, useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty() ||
+                composeRule.onAllNodesWithText("Qual é a sua preferência?", substring = true, useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+            hasClarificationMarker && hasQuestionMarker
         }
     }
 
