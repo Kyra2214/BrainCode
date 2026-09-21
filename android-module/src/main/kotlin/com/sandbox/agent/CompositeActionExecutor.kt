@@ -18,5 +18,14 @@ class CompositeActionExecutor(
         request: ActionRequest,
         capability: CapabilityDefinition,
         decision: PolicyDecision
-    ): ActionExecution = (overrides[capability.id] ?: defaultExecutor).execute(request, capability, decision)
+    ): ActionExecution {
+        if (capability.category == com.brain.capability.CapabilityCategory.AGENT && capability.id !in overrides) {
+            return ActionExecution(
+                false,
+                error = "agent indisponível: executor dedicado não registrado para " + capability.id,
+                provenance = listOf("composite:fail-closed", "agent:" + capability.id)
+            )
+        }
+        return (overrides[capability.id] ?: defaultExecutor).execute(request, capability, decision)
+    }
 }
