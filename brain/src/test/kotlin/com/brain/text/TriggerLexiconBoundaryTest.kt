@@ -31,8 +31,16 @@ class TriggerLexiconBoundaryTest {
     @Test
     fun `termos curtos exigem fronteira nos dois lados`() {
         assertFalse(TriggerLexicon.matches("aplicativo", listOf("app")))
+        assertFalse(TriggerLexicon.matches("applicativo", listOf("app")))
+        assertFalse(TriggerLexicon.matches("xapp", listOf("app")))
         assertTrue(TriggerLexicon.matches("quero criar um app", TriggerLexicon.SUBSTANTIVOS_ENTREGAVEL))
-        assertFalse(IntentNegation.hasAllowedOccurrence("aplaplicativo", "app"))
+        assertFalse(IntentNegation.hasAllowedOccurrence("quero criar um applicativo", "app"))
+        assertTrue(IntentNegation.hasAllowedOccurrence("quero criar um app", "app"))
+    }
+
+    @Test
+    fun `fronteira direita impede hoje e dentro de hoje em`() {
+        assertFalse(IntentNegation.hasAllowedOccurrence("tempo hoje em rio das ostras", "hoje e"))
     }
 
     private fun suspendTest(block: suspend () -> Unit) {

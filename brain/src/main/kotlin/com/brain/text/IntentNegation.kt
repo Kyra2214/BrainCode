@@ -1,5 +1,7 @@
 package com.brain.text
 
+import java.util.Locale
+
 /**
  * Heurística deliberadamente pequena para não transformar o TermMatcher em parser semântico.
  * Ela só bloqueia uma ocorrência quando há um marcador negativo imediatamente antes da ação,
@@ -19,9 +21,9 @@ object IntentNegation {
         occurrences(text, terms).any { isNegated(text, it.first) }
 
     private fun occurrences(text: String, terms: Iterable<String>): List<Pair<Int, Int>> {
-        val normalized = text.lowercase()
+        val normalized = text.lowercase(Locale.ROOT)
         return terms.flatMap { term ->
-            val value = term.trim().lowercase()
+            val value = term.trim().lowercase(Locale.ROOT)
             if (value.isEmpty()) emptyList()
             else Regex("(?<![\\p{L}\\p{N}])${Regex.escape(value)}(?![\\p{L}\\p{N}])").findAll(normalized)
                 .map { it.range.first to it.range.last + 1 }
@@ -30,7 +32,7 @@ object IntentNegation {
     }
 
     private fun isNegated(text: String, start: Int): Boolean {
-        val normalized = text.lowercase()
+        val normalized = text.lowercase(Locale.ROOT)
         val clauseStart = listOf(
             normalized.lastIndexOf(',', start - 1),
             normalized.lastIndexOf(';', start - 1),

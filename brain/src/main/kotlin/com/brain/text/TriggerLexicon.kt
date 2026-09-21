@@ -1,9 +1,11 @@
 package com.brain.text
 
+import java.util.Locale
+
 /**
  * Fonte única de verdade para dicionários de gatilho usados pelas heurísticas
- * determinísticas do Secretário, Planner e respostas de chat. Nenhuma lógica
- * aqui, só listas auditáveis.
+ * determinísticas do Secretário, Planner e respostas de chat. As listas são
+ * auditáveis e o matcher seguro fica centralizado neste objeto.
  */
 object TriggerLexicon {
     // Conversa casual versus intenção real de criar.
@@ -124,7 +126,12 @@ object TriggerLexicon {
      */
     fun matches(texto: String, termos: List<String>): Boolean =
         termos.any { termo ->
-            Regex("(?<![\\p{L}\\p{N}])" + Regex.escape(termo.lowercase()) + "(?![\\p{L}\\p{N}])")
-                .containsMatchIn(texto.lowercase())
+            val value = termo.trim()
+            if (value.isEmpty()) {
+                false
+            } else {
+                Regex("(?<![\\p{L}\\p{N}])" + Regex.escape(value.lowercase(Locale.ROOT)) + "(?![\\p{L}\\p{N}])")
+                    .containsMatchIn(texto.lowercase(Locale.ROOT))
+            }
         }
 }

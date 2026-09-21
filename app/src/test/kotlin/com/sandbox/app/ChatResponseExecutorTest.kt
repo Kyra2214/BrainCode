@@ -14,6 +14,7 @@ import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -44,6 +45,16 @@ class ChatResponseExecutorTest {
         assertTrue(result.result!!.contains("18:30"))
         assertTrue(result.evidence.any { it.startsWith("chat:clock:") })
         assertTrue(result.provenance.contains("app:ChatResponseExecutor"))
+    }
+
+    @Test
+    fun `pergunta de data conhecida continua respondendo a data local`() {
+        val executor = ChatResponseExecutor(Clock.fixed(Instant.parse("2026-09-21T18:30:00Z"), ZoneId.of("UTC")))
+        val result = executor.execute(request("Que dia é hoje?"), capability, decision)
+
+        assertTrue(result.success)
+        assertTrue(result.result!!.contains("Hoje é 21/09/2026"))
+        assertTrue(result.evidence.any { it.startsWith("chat:clock:") })
     }
 
     @Test
@@ -80,6 +91,27 @@ class ChatResponseExecutorTest {
         assertTrue(result.evidence.contains("chat:factual-question-no-research"))
         assertTrue(result.result!!.contains("não tenho essa informação sem pesquisar"))
         assertTrue(result.result!!.contains("quer que eu pesquise agora"))
+    }
+
+    @Test
+    fun `tempo hoje em local e pergunta factual e nao data`() {
+        val result = ChatResponseExecutor().execute(request("tempo hoje em rio das ostras"), capability, decision)
+
+        assertTrue(result.success)
+        assertTrue(result.evidence.contains("chat:factual-question-no-research"))
+        assertFalse(result.evidence.any { it.startsWith("chat:clock:") })
+        assertFalse(result.result!!.startsWith("Hoje é"))
+    }
+
+    @Test
+    fun `hoje seguido de texto comum nao responde data`() {
+        listOf("hoje eu vou trabalhar", "hoje espero que chova").forEach { prompt ->
+            val result = ChatResponseExecutor().execute(request(prompt), capability, decision)
+
+            assertTrue(prompt, result.success)
+            assertTrue(prompt, result.evidence.contains("chat:conversation"))
+            assertFalse(prompt, result.evidence.any { it.startsWith("chat:clock:") })
+        }
     }
 
     @Test
