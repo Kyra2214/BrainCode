@@ -30,7 +30,8 @@ class ValidationEngineTest {
                 door = Door.CHAT,
                 result = "Preciso de um esclarecimento.",
                 evidence = listOf("chat:clarification-question"),
-                missingRequirements = listOf("sujeito principal")
+                missingRequirements = listOf("sujeito principal"),
+                requiresInput = true
             )
         )
         assertEquals(ValidationStatus.NEEDS_INPUT, result.status)
