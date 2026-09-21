@@ -82,6 +82,9 @@ class BrainSandboxControllerChatTest {
             assertTrue(cycle.resposta!!.contains("Qual é a sua preferência?"))
             assertFalse(cycle.passos.any { it.capacidade.orEmpty().startsWith("workspace.") || it.capacidade.orEmpty().startsWith("sandbox.") })
             assertTrue(controller.localEvents("chat-clarification").any { it.type == "ClarificationRequested" && it.payload["missing"] == "sujeito principal" })
+            assertTrue(step.capacidade == "chat.respond")
+            assertTrue(cycle.posExecucao?.selfE2E?.all { it.passed } == true)
+            assertEquals(com.brain.validation.ValidationStatus.NEEDS_INPUT, cycle.posExecucao?.doorE2E?.status)
         } finally {
             root.deleteRecursively()
         }
