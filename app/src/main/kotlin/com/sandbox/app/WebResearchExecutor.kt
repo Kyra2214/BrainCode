@@ -46,7 +46,7 @@ class WebResearchExecutor(
         if (resultados.isEmpty()) {
             return ActionExecution(
                 success = true,
-                result = output.userMessage ?: "Não consegui concluir a pesquisa agora. Prosseguindo com conhecimento local.",
+                result = "WebResearch indisponível. ${output.userMessage ?: "Prosseguindo com conhecimento local."}",
                 evidence = listOf("web-research:indisponivel", "web-research:diagnostic:${output.diagnostic?.take(160).orEmpty()}"),
                 provenance = provenance(capability)
             )
