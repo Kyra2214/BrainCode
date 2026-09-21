@@ -121,17 +121,25 @@ class ValidationEngine {
 
     fun selfAgent(subject: ValidationSubject, stage: String = "agent", attempt: Int = 1, previousResultId: String? = null): ValidationResult {
         val contract = ValidationContractRegistry.contractForCapability(subject.capability)
-            ?: ValidationContract(
-                id = "self-e2e:unregistered:" + subject.capability,
+        val owner = ValidationContractRegistry.ownerForCapability(subject.capability)
+        if (contract == null || owner == null) {
+            return ValidationResult(
+                status = ValidationStatus.FAIL,
+                contractId = "self-e2e:unregistered:" + subject.capability,
+                taskId = subject.taskId,
                 capability = subject.capability,
-                level = ValidationLevel.AGENT,
-                checks = listOf(
-                    ValidationCheck("result-or-evidence", "capacidade produz resultado ou evidência") {
-                        it.result.isNotBlank() || it.evidence.isNotEmpty()
-                    }
+                agentId = subject.agentId,
+                stage = stage,
+                failedChecks = listOf("contract.missing", "agent.unavailable"),
+                evidenceIds = subject.evidence,
+                attempt = attempt,
+                previousResultId = previousResultId,
+                findingOwners = mapOf(
+                    "contract.missing" to FindingOwner.INFRA,
+                    "agent.unavailable" to FindingOwner.AGENT
                 )
             )
-        val owner = ValidationContractRegistry.ownerForCapability(subject.capability)
+        }
         return validate(contract, subject.copy(agentId = subject.agentId ?: owner), stage, attempt, previousResultId)
     }
 
@@ -153,14 +161,42 @@ class ValidationEngine {
 
     fun promptContent(subject: ValidationSubject, stage: String = "door.prompt", attempt: Int = 1, previousResultId: String? = null): ValidationResult {
         val checks = subject.requirements.mapIndexed { index, requirement ->
-            ValidationCheck("prompt.requirement." + index, "requisito do prompt presente", FindingSeverity.HIGH, FindingOwner.AGENT) {
+            ValidationCheck("prompt.requirement." + index, "requisito explícito do prompt presente", FindingSeverity.HIGH, FindingOwner.AGENT) {
                 com.brain.behavior.RequirementMatcher.isPresent(requirement, it.result)
             }
-        }
+        } + promptSlotChecks(subject.requirements)
         return validate(
-            ValidationContract("door.prompt.content", subject.capability, ValidationLevel.CONTENT, checks + ValidationCheck("prompt.non-empty", "prompt final não vazio") { it.result.isNotBlank() }),
+            ValidationContract(
+                "door.prompt.content",
+                subject.capability,
+                ValidationLevel.CONTENT,
+                checks.distinctBy { it.id } + ValidationCheck("prompt.non-empty", "prompt final não vazio") { it.result.isNotBlank() }
+            ),
             subject, stage, attempt, previousResultId
         )
+    }
+
+    private fun promptSlotChecks(requirements: List<String>): List<ValidationCheck> {
+        val aliases = mapOf(
+            "sujeito" to "subject", "subject" to "subject",
+            "ação" to "action", "acao" to "action", "action" to "action",
+            "ambiente" to "environment", "environment" to "environment",
+            "elementos" to "elements", "elements" to "elements",
+            "estilo" to "style", "style" to "style",
+            "iluminação" to "lighting", "iluminacao" to "lighting", "lighting" to "lighting",
+            "composição" to "composition", "composicao" to "composition", "composition" to "composition",
+            "formato" to "format", "format" to "format",
+            "restrições" to "restrictions", "restricoes" to "restrictions", "restrictions" to "restrictions"
+        )
+        return requirements.mapNotNull { requirement ->
+            val match = Regex("^\\s*([\\p{L}]+)\\s*[:=]\\s*(.+?)\\s*$").find(requirement) ?: return@mapNotNull null
+            val slot = aliases[match.groupValues[1].lowercase()] ?: return@mapNotNull null
+            val value = match.groupValues[2].trim()
+            if (value.isBlank()) return@mapNotNull null
+            ValidationCheck("prompt.slot.$slot", "slot $slot presente no prompt", FindingSeverity.HIGH, FindingOwner.AGENT) {
+                com.brain.behavior.RequirementMatcher.isPresent(value, it.result)
+            }
+        }
     }
 
     fun lightChat(subject: ValidationSubject, stage: String = "door.chat", attempt: Int = 1, previousResultId: String? = null): ValidationResult =
