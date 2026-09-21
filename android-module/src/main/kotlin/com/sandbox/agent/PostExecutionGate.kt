@@ -174,10 +174,14 @@ class PostExecutionGate(private val memory: LayeredMemory) {
                         door = com.brain.secretary.Door.CHAT,
                         result = chatStep.resultado.orEmpty(),
                         evidence = evidenceIds,
-                        requiresInput = evidenceIds.any { it == "chat:clarification-question" }
-                    )
+                        requiresInput = evidenceIds.any { it == "chat:clarification-question" },
+                        restrictions = emptySet()
+                    ),
+                    stage = "door.chat",
+                    attempt = attempt,
+                    previousResultId = previousValidationResultId
                 )
-            }
+            )
             promptStep != null -> {
                 val evidenceIds = promptStep.executionEvidence + promptStep.evidencias.map { it.toString() }
                 validation.promptContent(
@@ -187,7 +191,10 @@ class PostExecutionGate(private val memory: LayeredMemory) {
                         result = promptStep.resultado.orEmpty(),
                         requirements = requirements,
                         evidence = evidenceIds
-                    )
+                    ),
+                    stage = "door.prompt",
+                    attempt = attempt,
+                    previousResultId = previousValidationResultId
                 )
             }
             else -> null
@@ -209,10 +216,16 @@ class PostExecutionGate(private val memory: LayeredMemory) {
             status = CritiqueStatus.NEEDS_REVISION,
             findings = critique.findings + validationFindings
         )
+        val effectiveRevision = if (validationFindings.isEmpty()) revision else RevisionDecision(
+            action = if (doorE2E?.status == com.brain.validation.ValidationStatus.NEEDS_INPUT) RevisionAction.ASK_CLARIFICATION else RevisionAction.REVISE,
+            reason = "validação Self-E2E/E2E encontrou finding bloqueante",
+            targetCriteria = validationFindings.map { it.code },
+            maxAttempts = 3
+        )
         return ResultadoPosExecucao(
             verification = verification,
-            critique = critique,
-            revision = revision,
+            critique = finalCritique,
+            revision = effectiveRevision,
             readiness = readinessReport,
             learningRecorded = learningRecorded,
             issues = issues + selfE2E.filterNot { it.passed }.map { "self-e2e:" + it.contractId } +
