@@ -39,7 +39,8 @@ class PostExecutionGate(private val memory: LayeredMemory) {
         cycle: ResultadoCiclo,
         requirements: List<String> = emptyList(),
         attempt: Int = 1,
-        previousValidationResultId: String? = null
+        previousValidationResultId: String? = null,
+        createPhase: String? = null
     ): ResultadoPosExecucao {
         val evidence = cycle.passos.map { step ->
             ExecutionEvidence(
@@ -166,7 +167,26 @@ class PostExecutionGate(private val memory: LayeredMemory) {
         }
         val chatStep = cycle.passos.firstOrNull { it.capacidade == "chat.respond" }
         val promptStep = cycle.passos.firstOrNull { it.capacidade == "prompt.library.generate" }
+        val createStep = cycle.passos.firstOrNull { it.capacidade.startsWith("workspace.") || it.capacidade.startsWith("sandbox.") }
         val doorE2E: ValidationResult? = when {
+            createPhase != null && createStep != null -> {
+                val evidenceIds = createStep.executionEvidence + createStep.evidencias.map { it.toString() } +
+                    listOfNotNull(createStep.approvalId?.let { "approval:" + it })
+                validation.productPhase(
+                    createPhase,
+                    ValidationSubject(
+                        capability = createStep.capacidade ?: "create",
+                        taskId = createStep.passoId,
+                        door = com.brain.secretary.Door.CREATE,
+                        result = createStep.resultado.orEmpty(),
+                        requirements = requirements,
+                        evidence = evidenceIds
+                    ),
+                    stage = "door.create:" + createPhase,
+                    attempt = attempt,
+                    previousResultId = previousValidationResultId
+                )
+            }
             chatStep != null -> {
                 val evidenceIds = chatStep.executionEvidence + chatStep.evidencias.map { it.toString() }
                 validation.lightChat(
