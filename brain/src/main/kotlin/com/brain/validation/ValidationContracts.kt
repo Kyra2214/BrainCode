@@ -99,7 +99,7 @@ class ValidationEngine {
                 capability = subject.capability,
                 level = ValidationLevel.AGENT,
                 checks = listOf(
-                    ValidationCheck("result.non-empty", "resultado do especialista não vazio") { it.result.isNotBlank() }
+                    ValidationCheck("result-or-evidence", "especialista deve produzir resultado ou evidência") { it.result.isNotBlank() || it.evidence.isNotEmpty() }
                 )
             ),
             subject,
