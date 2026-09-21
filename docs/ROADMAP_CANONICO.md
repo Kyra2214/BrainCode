@@ -128,10 +128,28 @@ Não iniciar a integração de APIs externas antes de Porta 1 e Porta 2 estarem 
 [ ] fechar segunda opinião e retorno ao responsável quando houver erro.
 [x] consolidar Git autorizado / entrega ZIP.
 [x] bateria de testes funcional + regressão.
-[x] CI/E2E/readiness final da Porta 3.
-[x] declarar Porta 3 consolidada somente com evidência verde.
+[ ] CI/E2E/readiness final da Porta 3.
+[ ] declarar Porta 3 consolidada somente após o novo contrato de validação e evidência verde no mesmo HEAD.
 
-Após auditoria, foram adicionados o gate persistente via `FileApprovalStore`, `CreationWorkflowPlanner`, `CreateDeliveryTest`, `FileApprovalStorePersistenceTest` e a jornada instrumentada `creationJourneyRequiresApprovalBeforeWorkspaceExecution`. CI `35536050052` e UI E2E `35536055182` passaram no commit `f859426`; a Porta 3 está consolidada para este HEAD.
+Registro histórico: foram adicionados o gate persistente via `FileApprovalStore`, `CreationWorkflowPlanner`, `CreateDeliveryTest`, `FileApprovalStorePersistenceTest` e a jornada instrumentada `creationJourneyRequiresApprovalBeforeWorkspaceExecution`. Os runs históricos `35536050052` e `35536055182` passaram no commit `f859426`, mas essa jornada não prova sozinha a execução completa de todas as fases, especialistas, Self-E2E, Door E2E, correção/revalidação e integração. Portanto, o HEAD atual não deve declarar a Porta 3 consolidada com base apenas nessa evidência.
+
+
+### Marco 5.5 — Self-E2E por agente + E2E independente da Porta
+
+[ ] E2E-0 — corrigir base confiável: DoorScope/Policy, fallback de UI, RequirementMatcher, agentes sem executor como UNAVAILABLE, CompositeActionExecutor e higiene dos testes.
+[ ] E2E-1 — implementar ValidationContract, ValidationResult, ValidationCheck e roteamento de findings.
+[ ] E2E-2 — integrar ValidationEngine ao PostExecutionGate e fechar o vertical slice real de chat.respond/NEEDS_INPUT na Porta 1.
+[ ] E2E-3 — migrar capabilities/agentes reais para executor + contrato + Self-E2E + validação do Secretário.
+[ ] E2E-4 — fechar E2E de conteúdo e fluxo terminal da Porta 2.
+[ ] E2E-5 — fechar Porta 3 por fases, usando Roadmap como checklist operacional do Secretário.
+[ ] E2E-6 — validar jornada de produto, documentação, entrega e readiness.
+
+**Regra:** nenhum agente/capability selecionável fica AVAILABLE sem executor real, ValidationContract e Self-E2E. O Secretário executa uma validação independente antes de liberar a próxima etapa. `NEEDS_INPUT` é resultado válido na Porta 1; falhas são encaminhadas ao owner correto e revalidadas.
+
+**Porta 1:** E2E LIGHT, sem MeiGen.
+**Porta 2:** E2E CONTENT; MeiGen só entra quando a implementação da Porta 2 começar e após a consolidação da Porta 1.
+**Porta 3:** E2E por fase/tarefa, com Roadmap, especialistas, evidências e aprovação persistente.
+
 
 ### Critério de conclusão do Marco 5
 
