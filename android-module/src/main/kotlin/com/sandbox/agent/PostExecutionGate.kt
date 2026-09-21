@@ -37,7 +37,9 @@ class PostExecutionGate(private val memory: LayeredMemory) {
     fun evaluate(
         plan: PlanoExecucao,
         cycle: ResultadoCiclo,
-        requirements: List<String> = emptyList()
+        requirements: List<String> = emptyList(),
+        attempt: Int = 1,
+        previousValidationResultId: String? = null
     ): ResultadoPosExecucao {
         val evidence = cycle.passos.map { step ->
             ExecutionEvidence(
@@ -134,7 +136,7 @@ class PostExecutionGate(private val memory: LayeredMemory) {
                     result = cycle.resposta.orEmpty(),
                     evidence = evidence.firstOrNull() ?: ExecutionEvidence("${cycle.runId}:cycle", "cycle", cycle.resposta.orEmpty().ifBlank { "cycle" }, "CicloExecucaoPlano", verified = true),
                     verification = verification,
-                    critique = critique,
+                    critique = finalCritique,
                     readiness = readinessReport
                 )
             ).isSuccess
@@ -153,9 +155,12 @@ class PostExecutionGate(private val memory: LayeredMemory) {
                     capability = step.capacidade ?: "step",
                     agentId = step.capacidade,
                     result = step.resultado.orEmpty(),
-                    evidence = stepEvidence
+                    evidence = stepEvidence,
+                    requirements = requirements
                 ),
-                stage = "agent:" + (step.capacidade ?: "step")
+                stage = "agent:" + (step.capacidade ?: "step"),
+                attempt = attempt,
+                previousResultId = previousValidationResultId
             )
         }
         val chatStep = cycle.passos.firstOrNull { it.capacidade == "chat.respond" }
@@ -187,6 +192,23 @@ class PostExecutionGate(private val memory: LayeredMemory) {
             }
             else -> null
         }
+        val validationFindings = selfE2E.filterNot { it.passed }.map {
+            CritiqueFinding(
+                code = "validation." + it.contractId,
+                message = "Self-E2E falhou: " + it.failedChecks.joinToString(","),
+                severity = FindingSeverity.BLOCKING
+            )
+        } + listOfNotNull(doorE2E?.takeUnless { it.passed || it.status == com.brain.validation.ValidationStatus.NEEDS_INPUT }?.let {
+            CritiqueFinding(
+                code = "door-e2e." + it.contractId,
+                message = "E2E da porta falhou: " + it.failedChecks.joinToString(","),
+                severity = FindingSeverity.BLOCKING
+            )
+        })
+        val finalCritique = if (validationFindings.isEmpty()) critique else critique.copy(
+            status = CritiqueStatus.NEEDS_REVISION,
+            findings = critique.findings + validationFindings
+        )
         return ResultadoPosExecucao(
             verification = verification,
             critique = critique,
