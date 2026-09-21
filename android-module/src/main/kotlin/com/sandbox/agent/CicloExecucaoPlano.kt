@@ -30,6 +30,7 @@ import com.brain.behavior.RevisionDecision
 import com.brain.behavior.RevisionAction
 import com.brain.behavior.VerificationResult
 import com.brain.behavior.VerificationStatus
+import com.brain.validation.ValidationResult
 
 
 enum class StatusPasso { APROVADO, REPROVADO, NEGADO_PELA_POLICY, AGUARDANDO_APROVACAO, BLOQUEADO_POR_DEPENDENCIA }
@@ -82,7 +83,9 @@ data class ResultadoPosExecucao(
     val readiness: ReadinessReport,
     val learningRecorded: Boolean,
     val issues: List<String> = emptyList(),
-    val revisionAttempts: List<RevisionAttemptTrace> = emptyList()
+    val revisionAttempts: List<RevisionAttemptTrace> = emptyList(),
+    val selfE2E: List<ValidationResult> = emptyList(),
+    val doorE2E: ValidationResult? = null
 ) {
     /**
      * Conclusão semântica: nenhum resultado técnico parcial pode promover a UI
