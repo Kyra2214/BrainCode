@@ -1,12 +1,12 @@
 package com.brain.validation
 
 import com.brain.secretary.Door
+import java.util.UUID
 
 enum class ValidationStatus { PASS, FAIL, NEEDS_INPUT }
-
 enum class ValidationLevel { LIGHT, CONTENT, AGENT, DOOR, PRODUCT }
-
 enum class FindingOwner { AGENT, USER, POLICY, INFRA }
+enum class FindingSeverity { BLOCKING, HIGH, MEDIUM, LOW }
 
 data class ValidationSubject(
     val capability: String,
@@ -29,8 +29,6 @@ data class ValidationCheck(
     val evaluate: (ValidationSubject) -> Boolean
 )
 
-enum class FindingSeverity { BLOCKING, HIGH, MEDIUM, LOW }
-
 data class ValidationContract(
     val id: String,
     val capability: String,
@@ -38,7 +36,13 @@ data class ValidationContract(
     val checks: List<ValidationCheck>,
     val requiredEvidence: List<String> = emptyList(),
     val maxAttempts: Int = 3
-)
+) {
+    init {
+        require(id.isNotBlank() && capability.isNotBlank()) { "contrato de validação incompleto" }
+        require(checks.isNotEmpty()) { "contrato de validação precisa de checks" }
+        require(maxAttempts in 1..3) { "maxAttempts deve estar entre 1 e 3" }
+    }
+}
 
 data class ValidationResult(
     val status: ValidationStatus,
@@ -52,9 +56,11 @@ data class ValidationResult(
     val evidenceIds: List<String> = emptyList(),
     val attempt: Int = 1,
     val previousResultId: String? = null,
-    val findingOwners: Map<String, FindingOwner> = emptyMap()
+    val findingOwners: Map<String, FindingOwner> = emptyMap(),
+    val resultId: String = UUID.randomUUID().toString()
 ) {
     val passed: Boolean get() = status == ValidationStatus.PASS
+    val correctionRequired: Boolean get() = status == ValidationStatus.FAIL
 }
 
 class ValidationEngine {
@@ -65,9 +71,26 @@ class ValidationEngine {
         attempt: Int = 1,
         previousResultId: String? = null
     ): ValidationResult {
+        require(attempt >= 1) { "attempt deve ser >= 1" }
+        if (attempt > contract.maxAttempts) {
+            return ValidationResult(
+                status = ValidationStatus.FAIL,
+                contractId = contract.id,
+                capability = contract.capability,
+                agentId = subject.agentId,
+                stage = stage,
+                failedChecks = listOf("attempt-limit"),
+                evidenceIds = subject.evidence,
+                attempt = attempt,
+                previousResultId = previousResultId,
+                findingOwners = mapOf("attempt-limit" to FindingOwner.INFRA)
+            )
+        }
         val passed = contract.checks.filter { runCatching { it.evaluate(subject) }.getOrDefault(false) }
         val failed = contract.checks.filterNot { it in passed }
-        val missingEvidence = contract.requiredEvidence.filterNot { required -> subject.evidence.any { it.startsWith(required) } }
+        val missingEvidence = contract.requiredEvidence.filterNot { required ->
+            subject.evidence.any { it.startsWith(required) }
+        }
         val failedIds = (failed.map { it.id } + missingEvidence.map { "evidence:$it" }).distinct()
         val status = when {
             subject.requiresInput && contract.level == ValidationLevel.LIGHT -> ValidationStatus.NEEDS_INPUT
@@ -92,87 +115,64 @@ class ValidationEngine {
         )
     }
 
-    fun selfAgent(subject: ValidationSubject, stage: String = "agent", attempt: Int = 1): ValidationResult =
-        validate(
-            ValidationContract(
-                id = "agent.self.generic",
+    fun selfAgent(subject: ValidationSubject, stage: String = "agent", attempt: Int = 1, previousResultId: String? = null): ValidationResult {
+        val contract = ValidationContractRegistry.contractForCapability(subject.capability)
+            ?: ValidationContract(
+                id = "self-e2e:unregistered:" + subject.capability,
                 capability = subject.capability,
                 level = ValidationLevel.AGENT,
                 checks = listOf(
-                    ValidationCheck("result-or-evidence", "especialista deve produzir resultado ou evidência") { it.result.isNotBlank() || it.evidence.isNotEmpty() }
-                )
-            ),
-            subject,
-            stage,
-            attempt
-        )
-
-    fun productPhase(
-        phase: String,
-        subject: ValidationSubject,
-        stage: String = "door.create",
-        attempt: Int = 1
-    ): ValidationResult =
-        validate(
-            ValidationContract(
-                id = "door.create.phase." + phase.lowercase().replace(" ", "-"),
-                capability = subject.capability,
-                level = ValidationLevel.PRODUCT,
-                checks = listOf(
-                    ValidationCheck("phase.result-or-evidence", "fase produz resultado ou evidência") {
+                    ValidationCheck("result-or-evidence", "capacidade produz resultado ou evidência") {
                         it.result.isNotBlank() || it.evidence.isNotEmpty()
                     }
                 )
-            ),
-            subject,
-            stage,
-            attempt
-        )
+            )
+        val owner = ValidationContractRegistry.ownerForCapability(subject.capability)
+        return validate(contract, subject.copy(agentId = subject.agentId ?: owner), stage, attempt, previousResultId)
+    }
 
-    fun promptContent(subject: ValidationSubject, stage: String = "door.prompt", attempt: Int = 1): ValidationResult {
+    fun productPhase(phase: String, subject: ValidationSubject, stage: String = "door.create", attempt: Int = 1, previousResultId: String? = null): ValidationResult {
+        val normalized = phase.uppercase()
+        val checks = when (normalized) {
+            "DISCUSSION", "REQUIREMENTS" -> listOf(ValidationCheck("phase.requirements", "fase possui resultado/requisitos", FindingSeverity.HIGH) { it.result.isNotBlank() || it.requirements.isNotEmpty() })
+            "ARCHITECTURE" -> listOf(ValidationCheck("phase.architecture", "arquitetura possui resultado", FindingSeverity.HIGH) { it.result.isNotBlank() })
+            "PLAN" -> listOf(ValidationCheck("phase.plan", "plano possui resultado e evidência", FindingSeverity.HIGH) { it.result.isNotBlank() && it.evidence.isNotEmpty() })
+            "APPROVED" -> listOf(ValidationCheck("phase.approval", "aprovação persistente/evidência presente") { it.evidence.any { evidence -> evidence.startsWith("approval:") } })
+            "EXECUTION", "INTEGRATION" -> listOf(ValidationCheck("phase.execution", "execução produz resultado/evidência", FindingSeverity.BLOCKING) { it.result.isNotBlank() || it.evidence.any { evidence -> evidence.startsWith("execution:") } })
+            "REVIEW" -> listOf(ValidationCheck("phase.review", "revisão produz resultado", FindingSeverity.HIGH) { it.result.isNotBlank() })
+            "TESTS" -> listOf(ValidationCheck("phase.tests", "testes produzem evidência", FindingSeverity.BLOCKING) { it.evidence.any { evidence -> evidence.startsWith("test:") || evidence.startsWith("verification:") } })
+            "DELIVERY" -> listOf(ValidationCheck("phase.delivery", "entrega possui evidência verificável", FindingSeverity.BLOCKING) { it.evidence.any { evidence -> evidence.startsWith("delivery:") || evidence.startsWith("zip:") } })
+            else -> listOf(ValidationCheck("phase.result-or-evidence", "fase produz resultado ou evidência") { it.result.isNotBlank() || it.evidence.isNotEmpty() })
+        }
+        return validate(ValidationContract("door.create.phase." + normalized.lowercase(), subject.capability, ValidationLevel.PRODUCT, checks), subject, stage, attempt, previousResultId)
+    }
+
+    fun promptContent(subject: ValidationSubject, stage: String = "door.prompt", attempt: Int = 1, previousResultId: String? = null): ValidationResult {
         val checks = subject.requirements.mapIndexed { index, requirement ->
-            ValidationCheck(
-                id = "prompt.requirement.$index",
-                description = "requisito do prompt presente",
-                severity = FindingSeverity.HIGH,
-                owner = FindingOwner.AGENT
-            ) { com.brain.behavior.RequirementMatcher.isPresent(requirement, it.result) }
+            ValidationCheck("prompt.requirement." + index, "requisito do prompt presente", FindingSeverity.HIGH, FindingOwner.AGENT) {
+                com.brain.behavior.RequirementMatcher.isPresent(requirement, it.result)
+            }
         }
         return validate(
-            ValidationContract(
-                id = "door.prompt.content",
-                capability = subject.capability,
-                level = ValidationLevel.CONTENT,
-                checks = checks + ValidationCheck(
-                    "prompt.non-empty",
-                    "prompt final não vazio"
-                ) { it.result.isNotBlank() }
-            ),
-            subject,
-            stage,
-            attempt
+            ValidationContract("door.prompt.content", subject.capability, ValidationLevel.CONTENT, checks + ValidationCheck("prompt.non-empty", "prompt final não vazio") { it.result.isNotBlank() }),
+            subject, stage, attempt, previousResultId
         )
     }
 
-    fun lightChat(subject: ValidationSubject, stage: String = "door.chat", attempt: Int = 1): ValidationResult =
+    fun lightChat(subject: ValidationSubject, stage: String = "door.chat", attempt: Int = 1, previousResultId: String? = null): ValidationResult =
         validate(
             ValidationContract(
-                id = "door.chat.light",
-                capability = "chat.respond",
-                level = ValidationLevel.LIGHT,
-                checks = listOf(
+                "door.chat.light", "chat.respond", ValidationLevel.LIGHT,
+                listOf(
                     ValidationCheck("response.non-empty", "resposta não vazia") { it.result.isNotBlank() },
-                    ValidationCheck("no-workspace", "chat não executa workspace/sandbox") {
-                        it.evidence.none { evidence -> evidence.startsWith("workspace.") || evidence.startsWith("sandbox.") }
-                    },
-                    ValidationCheck("no-policy-denial-success", "negação de Policy não conta como sucesso") {
-                        it.evidence.none { evidence -> evidence == "NEGADO_PELA_POLICY" }
+                    ValidationCheck("no-workspace", "chat não executa workspace/sandbox") { it.evidence.none { evidence -> evidence.startsWith("workspace.") || evidence.startsWith("sandbox.") } },
+                    ValidationCheck("no-policy-denial-success", "negação de Policy não conta como sucesso") { it.evidence.none { evidence -> evidence == "NEGADO_PELA_POLICY" } },
+                    ValidationCheck("restriction.no-web", "NO_WEB impede evidência de rede") {
+                        "NO_WEB" !in it.restrictions || it.evidence.none { evidence -> evidence.startsWith("web:") }
                     }
                 ),
                 requiredEvidence = listOf("chat:")
             ),
-            subject,
-            stage,
-            attempt
+            subject, stage, attempt, previousResultId
         )
 }
