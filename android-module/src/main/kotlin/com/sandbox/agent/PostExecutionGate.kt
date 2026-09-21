@@ -2,6 +2,7 @@ package com.sandbox.agent
 
 import com.brain.behavior.CritiqueInput
 import com.brain.behavior.CritiqueResult
+import com.brain.behavior.CritiqueStatus
 import com.brain.behavior.DoubtDrivenReview
 import com.brain.behavior.ExecutionEvidence
 import com.brain.behavior.ReadinessEvaluator
@@ -127,28 +128,6 @@ class PostExecutionGate(private val memory: LayeredMemory) {
             ReadinessStageName.RELEASE to ownEvidence(ReadinessStageName.RELEASE, listOf("gate:${verification.status.name.lowercase()}:${critique.status.name.lowercase()}"), completed.getValue(ReadinessStageName.RELEASE))
         )
         val readinessReport = readiness.evaluate(ReadinessInput(com.brain.behavior.WorkKind.EXECUTION, completed, evidenceByStage))
-        val learningRecorded = if (verification.passed && critique.status == com.brain.behavior.CritiqueStatus.PASS && readinessReport.status == com.brain.behavior.ReadinessStatus.READY) {
-            learning.record(
-                LearningCandidate(
-                    runId = cycle.runId,
-                    taskId = "plan",
-                    problem = cycle.objetivo,
-                    strategy = plan.passos.joinToString(",") { it.capacidade },
-                    result = cycle.resposta.orEmpty(),
-                    evidence = evidence.firstOrNull() ?: ExecutionEvidence("${cycle.runId}:cycle", "cycle", cycle.resposta.orEmpty().ifBlank { "cycle" }, "CicloExecucaoPlano", verified = true),
-                    verification = verification,
-                    critique = finalCritique,
-                    readiness = readinessReport
-                )
-            ).isSuccess
-        } else false
-        val issues = buildList {
-            if (!verification.passed) add("verification.failed")
-            if (critique.status != com.brain.behavior.CritiqueStatus.PASS) add("critic.${critique.status.name.lowercase()}")
-            if (revision.action != RevisionAction.ACCEPT) add("revision.${revision.action.name.lowercase()}")
-            if (readinessReport.status != com.brain.behavior.ReadinessStatus.READY) addAll(readinessReport.blockers)
-            if (!learningRecorded) add("learning.not-recorded")
-        }
         val selfE2E = cycle.passos.map { step ->
             val stepEvidence = step.executionEvidence + step.evidencias.map { it.toString() }
             validation.selfAgent(
@@ -167,7 +146,7 @@ class PostExecutionGate(private val memory: LayeredMemory) {
         }
         val chatStep = cycle.passos.firstOrNull { it.capacidade == "chat.respond" }
         val promptStep = cycle.passos.firstOrNull { it.capacidade == "prompt.library.generate" }
-        val createStep = cycle.passos.firstOrNull { it.capacidade.startsWith("workspace.") || it.capacidade.startsWith("sandbox.") }
+        val createStep = cycle.passos.firstOrNull { it.capacidade?.startsWith("workspace.") == true || it.capacidade?.startsWith("sandbox.") == true }
         val doorE2E: ValidationResult? = when {
             createPhase != null && createStep != null -> {
                 val evidenceIds = createStep.executionEvidence + createStep.evidencias.map { it.toString() } +
@@ -203,7 +182,7 @@ class PostExecutionGate(private val memory: LayeredMemory) {
                     attempt = attempt,
                     previousResultId = previousValidationResultId
                 )
-            )
+            }
             promptStep != null -> {
                 val evidenceIds = promptStep.executionEvidence + promptStep.evidencias.map { it.toString() }
                 validation.promptContent(
@@ -245,6 +224,28 @@ class PostExecutionGate(private val memory: LayeredMemory) {
             targetCriteria = validationFindings.map { it.code },
             maxAttempts = 3
         )
+        val learningRecorded = if (verification.passed && finalCritique.status == com.brain.behavior.CritiqueStatus.PASS && readinessReport.status == com.brain.behavior.ReadinessStatus.READY) {
+            learning.record(
+                LearningCandidate(
+                    runId = cycle.runId,
+                    taskId = "plan",
+                    problem = cycle.objetivo,
+                    strategy = plan.passos.joinToString(",") { it.capacidade },
+                    result = cycle.resposta.orEmpty(),
+                    evidence = evidence.firstOrNull() ?: ExecutionEvidence("${cycle.runId}:cycle", "cycle", cycle.resposta.orEmpty().ifBlank { "cycle" }, "CicloExecucaoPlano", verified = true),
+                    verification = verification,
+                    critique = finalCritique,
+                    readiness = readinessReport
+                )
+            ).isSuccess
+        } else false
+        val issues = buildList {
+            if (!verification.passed) add("verification.failed")
+            if (finalCritique.status != com.brain.behavior.CritiqueStatus.PASS) add("critic.${finalCritique.status.name.lowercase()}")
+            if (effectiveRevision.action != RevisionAction.ACCEPT) add("revision.${effectiveRevision.action.name.lowercase()}")
+            if (readinessReport.status != com.brain.behavior.ReadinessStatus.READY) addAll(readinessReport.blockers)
+            if (!learningRecorded) add("learning.not-recorded")
+        }
         return ResultadoPosExecucao(
             verification = verification,
             critique = finalCritique,
