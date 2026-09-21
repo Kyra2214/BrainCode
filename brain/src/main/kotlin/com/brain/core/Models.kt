@@ -46,7 +46,9 @@ data class Submodulo(
 data class Tarefa(
     val id: String,
     val descricao: String,
-    val statusAtual: TarefaStatus = TarefaStatus.PENDENTE
+    val statusAtual: TarefaStatus = TarefaStatus.PENDENTE,
+    val responsibleAgentId: String? = null,
+    val dependencies: List<String> = emptyList()
 )
 
 enum class TarefaStatus { PENDENTE, PROMPT_GERADO, EM_EXECUCAO, AGUARDANDO_QA, APROVADA, REPROVADA }
