@@ -7,9 +7,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ConversationEngineTest {
-    private fun engine(): NoInferenceConversationEngine = NoInferenceConversationEngine { path ->
+    private fun engine(): NoInferenceConversationEngine = NoInferenceConversationEngine(assets = { path ->
         File("src/main/assets/$path").readText()
-    }
+    })
 
     @Test
     fun `social em portugues nao cai no fallback de requisitos`() {

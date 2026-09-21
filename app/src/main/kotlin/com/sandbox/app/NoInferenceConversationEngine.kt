@@ -180,6 +180,6 @@ class NoInferenceConversationEngine(
 }
 
 fun noInferenceEngine(context: android.content.Context): NoInferenceConversationEngine =
-    NoInferenceConversationEngine { path -> context.assets.open(path).bufferedReader().use { it.readText() } }
+    NoInferenceConversationEngine(assets = { path -> context.assets.open(path).bufferedReader().use { it.readText() } })
 
 private fun JSONArray.optString(index: Int): String = optString(index, "")
