@@ -80,10 +80,11 @@ class NoInferenceConversationEngine(
     private fun followUp(query: String): ConversationResponse? {
         val last = turns.lastOrNull() ?: return null
         val topic = last.topic ?: return null
+        val explicitTopic = extractTopic(query)
         val asksContinuation = listOf(
             "explique melhor", "pode explicar melhor", "e como funciona", "como isso funciona",
             "fale mais", "continue", "mais detalhes", "não entendi"
-        ).any { query.contains(it) }
+        ).any { query.contains(it) } && explicitTopic == null
         if (!asksContinuation) return null
         val entry = knowledge.firstOrNull { item -> item.questions.any { normalize(it).contains(topic) } }
         val text = entry?.answer ?: "Posso continuar explicando $topic a partir desse ponto, mas não tenho mais detalhes locais confiáveis."
