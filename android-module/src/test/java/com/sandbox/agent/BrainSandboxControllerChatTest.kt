@@ -38,6 +38,8 @@ class BrainSandboxControllerChatTest {
             assertTrue(cycle.passos.single().resultado!!.contains("Resposta conversacional"))
             assertFalse(cycle.passos.any { it.capacidade.orEmpty().startsWith("workspace.") || it.capacidade.orEmpty().startsWith("sandbox.") })
             assertTrue(controller.localEvents("chat-port").any { it.type == "DoorDesignated" && it.payload["door"] == "CHAT" })
+            assertTrue(cycle.posExecucao?.selfE2E?.all { it.passed } == true)
+            assertEquals(com.brain.validation.ValidationStatus.PASS, cycle.posExecucao?.doorE2E?.status)
         } finally {
             root.deleteRecursively()
         }
