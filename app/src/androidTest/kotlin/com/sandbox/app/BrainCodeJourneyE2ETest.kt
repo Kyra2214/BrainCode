@@ -66,7 +66,7 @@ class BrainCodeJourneyE2ETest {
                         .fetchSemanticsNodes().isNotEmpty()
                 hasResultCard && terms.all { term ->
                     composeRule.onAllNodesWithText(term, substring = true, useUnmergedTree = true)
-                        .fetchSemanticsNodes().isNotEmpty()
+                        .fetchSemanticsNodes().size >= 2
                 }
             }.getOrDefault(false)
         }
