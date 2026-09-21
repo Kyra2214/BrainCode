@@ -15,6 +15,10 @@ import com.brain.behavior.CritiqueFinding
 import com.brain.behavior.FindingSeverity
 import com.brain.behavior.ValidatedLearning
 import com.brain.behavior.LearningCandidate
+import com.brain.behavior.VerificationCheck
+import com.brain.behavior.VerificationResult
+import com.brain.behavior.ReadinessStage
+import com.brain.behavior.ReadinessReport
 import com.brain.memory.LayeredMemory
 import com.brain.planner.PlanoExecucao
 import com.brain.secretary.CreatePhase
