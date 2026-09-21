@@ -16,6 +16,7 @@ enum class IntentCategory {
     RESEARCH,
     CODE_EXECUTION,
     CREATION,
+    INFORMATION,
     CONVERSATION,
     AMBIGUOUS
 }
@@ -107,6 +108,8 @@ class BrainInputInterpreter(
         val codeExecution = !weather && !calculation && !navigation && !research &&
             IntentNegation.hasAllowedOccurrence(normalized, TriggerLexicon.EXECUTION_TERMS) &&
             TriggerLexicon.matches(normalized, listOf("código", "codigo", "script", "programa", "função", "funcao"))
+        val information = !weather && !calculation && !navigation && !research && !codeExecution &&
+            Regex("(?i)\\b(explique|explica|como funciona|o que é|o que e)\\b").containsMatchIn(normalized)
         val ambiguous = normalized.matches(Regex("(?i)^(faça|faca|execute|rode|fa\u00e7a|fazer) isso[.!? ]*$"))
 
         val intent: IntentCategory
@@ -183,6 +186,14 @@ class BrainInputInterpreter(
                 requiresLiveData = false
                 confidence = 0.9
                 rationale = "ordem explícita de execução de código sujeita à Policy"
+            }
+            information -> {
+                intent = IntentCategory.INFORMATION
+                action = null
+                target = null
+                requiresLiveData = false
+                confidence = 0.9
+                rationale = "pedido informativo local sem capability de execução"
             }
             else -> {
                 intent = IntentCategory.CONVERSATION

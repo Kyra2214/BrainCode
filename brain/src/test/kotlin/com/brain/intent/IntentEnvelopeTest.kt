@@ -25,7 +25,7 @@ class IntentEnvelopeTest {
             Case("Calcule 220V × 10A.", Door.CHAT, IntentCategory.CALCULATION, Route.CAPABILITY, "chat.respond"),
             Case("Quanto é 15% de 800?", Door.CHAT, IntentCategory.CALCULATION, Route.CAPABILITY, "chat.respond"),
             Case("Crie um plano para instalar um quadro.", Door.CREATE, IntentCategory.CREATION, Route.CREATION, "brain.plan"),
-            Case("Explique como funciona um DR.", Door.CHAT, IntentCategory.CONVERSATION, Route.CONVERSATION, null),
+            Case("Explique como funciona um DR.", Door.CHAT, IntentCategory.INFORMATION, Route.CONVERSATION, null),
             Case("Pesquise no GitHub sobre X.", Door.CHAT, IntentCategory.RESEARCH, Route.CAPABILITY, "network.research"),
             Case("Me ajude a criar um aplicativo.", Door.CREATE, IntentCategory.CREATION, Route.CREATION, "brain.plan"),
             Case("Oi, tudo bem?", Door.CHAT, IntentCategory.CONVERSATION, Route.CONVERSATION, null),
