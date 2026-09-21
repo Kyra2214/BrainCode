@@ -92,6 +92,21 @@ class ValidationEngine {
         )
     }
 
+    fun selfAgent(subject: ValidationSubject, stage: String = "agent", attempt: Int = 1): ValidationResult =
+        validate(
+            ValidationContract(
+                id = "agent.self.generic",
+                capability = subject.capability,
+                level = ValidationLevel.AGENT,
+                checks = listOf(
+                    ValidationCheck("result.non-empty", "resultado do especialista não vazio") { it.result.isNotBlank() }
+                )
+            ),
+            subject,
+            stage,
+            attempt
+        )
+
     fun lightChat(subject: ValidationSubject, stage: String = "door.chat", attempt: Int = 1): ValidationResult =
         validate(
             ValidationContract(
