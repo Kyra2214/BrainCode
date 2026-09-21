@@ -9,11 +9,15 @@ object ValidationContractRegistry {
     private val capabilityOwners = mapOf(
         "research.web" to "agent.research",
         "research.evidence" to "agent.research",
+        "network.research" to "agent.research",
         "workspace.generate" to "agent.code",
+        "workspace.write" to "agent.code",
         "sandbox.build" to "agent.code",
         "sandbox.test" to "agent.test",
         "sandbox.diagnose" to "agent.review",
-        "prompt.library.generate" to "local.prompt.creator"
+        "prompt.library.generate" to "local.prompt.creator",
+        "prompt.library.write" to "local.prompt.creator",
+        "chat.respond" to "agent.requirements"
     )
 
     private val localContracts = mapOf(
