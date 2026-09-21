@@ -153,6 +153,7 @@ class PostExecutionGate(private val memory: LayeredMemory) {
             validation.selfAgent(
                 ValidationSubject(
                     capability = step.capacidade ?: "step",
+                    taskId = step.passoId,
                     agentId = step.capacidade,
                     result = step.resultado.orEmpty(),
                     evidence = stepEvidence,
@@ -171,6 +172,7 @@ class PostExecutionGate(private val memory: LayeredMemory) {
                 validation.lightChat(
                     ValidationSubject(
                         capability = "chat.respond",
+                        taskId = chatStep.passoId,
                         door = com.brain.secretary.Door.CHAT,
                         result = chatStep.resultado.orEmpty(),
                         evidence = evidenceIds,
@@ -187,6 +189,7 @@ class PostExecutionGate(private val memory: LayeredMemory) {
                 validation.promptContent(
                     ValidationSubject(
                         capability = "prompt.library.generate",
+                        taskId = promptStep.passoId,
                         door = com.brain.secretary.Door.PROMPT,
                         result = promptStep.resultado.orEmpty(),
                         requirements = requirements,
