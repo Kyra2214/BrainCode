@@ -160,7 +160,7 @@ class ValidationEngine {
     }
 
     fun promptContent(subject: ValidationSubject, stage: String = "door.prompt", attempt: Int = 1, previousResultId: String? = null): ValidationResult {
-        val checks = subject.requirements.mapIndexed { index, requirement ->
+        val checks = subject.requirements.filterNot(::isStructuredSlotRequirement).mapIndexed { index, requirement ->
             ValidationCheck("prompt.requirement." + index, "requisito explícito do prompt presente", FindingSeverity.HIGH, FindingOwner.AGENT) {
                 com.brain.behavior.RequirementMatcher.isPresent(requirement, it.result)
             }
@@ -197,6 +197,16 @@ class ValidationEngine {
                 com.brain.behavior.RequirementMatcher.isPresent(value, it.result)
             }
         }
+    }
+
+    private fun isStructuredSlotRequirement(requirement: String): Boolean {
+        val key = Regex("^\\s*([\\p{L}]+)\\s*[:=]").find(requirement)?.groupValues?.getOrNull(1)?.lowercase()
+            ?: return false
+        return key in setOf(
+            "sujeito", "subject", "ação", "acao", "action", "ambiente", "environment",
+            "elementos", "elements", "estilo", "style", "iluminação", "iluminacao", "lighting",
+            "composição", "composicao", "composition", "formato", "format", "restrições", "restricoes", "restrictions"
+        )
     }
 
     fun lightChat(subject: ValidationSubject, stage: String = "door.chat", attempt: Int = 1, previousResultId: String? = null): ValidationResult =
