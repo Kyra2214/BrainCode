@@ -42,8 +42,10 @@ class PostExecutionGate(private val memory: LayeredMemory) {
         requirements: List<String> = emptyList(),
         attempt: Int = 1,
         previousValidationResultId: String? = null,
-        createPhase: String? = null
+        createPhase: String? = null,
+        lightChat: Boolean = false
     ): ResultadoPosExecucao {
+        if (lightChat) return evaluateLightChat(plan, cycle, attempt, previousValidationResultId)
         val evidence = cycle.passos.map { step ->
             ExecutionEvidence(
                 id = "${cycle.runId}:step:${step.passoId}",
@@ -257,6 +259,75 @@ class PostExecutionGate(private val memory: LayeredMemory) {
             issues = issues + selfE2E.filterNot { it.passed }.map { "self-e2e:" + it.contractId } +
                 listOfNotNull(doorE2E?.takeUnless { it.passed }?.let { "door-e2e:" + it.status.name.lowercase() }),
             selfE2E = selfE2E,
+            doorE2E = doorE2E
+        )
+    }
+
+    /** Fast path de CHAT: valida o resultado e a policy sem readiness de projeto, QA/release ou learning. */
+    private fun evaluateLightChat(
+        plan: PlanoExecucao,
+        cycle: ResultadoCiclo,
+        attempt: Int,
+        previousValidationResultId: String?
+    ): ResultadoPosExecucao {
+        val evidenceIds = cycle.passos.flatMap { step ->
+            listOf("${cycle.runId}:chat-step:${step.passoId}") + step.executionEvidence + step.evidencias.map { it.toString() }
+        }.distinct()
+        val checks = plan.passos.map { step ->
+            val result = cycle.passos.firstOrNull { it.passoId == step.id }
+            VerificationCheck(
+                criterionId = step.id,
+                passed = result?.status == StatusPasso.APROVADO && result?.resultado?.isNotBlank() == true,
+                detail = if (result?.status == StatusPasso.APROVADO && result?.resultado?.isNotBlank() == true) "resposta conversacional produzida" else "resposta conversacional ausente",
+                evidenceId = evidenceIds.firstOrNull()
+            )
+        }
+        val verification = VerificationResult(
+            if (checks.all { it.passed }) com.brain.behavior.VerificationStatus.PASSED else com.brain.behavior.VerificationStatus.FAILED,
+            checks,
+            evidenceIds
+        )
+        val passed = verification.passed && cycle.passos.all { it.decisaoPolicy?.decision?.name == "ALLOW" }
+        val critique = if (passed) CritiqueResult(CritiqueStatus.PASS, emptyList(), checks.map { it.criterionId })
+        else CritiqueResult(CritiqueStatus.BLOCKED, listOf(CritiqueFinding("chat.fast-path.failed", "resposta CHAT não passou na verificação leve", FindingSeverity.BLOCKING)))
+        val revision = RevisionDecision(
+            if (passed) RevisionAction.ACCEPT else RevisionAction.REVISE,
+            if (passed) "fast path CHAT validado" else "fast path CHAT reprovado",
+            maxAttempts = 1
+        )
+        val stages = ReadinessStageName.entries.map { stage ->
+            ReadinessStage(stage.name.lowercase(), passed, listOf("${cycle.runId}:chat-readiness:${stage.name.lowercase()}"), if (passed) "fast-chat-ok" else "fast-chat-blocked")
+        }
+        val readiness = ReadinessReport(
+            if (passed) com.brain.behavior.ReadinessStatus.READY else com.brain.behavior.ReadinessStatus.BLOCKED,
+            stages,
+            if (passed) emptyList() else listOf("chat.fast-path.failed")
+        )
+        val chatStep = cycle.passos.firstOrNull { it.capacidade == "chat.respond" }
+        val doorE2E = chatStep?.let {
+            validation.lightChat(
+                ValidationSubject(
+                    capability = "chat.respond",
+                    taskId = it.passoId,
+                    door = com.brain.secretary.Door.CHAT,
+                    result = it.resultado.orEmpty(),
+                    evidence = it.executionEvidence + it.evidencias.map { evidence -> evidence.toString() },
+                    requiresInput = it.executionEvidence.contains("chat:clarification-question"),
+                    restrictions = emptySet()
+                ),
+                stage = "door.chat.fast",
+                attempt = attempt,
+                previousResultId = previousValidationResultId
+            )
+        }
+        return ResultadoPosExecucao(
+            verification = verification,
+            critique = critique,
+            revision = revision,
+            readiness = readiness,
+            learningRecorded = false,
+            issues = if (passed) emptyList() else listOf("chat.fast-path.failed"),
+            selfE2E = emptyList(),
             doorE2E = doorE2E
         )
     }

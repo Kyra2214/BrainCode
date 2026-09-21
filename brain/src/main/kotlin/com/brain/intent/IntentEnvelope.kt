@@ -3,6 +3,7 @@ package com.brain.intent
 import com.brain.secretary.Door
 import com.brain.secretary.DeterministicSecretary
 import com.brain.secretary.OrderIntent
+import com.brain.capability.CapabilityRegistry
 import com.brain.text.IntentNegation
 import com.brain.text.TriggerLexicon
 import java.util.Locale
@@ -59,6 +60,17 @@ data class IntentEnvelope(
 
 /** Única autoridade que transforma sinais determinísticos em uma rota executável. */
 class BrainRouter {
+    fun resolveCapability(envelope: IntentEnvelope, registry: CapabilityRegistry): String? {
+        val target = envelope.targetCapability ?: return null
+        return registry.findByCapability(target).firstOrNull()?.let { definition ->
+            when {
+                definition.id == target -> definition.id
+                definition.providedCapabilities.contains(target) -> target
+                else -> null
+            }
+        }
+    }
+
     fun decide(
         door: Door,
         action: String?,

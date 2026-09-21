@@ -38,8 +38,10 @@ import com.brain.retrieval.PromptLibraryRetrievalSource
 import com.brain.retrieval.Retrieval
 import com.brain.retrieval.RetrievalQuery
 import com.brain.reasoning.ReasoningEngine
+import com.brain.reasoning.ReasoningState
 import com.brain.intent.BrainInputInterpreter
 import com.brain.intent.IntentEnvelope
+import com.brain.intent.BrainRouter
 import com.brain.intent.Route
 import com.brain.behavior.PlanningGate
 import com.brain.behavior.RequirementGate
@@ -70,6 +72,10 @@ import kotlin.coroutines.Continuation
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine
 
+fun interface ReasoningAnalyzer { fun analyze(request: String): ReasoningState }
+fun interface PlanningArtifactPlanner { fun plan(runId: String, reasoning: ReasoningState, references: List<String>): PlanningArtifact }
+fun interface RequirementEvaluator { fun evaluate(reasoning: ReasoningState): com.brain.behavior.GateResult<ReasoningState> }
+
 /**
  * Primeira fatia vertical da unificação Brain + Sandbox.
  *
@@ -89,9 +95,13 @@ class BrainSandboxController(
     private val authorizedAccountIds: Set<String> = emptySet(),
     private val events: EventStore = InMemoryEventStore(),
     private val revisionFixer: RevisionFixer = FindingsRevisionFixer(),
-    private val secretary: com.brain.secretary.DeterministicSecretary = com.brain.secretary.DeterministicSecretary()
+    private val secretary: com.brain.secretary.DeterministicSecretary = com.brain.secretary.DeterministicSecretary(),
+    private val reasoningAnalyzer: ReasoningAnalyzer = ReasoningAnalyzer { ReasoningEngine().analyze(it) },
+    private val planningArtifactPlanner: PlanningArtifactPlanner = PlanningArtifactPlanner { runId, reasoning, references -> PlanningAgent().plan(runId, reasoning, references) },
+    private val requirementEvaluator: RequirementEvaluator = RequirementEvaluator { reasoning -> RequirementGate().evaluate(reasoning) }
 ) {
     private val inputInterpreter = BrainInputInterpreter(secretary)
+    private val brainRouter = BrainRouter()
     private val behaviorDiagnostics = BehaviorDiagnostics(EventStoreBehaviorTraceSink(events, "android-local"))
     private val dynamicCapabilityProviders = capabilityProviders
     private val approvals = FileApprovalStore(File(rootfsDir, "approvals.jsonl"))
@@ -150,8 +160,6 @@ class BrainSandboxController(
                 authorizedAccountIds = authorizedAccountIds
         )
     )
-    private val reasoningEngine = ReasoningEngine()
-    private val requirementGate = RequirementGate()
     private val planningGate = PlanningGate()
     private val treeOfThoughts = TreeOfThoughts()
     private val layeredMemory = LayeredMemory()
@@ -217,7 +225,8 @@ class BrainSandboxController(
         val envelope = inputInterpreter.interpret(objective, designatedIntent)
         emit(runId, "chat", "TaskCreated", mapOf("objective" to objective.take(500)))
         emit(runId, "interpreter", "IntentEnvelopeCreated", envelopePayload(envelope))
-        emit(runId, "router", "RouteDecided", envelopePayload(envelope))
+        val resolvedCapability = brainRouter.resolveCapability(envelope, capabilities)
+        emit(runId, "router", "RouteDecided", envelopePayload(envelope) + mapOf("resolvedCapability" to (resolvedCapability ?: "")))
         emit(
             runId,
             "secretary",
@@ -229,8 +238,8 @@ class BrainSandboxController(
             )
         )
         if (envelope.route != Route.CREATION) {
-            val fastPlan = fastPathPlan(objective, envelope)
-            val fastResult = executeWithEvents(fastPlan, runId, createPhase = designatedIntent.phase.name) { attemptPlan, attemptRunId ->
+            val fastPlan = fastPathPlan(objective, envelope, resolvedCapability)
+            val fastResult = executeWithEvents(fastPlan, runId, createPhase = designatedIntent.phase.name, lightChat = designatedIntent.door == Door.CHAT) { attemptPlan, attemptRunId ->
                 bridge.authorizeAndExecute(
                     attemptPlan,
                     attemptRunId,
@@ -256,12 +265,12 @@ class BrainSandboxController(
             }
             return fastResult
         }
-        val reasoning = reasoningEngine.analyze(objective)
+        val reasoning = reasoningAnalyzer.analyze(objective)
         val references = objective.lineSequence().filter { it.startsWith("Referências resolvidas:", ignoreCase = true) }.toList()
-        val planningArtifact = PlanningAgent().plan(runId, reasoning, references)
+        val planningArtifact = planningArtifactPlanner.plan(runId, reasoning, references)
         planningArtifacts.save(planningArtifact)
         emit(runId, "planning", "PlanningArtifactCreated", mapOf("artifactId" to planningArtifact.artifactId, "status" to planningArtifact.status.name, "requirements" to planningArtifact.requirements.size.toString(), "pending" to planningArtifact.pending.size.toString(), "references" to planningArtifact.references.size.toString()))
-        val requirementGateResult = requirementGate.evaluate(reasoning)
+        val requirementGateResult = requirementEvaluator.evaluate(reasoning)
         if (!requirementGateResult.isSuccessful) {
             if (requirementGateResult.status == GateStatus.NEEDS_CLARIFICATION && designatedIntent.door == com.brain.secretary.Door.CHAT) {
                 val clarification = ClarificationQuestion.from(objective, requirementGateResult.issues)
@@ -461,9 +470,9 @@ class BrainSandboxController(
         activeRoadmaps[runId] = updated
     }
 
-    private fun fastPathPlan(objective: String, envelope: IntentEnvelope): PlanoExecucao {
+    private fun fastPathPlan(objective: String, envelope: IntentEnvelope, resolvedCapability: String?): PlanoExecucao {
         val capability = when (envelope.route) {
-            Route.CAPABILITY -> requireNotNull(envelope.targetCapability)
+            Route.CAPABILITY -> requireNotNull(resolvedCapability) { "capability não registrada: ${envelope.targetCapability}" }
             Route.CONVERSATION, Route.CLARIFY, Route.LLM_FALLBACK -> "chat.respond"
             Route.CREATION -> error("rota CREATION não pertence ao fast path")
         }
@@ -531,6 +540,7 @@ class BrainSandboxController(
         runId: String,
         requirements: List<String> = emptyList(),
         createPhase: String? = null,
+        lightChat: Boolean = false,
         action: (PlanoExecucao, String) -> ResultadoCiclo
     ): ResultadoCiclo {
         emit(runId, "plan", "PlanCreated", mapOf("steps" to plan.passos.size.toString()))
@@ -589,7 +599,8 @@ class BrainSandboxController(
                 requirements = requirements,
                 attempt = attempt,
                 previousValidationResultId = previousValidationResultId,
-                createPhase = createPhase
+                createPhase = createPhase,
+                lightChat = lightChat
             )
             previousValidationResultId = postExecution.selfE2E.lastOrNull()?.resultId ?: postExecution.doorE2E?.resultId
             updateRoadmapFromValidation(runId, postExecution)

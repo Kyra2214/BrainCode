@@ -16,6 +16,33 @@ import org.junit.Test
 
 class BrainSandboxControllerChatTest {
     @Test
+    fun `chat nao chama reasoning planner nem requirement gate por spy formal`() {
+        val root = Files.createTempDirectory("chat-spy-").toFile()
+        try {
+            var reasoningCalls = 0
+            var planningCalls = 0
+            var requirementCalls = 0
+            val controller = BrainSandboxController(
+                runtime = ManagedSandboxRuntime(TestLauncher(root), FileExecutionLogRepository(File(root, "logs")), sessionId = "session-chat-spy"),
+                rootfsDir = root,
+                capabilityExecutors = mapOf("chat.respond" to ActionExecutor { _, _, _ -> ActionExecution(true, result = "ok", evidence = listOf("chat:test")) }),
+                reasoningAnalyzer = ReasoningAnalyzer { reasoningCalls++; error("CHAT não pode chamar reasoning") },
+                planningArtifactPlanner = PlanningArtifactPlanner { _, _, _ -> planningCalls++; error("CHAT não pode chamar planner") },
+                requirementEvaluator = RequirementEvaluator { requirementCalls++; error("CHAT não pode chamar gate") }
+            )
+
+            val cycle = controller.executeObjective("Oi, tudo bem?", "chat-spy", intent = DeterministicSecretary().classify("Oi, tudo bem?"))
+
+            assertTrue(cycle.aprovado)
+            assertEquals(0, reasoningCalls)
+            assertEquals(0, planningCalls)
+            assertEquals(0, requirementCalls)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `porta chat responde sem iniciar producao ou execucao`() {
         val root = Files.createTempDirectory("chat-port-").toFile()
         try {

@@ -1,6 +1,11 @@
 package com.brain.intent
 
 import com.brain.secretary.CreatePhase
+import com.brain.capability.CapabilityCategory
+import com.brain.capability.CapabilityDefinition
+import com.brain.capability.CapabilityAvailability
+import com.brain.capability.CapabilityProvenance
+import com.brain.capability.CapabilityRegistry
 import com.brain.secretary.DeterministicSecretary
 import com.brain.secretary.Door
 import org.junit.Assert.assertEquals
@@ -55,6 +60,35 @@ class IntentEnvelopeTest {
         assertEquals("network.research", envelope.targetCapability)
         assertEquals("rio das ostras", envelope.entities["location"])
         assertEquals("today", envelope.entities["date"])
+    }
+
+    @Test
+    fun `router resolve target capability somente quando registry a fornece`() {
+        val definition = CapabilityDefinition(
+            id = "sandbox.info",
+            name = "sandbox.info",
+            description = "test",
+            category = CapabilityCategory.SANDBOX,
+            ownerId = "test",
+            origin = "test",
+            providedCapabilities = setOf("network.research"),
+            availability = CapabilityAvailability.AVAILABLE,
+            provenance = listOf(CapabilityProvenance("test", "test"))
+        )
+        val registry = CapabilityRegistry(listOf(definition))
+        val envelope = interpreter.interpret("Pesquise no GitHub sobre X.")
+
+        assertEquals("network.research", BrainRouter().resolveCapability(envelope, registry))
+        assertEquals(null, BrainRouter().resolveCapability(envelope.copy(targetCapability = "missing.capability"), registry))
+    }
+
+    @Test
+    fun `fast path deterministico permanece abaixo de um segundo em mil classificacoes`() {
+        val started = System.nanoTime()
+        repeat(1_000) { interpreter.interpret("Oi, tudo bem?") }
+        val elapsedMs = (System.nanoTime() - started) / 1_000_000
+
+        assertTrue("fast path levou ${elapsedMs}ms", elapsedMs < 1_000)
     }
 
     private data class Case(
