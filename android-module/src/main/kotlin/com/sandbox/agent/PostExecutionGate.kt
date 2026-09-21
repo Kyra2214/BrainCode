@@ -16,6 +16,9 @@ import com.brain.behavior.ValidatedLearning
 import com.brain.behavior.LearningCandidate
 import com.brain.memory.LayeredMemory
 import com.brain.planner.PlanoExecucao
+import com.brain.validation.ValidationEngine
+import com.brain.validation.ValidationSubject
+import com.brain.validation.ValidationResult
 
 /**
  * Pós-execução obrigatório do caminho Android.
@@ -29,6 +32,7 @@ class PostExecutionGate(private val memory: LayeredMemory) {
     private val review = DoubtDrivenReview()
     private val readiness = ReadinessEvaluator()
     private val learning = ValidatedLearning(memory)
+    private val validation = ValidationEngine()
 
     fun evaluate(
         plan: PlanoExecucao,
@@ -142,6 +146,41 @@ class PostExecutionGate(private val memory: LayeredMemory) {
             if (readinessReport.status != com.brain.behavior.ReadinessStatus.READY) addAll(readinessReport.blockers)
             if (!learningRecorded) add("learning.not-recorded")
         }
-        return ResultadoPosExecucao(verification, critique, revision, readinessReport, learningRecorded, issues)
+        val selfE2E = cycle.passos.map { step ->
+            val stepEvidence = step.executionEvidence + step.evidencias.map { it.toString() }
+            validation.selfAgent(
+                ValidationSubject(
+                    capability = step.capacidade ?: "step",
+                    agentId = step.capacidade,
+                    result = step.resultado.orEmpty(),
+                    evidence = stepEvidence
+                ),
+                stage = "agent:" + (step.capacidade ?: "step")
+            )
+        }
+        val chatStep = cycle.passos.firstOrNull { it.capacidade == "chat.respond" }
+        val doorE2E: ValidationResult? = chatStep?.let { step ->
+            val evidenceIds = step.executionEvidence + step.evidencias.map { it.toString() }
+            validation.lightChat(
+                ValidationSubject(
+                    capability = "chat.respond",
+                    door = com.brain.secretary.Door.CHAT,
+                    result = step.resultado.orEmpty(),
+                    evidence = evidenceIds,
+                    requiresInput = evidenceIds.any { it == "chat:clarification-question" }
+                )
+            )
+        }
+        return ResultadoPosExecucao(
+            verification = verification,
+            critique = critique,
+            revision = revision,
+            readiness = readinessReport,
+            learningRecorded = learningRecorded,
+            issues = issues + selfE2E.filterNot { it.passed }.map { "self-e2e:" + it.contractId } +
+                listOfNotNull(doorE2E?.takeUnless { it.passed }?.let { "door-e2e:" + it.status.name.lowercase() }),
+            selfE2E = selfE2E,
+            doorE2E = doorE2E
+        )
     }
 }
