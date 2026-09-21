@@ -48,9 +48,9 @@ class DeterministicSecretary {
     private fun isCreation(text: String): Boolean {
         if (TriggerLexicon.CONTEXTO_SO_CONVERSA.any { it in text }) return false
         if (TriggerLexicon.VETOS_EXPLICITOS_REGEX.any { Regex(it).containsMatchIn(text) }) return false
-        return IntentNegation.hasAllowedOccurrence(text, TriggerLexicon.VERBOS_CRIACAO) ||
-            (IntentNegation.hasAllowedOccurrence(text, TriggerLexicon.SUBSTANTIVOS_ENTREGAVEL) &&
-                IntentNegation.hasAllowedOccurrence(text, TriggerLexicon.VERBOS_CRIACAO))
+        return IntentNegation.hasAllowedOccurrence(text, TriggerLexicon.VERBOS_CRIACAO) &&
+            (IntentNegation.hasAllowedOccurrence(text, TriggerLexicon.SUBSTANTIVOS_ENTREGAVEL) ||
+                IntentNegation.hasAllowedOccurrence(text, "criar projeto", "abrir um projeto", "subir o projeto"))
     }
 
     private fun isApprovalSignal(text: String): Boolean = IntentNegation.hasAllowedOccurrence(
