@@ -57,6 +57,7 @@ import com.brain.secretary.CreatePhase
 import com.brain.core.CreationWorkflowPlanner
 import com.brain.core.Roadmap
 import com.brain.core.RoadmapValidationCoordinator
+import com.brain.secretary.SecretaryValidationRouter
 import com.brain.planning.FilePlanningArtifactStore
 import com.brain.planning.PlanningArtifact
 import com.brain.planning.PlanningAgent
@@ -393,6 +394,19 @@ class BrainSandboxController(
         (postExecution.selfE2E + listOfNotNull(postExecution.doorE2E)).forEach { validationResult ->
             val taskId = validationResult.taskId ?: return@forEach
             updated = RoadmapValidationCoordinator.apply(updated, validationResult)
+            val route = SecretaryValidationRouter.route(validationResult)
+            emit(
+                runId,
+                "secretary",
+                "ValidationFindingRouted",
+                mapOf(
+                    "taskId" to (validationResult.taskId ?: ""),
+                    "resultId" to validationResult.resultId,
+                    "action" to route.action.name,
+                    "responsibleAgent" to (route.responsibleAgentId ?: ""),
+                    "reason" to route.reason
+                )
+            )
             emit(
                 runId,
                 "roadmap",
