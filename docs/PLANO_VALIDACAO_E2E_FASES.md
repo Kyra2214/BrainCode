@@ -330,3 +330,20 @@ Nenhum novo agente entra no catálogo de execução sem:
 7. evidência de CI/E2E/readiness quando aplicável.
 
 Essa regra vale para todos os agentes futuros do BrainCode.
+
+
+## Atualização de implementação — 2026-09-21
+
+Após a auditoria do HEAD anterior, as lacunas críticas desta camada foram conectadas:
+
+- ValidationContractRegistry liga capabilities reais aos responsáveis/contratos Self-E2E; capacidades sem executor continuam fail-closed.
+- ValidationResult agora possui resultId e taskId; attempt/previousResultId são transportados pela execução.
+- ValidationEngine aplica limite de tentativas do contrato e classifica excesso como finding de infraestrutura.
+- Falhas de Self-E2E/E2E são promovidas a findings bloqueantes da revisão, portanto não podem ser aceitas silenciosamente pelo PostExecutionGate.
+- A revisão reaproveita RevisionDecision/RevisionFixer/loop de até 3 tentativas existente, preservando revision.no-progress.
+- ValidationCompleted registra contrato, agente, checks, owners, evidências, IDs de resultado, tentativa e predecessor.
+- RoadmapValidationCoordinator conecta ValidationResult.taskId ao Roadmap/Tarefa, e o controller registra RoadmapValidationUpdated.
+- A Porta 3 passa a selecionar contrato específico por fase quando a fase está disponível no fluxo: DISCUSSION, REQUIREMENTS, ARCHITECTURE, PLAN, APPROVED, EXECUTION, INTEGRATION, REVIEW, TESTS, DELIVERY.
+- DocumentationAgent permanece declarado como UNAVAILABLE até possuir executor dedicado e contrato/fluxo real; a existência do contrato não o torna executável.
+
+A implementação ainda só pode ser considerada consolidada após CI, suíte JVM/Android e UI E2E/readiness verdes no mesmo HEAD.
