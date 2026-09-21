@@ -364,3 +364,110 @@ RooftS continua sendo uma única entidade composta pelas camadas 0.3, 0.4, 0.5 e
 > A Web é uma capacidade disponível para as três portas. APIs externas ficam para uma fase posterior, quando o restante do BrainCode estiver consolidado.
 >
 > O Secretário organiza a ordem e encaminha o trabalho. Os especialistas executam suas responsabilidades dentro das regras da porta e da arquitetura central do BrainCode.
+
+
+## 15. MeiGen como referência e futura capacidade da Porta 2
+
+Foi identificada a família de projetos **MeiGen AI / MeiGen-AI-Design-MCP** como referência arquitetural relevante para a Porta 2. A decisão não é incorporar o projeto automaticamente agora, mas registrar o que pode casar com a arquitetura do BrainCode quando a Porta 2 for consolidada.
+
+### O que o conceito traz
+
+- criação e refinamento de prompts;
+- pesquisa de referências em biblioteca de prompts;
+- especialistas/subagentes separados para funções como criação de prompt, pesquisa e geração;
+- execução paralela de especialistas quando as tarefas forem independentes;
+- Skills e comandos;
+- MCP como camada de integração com hosts/agentes;
+- geração de imagem e vídeo;
+- suporte a providers diferentes;
+- possibilidade de usar ComfyUI local;
+- possibilidade de providers/API externos posteriormente.
+
+### Encaixe no BrainCode
+
+O MeiGen **não será tratado como um segundo cérebro nem como o dono do fluxo**. O encaixe conceitual é:
+
+```
+Brain
+  ↓
+Secretary
+  ↓
+Porta 2 — Prompt
+  ↓
+Prompt Specialist
+  ├── Prompt Crafter
+  ├── Gallery / Reference Research
+  └── Prompt Critic / Optimizer
+  ↓
+Agent Self-E2E
+  ↓
+Secretary / Door E2E
+  ↓
+Provider / Capability
+  ├── MeiGen
+  ├── ComfyUI local
+  └── outros providers futuros
+```
+
+A responsabilidade permanece separada:
+
+- **Brain:** decide, planeja e orquestra.
+- **Secretário:** controla porta, estado, restrições, dependências e passagem entre etapas.
+- **Especialistas:** executam responsabilidades bounded.
+- **E2E do especialista:** valida o próprio resultado antes de devolvê-lo.
+- **E2E da Porta/Secretário:** valida o resultado antes de liberar a próxima etapa.
+- **Provider:** fornece capacidade de execução; não assume o papel de orquestrador.
+- **Policy:** continua sendo a autoridade de autorização.
+
+### Provider instalado não significa provider autorizado
+
+Mesmo que componentes MeiGen, MCP, ComfyUI ou APIs existam no código, isso não significa que estejam autorizados a executar.
+
+Nesta fase:
+
+- Web: liberada conforme Policy.
+- APIs externas: bloqueadas.
+- Providers externos: não ativados por padrão.
+- Infraestrutura pode permanecer preparada para ativação futura.
+
+Quando a camada de APIs/providers for aberta, a seleção deverá passar pelo Provider Gateway/Policy e pela especialidade da tarefa.
+
+### Por que a referência pertence principalmente à Porta 2
+
+A composição de prompt, pesquisa de referências, crítica, otimização, biblioteca de prompts e preparação para geração visual são responsabilidades naturais da Porta 2. A geração efetiva por um provider pode ser acionada posteriormente, conforme a ordem do usuário e as permissões.
+
+Exemplo:
+
+```
+"Crie um prompt de um foguete decolando no deserto ao pôr do sol."
+        ↓
+Secretário → PROMPT
+        ↓
+Prompt Specialist
+        ↓
+pesquisa/referências (se permitida)
+        ↓
+Prompt Crafter
+        ↓
+Prompt Critic / Optimizer
+        ↓
+Agent E2E
+        ↓
+Secretary E2E
+        ↓
+prompt final
+```
+
+Se o usuário depois solicitar geração da imagem, isso é uma nova decisão de capability/provider. A conclusão do prompt não deve iniciar automaticamente a geração.
+
+### Regra de incorporação
+
+O BrainCode deve primeiro **auditar** o projeto/referência, verificar licença, código real, testes, segurança e compatibilidade, e somente depois decidir entre:
+
+1. incorporar código sob os termos da licença;
+2. adaptar componentes/ideias compatíveis;
+3. usar apenas como referência arquitetural.
+
+Não fazer uma reimplementação simplificada de algo maduro sem motivo técnico documentado.
+
+O conceito MeiGen entra, portanto, como **referência da consolidação futura da Porta 2**, sem alterar a regra de que a Porta 1 deve ser consolidada primeiro.
