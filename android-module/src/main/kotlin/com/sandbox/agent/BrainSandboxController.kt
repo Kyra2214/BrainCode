@@ -232,34 +232,43 @@ class BrainSandboxController(
                     objective,
                     listOf(PassoPlano("clarificar", "chat.respond", "pergunta de esclarecimento não vazia", parametros = listOf(clarification.question, "clarification.status=NEEDS_CLARIFICATION", "clarification.missing=${clarification.missingRequirements.joinToString("|")}")))
                 )
-                emit(runId, "plan", "PlanCreated", mapOf("steps" to "1", "kind" to "clarification"))
-                val clarificationCycle = bridge.authorizeAndExecute(
+                // Clarificação é uma execução válida da Porta 1: precisa atravessar
+                // a mesma pipeline de execução + PostExecutionGate, e não retornar
+                // diretamente do bridge. Isso garante Verification/Critic/Readiness,
+                // evidência e o contrato de validação antes de voltar ao Secretário.
+                val clarificationCycle = executeWithEvents(
                     clarificationPlan,
                     runId,
-                    actor,
-                    onPasso = { passo ->
-                        emit(
-                            runId,
-                            passo.passoId,
-                            "StepCompleted",
-                            mapOf(
-                                "passoId" to passo.passoId,
-                                "status" to passo.status.name,
-                                "motivo" to (passo.motivo ?: "")
+                    requirements = emptyList()
+                ) { attemptPlan, attemptRunId ->
+                    bridge.authorizeAndExecute(
+                        attemptPlan,
+                        attemptRunId,
+                        actor,
+                        onPasso = { passo ->
+                            emit(
+                                attemptRunId,
+                                passo.passoId,
+                                "StepCompleted",
+                                mapOf(
+                                    "passoId" to passo.passoId,
+                                    "status" to passo.status.name,
+                                    "motivo" to (passo.motivo ?: "")
+                                )
                             )
-                        )
-                        onPasso(passo)
-                    },
-                    doorScope = intent.scope
-                )
-                if (clarificationCycle.resposta.isNullOrBlank() && clarificationCycle.passos.any { it.capacidade == "chat.respond" && it.status == StatusPasso.APROVADO }) {
-                    return clarificationCycle.copy(
+                            onPasso(passo)
+                        },
+                        doorScope = intent.scope
+                    )
+                }
+                return if (clarificationCycle.resposta.isNullOrBlank() &&
+                    clarificationCycle.passos.any { it.capacidade == "chat.respond" && it.status == StatusPasso.APROVADO }) {
+                    clarificationCycle.copy(
                         passos = clarificationCycle.passos.map { passo ->
                             if (passo.capacidade == "chat.respond") passo.copy(resultado = clarification.question) else passo
                         }
                     )
-                }
-                return clarificationCycle
+                } else clarificationCycle
             }
             return blockedCycle(
                 PlanoExecucao(objective, listOf(PassoPlano("requirements", "brain.requirements", "requisitos resolvidos"))),
