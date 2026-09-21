@@ -35,6 +35,10 @@ class IntentEnvelopeTest {
             Case("Quero apenas conversar sobre como criar um aplicativo; não quero criar agora", Door.CHAT, IntentCategory.CONVERSATION, Route.CONVERSATION, null),
             Case("Pode começar a desenvolver o app de lista de compras", Door.CREATE, IntentCategory.CREATION, Route.CREATION, "brain.plan", CreatePhase.APPROVED),
             Case("Tempo hoje em Rio das Ostras", Door.CHAT, IntentCategory.WEATHER, Route.CAPABILITY, "network.research")
+            ,Case("Qual o melhor mecanismo pra criar um app de IPTV?", Door.CHAT, IntentCategory.INFORMATION, Route.CONVERSATION, null)
+            ,Case("Como funciona um app de IPTV?", Door.CHAT, IntentCategory.INFORMATION, Route.CONVERSATION, null)
+            ,Case("Quais tecnologias posso usar para fazer um app de IPTV?", Door.CHAT, IntentCategory.INFORMATION, Route.CONVERSATION, null)
+            ,Case("Crie um app de IPTV", Door.CREATE, IntentCategory.CREATION, Route.CREATION, "brain.plan")
         )
 
         cases.forEach { expected ->

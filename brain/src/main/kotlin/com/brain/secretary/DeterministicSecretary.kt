@@ -46,11 +46,23 @@ class DeterministicSecretary {
     }
 
     private fun isCreation(text: String): Boolean {
+        if (isInformationalCreationQuestion(text)) return false
         if (TriggerLexicon.matches(text, TriggerLexicon.CONTEXTO_SO_CONVERSA)) return false
         if (TriggerLexicon.VETOS_EXPLICITOS_REGEX.any { Regex(it).containsMatchIn(text) }) return false
         return IntentNegation.hasAllowedOccurrence(text, TriggerLexicon.VERBOS_CRIACAO) &&
             (IntentNegation.hasAllowedOccurrence(text, TriggerLexicon.SUBSTANTIVOS_ENTREGAVEL) ||
                 IntentNegation.hasAllowedOccurrence(text, "criar projeto", "abrir um projeto", "subir o projeto"))
+    }
+
+    /** Perguntas sobre como criar explicam uma solução; não autorizam criação. */
+    private fun isInformationalCreationQuestion(text: String): Boolean {
+        val interrogative = text.contains("?") || text.startsWith("qual ") || text.startsWith("quais ") ||
+            text.startsWith("como ") || text.startsWith("o que ")
+        val explanatory = text.contains("explic") || text.contains("como funciona") ||
+            text.contains("como fazer") || text.contains("qual a melhor") ||
+            text.contains("qual o melhor") || text.contains("quais tecnologias") ||
+            text.contains("que tecnologias")
+        return interrogative && explanatory
     }
 
     private fun isApprovalSignal(text: String): Boolean = IntentNegation.hasAllowedOccurrence(

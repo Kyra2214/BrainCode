@@ -109,7 +109,7 @@ class BrainInputInterpreter(
             IntentNegation.hasAllowedOccurrence(normalized, TriggerLexicon.EXECUTION_TERMS) &&
             TriggerLexicon.matches(normalized, listOf("código", "codigo", "script", "programa", "função", "funcao"))
         val information = !weather && !calculation && !navigation && !research && !codeExecution &&
-            Regex("(?i)\\b(explique|explica|como funciona|o que é|o que e)\\b").containsMatchIn(normalized)
+            isInformationalQuestion(normalized)
         val ambiguous = normalized.matches(Regex("(?i)^(faça|faca|execute|rode|fa\u00e7a|fazer) isso[.!? ]*$"))
 
         val intent: IntentCategory
@@ -233,6 +233,15 @@ class BrainInputInterpreter(
 
     private fun isNavigation(text: String): Boolean =
         Regex("(?i)\\b(ab(r|ra)|abra|abrir|mostre|mostrar|liste|listar)\\b.*\\b(catálogo|catalogo|capacidades|comandos)\\b").containsMatchIn(text)
+
+    private fun isInformationalQuestion(text: String): Boolean {
+        val asks = text.contains("?") || TriggerLexicon.matches(
+            text,
+            TriggerLexicon.INTERROGATIVOS + listOf("como funciona", "qual a melhor", "qual o melhor", "quais tecnologias")
+        )
+        val explanatory = Regex("(?i)\\b(explique|explica|como funciona|o que é|o que e|qual a melhor|qual o melhor|quais tecnologias|que tecnologias)\\b").containsMatchIn(text)
+        return asks && explanatory
+    }
 
     private fun extractLocation(text: String): String? {
         val match = Regex("(?i)\\b(?:em|de)\\s+(.+?)(?=\\s+(?:hoje|agora|amanhã|amanha|neste momento)\\b|[?!.;,]|$)").find(text)

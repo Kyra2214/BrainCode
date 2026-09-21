@@ -54,7 +54,7 @@ class WebResearchExecutor(
 
         return ActionExecution(
             success = true,
-            result = montarResumo(resultados),
+            result = output.answer,
             evidence = resultados.map { evidenciaDe(it) } + output.citations.map { "web-research:citation=${it.index}:${it.url}" } + "web-research:quality=${output.sourceQuality}",
             provenance = provenance(capability),
             researchSources = resultados

@@ -17,7 +17,7 @@ class WebResearchAgent(
 ) {
     fun research(request: ResearchRequest): ResearchRunResult {
         val started = clock.instant()
-        val safeQuery = QuerySanitizer.sanitizar(request.query)
+        val safeQuery = QuerySanitizer.sanitizar(ResearchQueryRewriter.rewrite(request.query))
         if (safeQuery.isBlank()) return failure(request, started, "consulta removida pela política de segurança")
         if (request.networkPolicy == NetworkPolicy.OFFLINE_ONLY) {
             return failure(request, started, "pesquisa online desativada pela política; use o cache local")
@@ -51,7 +51,7 @@ class WebResearchAgent(
         }
         val finished = clock.instant()
         return ResearchRunResult(
-            answer = found.joinToString("\n\n") { it.relevantContent.take(request.constraints.maxContentCharsPerSource) },
+            answer = ResearchAnswerSynthesizer.synthesize(request.query, found),
             sources = found,
             evidence = evidence,
             citations = citations,
