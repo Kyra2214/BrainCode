@@ -347,3 +347,13 @@ Após a auditoria do HEAD anterior, as lacunas críticas desta camada foram cone
 - DocumentationAgent permanece declarado como UNAVAILABLE até possuir executor dedicado e contrato/fluxo real; a existência do contrato não o torna executável.
 
 A implementação ainda só pode ser considerada consolidada após CI, suíte JVM/Android e UI E2E/readiness verdes no mesmo HEAD.
+
+## Correção da auditoria final — 2026-09-21
+
+Os três pontos pendentes da auditoria foram fechados estruturalmente:
+
+1. **Self-E2E fail-closed:** `ValidationEngine.selfAgent()` não cria mais contrato genérico para capability desconhecida. Sem registro de capability + responsável + contrato, o resultado é `FAIL` com `contract.missing` e `agent.unavailable`.
+2. **Porta 2:** o contrato de conteúdo agora mantém os requisitos explícitos e também valida slots estruturados declarados (`sujeito`, `ação`, `ambiente`, `elementos`, `estilo`, `iluminação`, `composição`, `formato`, `restrições`) sem obrigar slots que não foram pedidos.
+3. **Secretário/Roadmap:** cada tarefa do Roadmap registra especialista responsável e dependências. `SecretaryValidationRouter` transforma cada `ValidationResult` em rota explícita: especialista, usuário, Policy ou infraestrutura. O controller registra `ValidationFindingRouted` antes de `RoadmapValidationUpdated`; a correção continua usando o `RevisionFixer` existente sobre o mesmo passo/capability, preservando o responsável sem criar um segundo orquestrador.
+
+Testes adicionados/corrigidos cobrem: capability sem contrato, slots do Prompt, roteamento de findings e vínculo de tarefas do Roadmap. O HEAD ainda deve passar por CI/UI E2E/readiness antes de qualquer declaração de consolidação.
