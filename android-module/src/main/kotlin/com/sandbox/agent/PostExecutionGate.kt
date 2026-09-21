@@ -159,17 +159,33 @@ class PostExecutionGate(private val memory: LayeredMemory) {
             )
         }
         val chatStep = cycle.passos.firstOrNull { it.capacidade == "chat.respond" }
-        val doorE2E: ValidationResult? = chatStep?.let { step ->
-            val evidenceIds = step.executionEvidence + step.evidencias.map { it.toString() }
-            validation.lightChat(
-                ValidationSubject(
-                    capability = "chat.respond",
-                    door = com.brain.secretary.Door.CHAT,
-                    result = step.resultado.orEmpty(),
-                    evidence = evidenceIds,
-                    requiresInput = evidenceIds.any { it == "chat:clarification-question" }
+        val promptStep = cycle.passos.firstOrNull { it.capacidade == "prompt.library.generate" }
+        val doorE2E: ValidationResult? = when {
+            chatStep != null -> {
+                val evidenceIds = chatStep.executionEvidence + chatStep.evidencias.map { it.toString() }
+                validation.lightChat(
+                    ValidationSubject(
+                        capability = "chat.respond",
+                        door = com.brain.secretary.Door.CHAT,
+                        result = chatStep.resultado.orEmpty(),
+                        evidence = evidenceIds,
+                        requiresInput = evidenceIds.any { it == "chat:clarification-question" }
+                    )
                 )
-            )
+            }
+            promptStep != null -> {
+                val evidenceIds = promptStep.executionEvidence + promptStep.evidencias.map { it.toString() }
+                validation.promptContent(
+                    ValidationSubject(
+                        capability = "prompt.library.generate",
+                        door = com.brain.secretary.Door.PROMPT,
+                        result = promptStep.resultado.orEmpty(),
+                        requirements = requirements,
+                        evidence = evidenceIds
+                    )
+                )
+            }
+            else -> null
         }
         return ResultadoPosExecucao(
             verification = verification,
