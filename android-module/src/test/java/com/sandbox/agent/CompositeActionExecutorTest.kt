@@ -11,6 +11,7 @@ import com.brain.gateway.ActionRequest
 import com.brain.policy.PolicyBroker
 import com.brain.policy.PolicyContext
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CompositeActionExecutorTest {
@@ -54,10 +55,15 @@ class CompositeActionExecutorTest {
             origin = "test",
             providedCapabilities = emptySet()
         )
+        val context = PolicyContext("run", "task", "agent", RiskClass.LOW, sandboxRequired = false)
+        val decision = PolicyBroker(
+            allowedCapabilities = listOf("agent.fake"),
+            actorCapabilities = mapOf("agent" to listOf("agent.fake"))
+        ).authorize("agent", "agent.fake", "", context)
         val result = executor.execute(
-            com.brain.gateway.ActionRequest("test", "agent.fake", emptyMap(), "test"),
+            ActionRequest("test", "agent", "agent.fake", context = context),
             capability,
-            com.brain.policy.PolicyDecision.allow("test")
+            decision
         )
         assertEquals(false, result.success)
         assertTrue(result.error.orEmpty().contains("executor dedicado"))
