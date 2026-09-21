@@ -143,3 +143,45 @@ O mecanismo (`DoorPolicy.externalAccountsAllowed(door)`) nasce na Fase 1; o valo
 - A Policy é a autoridade; o Planner nunca é a única barreira.
 - Atualizar `ROADMAP_CANONICO.md`, `ARQUITETURA_3_PORTAS_SECRETARIO.md` e `ESTADO_ATUAL.md` a cada fase, marcando itens só com evidência executada.
 - Os percentuais 72/88/81% do roadmap são estimativas do próprio doc; use o critério de saída de cada fase, não o percentual.
+
+
+### Referência futura da Porta 2 — MeiGen / capacidades visuais
+
+Durante a preparação da Porta 2 foi identificado o projeto **MeiGen AI / MeiGen-AI-Design-MCP** como referência que pode casar diretamente com o domínio de prompts.
+
+A referência deve ser tratada como uma possível **capacidade/Skill visual da Porta 2**, e não como um segundo cérebro. Os conceitos relevantes para auditoria futura são:
+
+- Prompt Crafter / criação e refinamento;
+- Gallery/Reference Research;
+- biblioteca de prompts;
+- especialistas/subagentes separados;
+- execução paralela quando houver independência;
+- Skills/commands;
+- MCP;
+- geração de imagem/vídeo;
+- ComfyUI local;
+- providers/API externos posteriormente.
+
+Fluxo desejado no BrainCode:
+
+```
+Secretary
+  ↓
+Porta 2
+  ↓
+Prompt Specialist
+  ↓
+Prompt Crafter + Research + Critic/Optimizer
+  ↓
+Agent Self-E2E
+  ↓
+Secretary / Door E2E
+  ↓
+Provider autorizado
+```
+
+O BrainCode não deve simplesmente importar o projeto inteiro. Antes de qualquer incorporação: **AUDITAR → LICENÇA → CÓDIGO REAL → TESTES → SEGURANÇA → COMPATIBILIDADE → DECISÃO → INCORPORAR/ADAPTAR/REFERENCIAR → VALIDAR → DOCUMENTAR PROVENIÊNCIA**.
+
+Mesmo com um provider MeiGen/ComfyUI instalado no código, **provider instalado ≠ provider autorizado**. APIs/providers continuam bloqueados até o Marco 5.3 e pela Policy.
+
+O conceito só deve ser implementado na Porta 2 depois que a Porta 1 estiver formalmente consolidada com CI/E2E/readiness verdes.
