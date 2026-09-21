@@ -110,8 +110,8 @@ class BrainCodeJourneyE2ETest {
     }
 
     @Test
-    fun missingRequirementBecomesClarificationQuestion() {
-        send("Quero discutir fotografia")
+    fun ambiguousChatBecomesObjectiveClarificationQuestion() {
+        send("Faça isso.")
         composeRule.waitUntil(timeoutMillis = 120_000) {
             val hasClarificationMarker =
                 composeRule.onAllNodesWithText("Esclarecimento", substring = true, useUnmergedTree = true)
@@ -119,9 +119,9 @@ class BrainCodeJourneyE2ETest {
                 composeRule.onAllNodesWithText("Preciso de um esclarecimento", substring = true, useUnmergedTree = true)
                     .fetchSemanticsNodes().isNotEmpty()
             val hasQuestionMarker =
-                composeRule.onAllNodesWithText("sujeito principal", substring = true, useUnmergedTree = true)
+                composeRule.onAllNodesWithText("Qual ação ou objeto", substring = true, useUnmergedTree = true)
                     .fetchSemanticsNodes().isNotEmpty() ||
-                composeRule.onAllNodesWithText("Qual é a sua preferência?", substring = true, useUnmergedTree = true)
+                composeRule.onAllNodesWithText("executar isso", substring = true, useUnmergedTree = true)
                     .fetchSemanticsNodes().isNotEmpty()
             hasClarificationMarker && hasQuestionMarker
         }
