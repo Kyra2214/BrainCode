@@ -194,6 +194,7 @@ Categorias previstas incluem, conforme a necessidade real do Brain:
 - Requirements;
 - Architecture;
 - Roadmap;
+- Documentation;
 - Code;
 - UI;
 - Backend;
@@ -222,6 +223,60 @@ Responsabilidades:
 8. impedir avanço enquanto um requisito obrigatório estiver em FAIL.
 
 O Secretário não deverá “consertar” o resultado produzido por um especialista.
+
+## 6.1 Porta 3 — Roadmap como checklist operacional do Secretário
+
+Na Porta 3, o **Roadmap é o checklist operacional do Secretário**. O CreatePhaseMachine define a macrofase; o Roadmap define o trabalho verificável dentro dela.
+
+Para cada etapa/tarefa do Roadmap, o Secretário deverá acompanhar:
+
+- responsável;
+- dependências;
+- requisitos;
+- restrições;
+- evidências esperadas;
+- E2E do especialista;
+- resultado da validação do Secretário;
+- status;
+- tentativa atual;
+- finding, quando houver;
+- responsável pela correção;
+- bloqueios;
+- condição para liberar a próxima etapa.
+
+Uma etapa só poderá ser marcada como concluída quando houver evidência e PASS do E2E correspondente. O agente não poderá avançar o Roadmap por conta própria.
+
+O Roadmap poderá liberar tarefas em paralelo quando as dependências permitirem. Tarefas dependentes ficam bloqueadas até que seus pré-requisitos tenham PASS.
+
+Fluxo:
+
+**Roadmap → tarefa → especialista → Self-E2E → Secretário → E2E da etapa → PASS → próxima tarefa**
+
+Em FAIL:
+
+**FAIL → finding → responsável → correção → Self-E2E novamente → Secretário → E2E da etapa novamente**
+
+Assim, a Porta 3 não depende de uma sequência implícita ou de agentes reportando “concluído”; o Secretário possui um estado verificável de cada etapa.
+
+## 6.2 Especialista de Documentação
+
+O BrainCode deverá tratar **Documentação** como um especialista próprio quando a tarefa exigir produção ou atualização documental.
+
+O especialista de Documentação:
+
+- recebe decisões, requisitos, mudanças e evidências validadas;
+- atualiza a documentação correspondente;
+- mantém arquitetura, decisões, APIs/interfaces, build, testes, changelog e entrega coerentes com o estado real;
+- não inventa funcionalidades ou evidências;
+- executa seu próprio E2E antes de devolver o resultado ao Secretário.
+
+A Documentação é um especialista transversal, não uma responsabilidade integral do Secretário. O Secretário coordena quando uma atualização documental é necessária e valida o resultado.
+
+Na entrega final da Porta 3, a documentação deverá ser verificada como parte do checklist do Roadmap:
+
+**implementação → evidências → documentação atualizada → E2E da documentação → validação do Secretário**
+
+O especialista de Documentação também entra na regra permanente de que nenhum agente pode ser promovido ao catálogo sem ValidationContract e E2E.
 
 ## 7. Relação com Policy
 
@@ -437,6 +492,9 @@ Os journeys deverão provar:
 
 ### Secretário
 - rejeita resultado sem E2E;
+- usa o Roadmap como checklist operacional da Porta 3;
+- bloqueia etapa enquanto dependência obrigatória estiver sem PASS;
+- permite paralelismo somente quando as dependências estiverem satisfeitas;
 - rejeita E2E sem evidência;
 - encaminha finding ao responsável;
 - não corrige pelo agente;
@@ -457,6 +515,10 @@ Os journeys deverão provar:
 ### Porta 3
 - requisito → arquitetura;
 - arquitetura → plano;
+- Roadmap criado e usado como checklist;
+- tarefas paralelas respeitam dependências;
+- Documentação atualizada por especialista quando exigida;
+- E2E da documentação;
 - aprovação;
 - execução;
 - integração;
