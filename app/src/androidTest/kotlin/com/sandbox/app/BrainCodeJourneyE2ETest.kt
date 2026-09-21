@@ -7,7 +7,6 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -16,13 +15,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Real Android journeys: drives the same chat UI used by the user,
- * submits deterministic requests, and verifies that BrainCode returns
- * a result of the expected kind.
- *
- * No external LLM/API is required for these journeys.
- */
+/** Real Android journeys through the same chat UI used by the user. */
 @RunWith(AndroidJUnit4::class)
 class BrainCodeJourneyE2ETest {
     @get:Rule
@@ -41,12 +34,10 @@ class BrainCodeJourneyE2ETest {
                 composeRule.onNodeWithText("Tentar de novo", substring = true, useUnmergedTree = true).performClick()
             }
         }
-
         composeRule.waitUntil(timeoutMillis = 120_000) {
             runCatching {
                 composeRule.onNode(hasSetTextAction(), useUnmergedTree = true)
-                    .assertIsDisplayed()
-                    .assertIsEnabled()
+                    .assertIsDisplayed().assertIsEnabled()
                 true
             }.getOrDefault(false)
         }
@@ -121,14 +112,9 @@ class BrainCodeJourneyE2ETest {
     @Test
     fun missingRequirementBecomesClarificationQuestion() {
         send("Quero discutir fotografia")
-        try {
-            composeRule.waitUntil(timeoutMillis = 120_000) {
-                composeRule.onAllNodesWithText("sujeito principal", substring = true, useUnmergedTree = true)
-                    .fetchSemanticsNodes().isNotEmpty()
-            }
-        } catch (failure: Throwable) {
-            composeRule.onRoot(useUnmergedTree = true).printToLog("BRAINCODE_CLARIFICATION_FAILURE")
-            throw failure
+        composeRule.waitUntil(timeoutMillis = 120_000) {
+            composeRule.onAllNodesWithText("sujeito principal", substring = true, useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty()
         }
     }
 
