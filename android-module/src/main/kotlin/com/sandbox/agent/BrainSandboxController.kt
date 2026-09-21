@@ -90,8 +90,8 @@ class BrainSandboxController(
 ) {
     private val behaviorDiagnostics = BehaviorDiagnostics(EventStoreBehaviorTraceSink(events, "android-local"))
     private val dynamicCapabilityProviders = capabilityProviders
-    private val approvals = FileApprovalStore(File(rootfsDir.parentFile ?: rootfsDir, "approvals.jsonl"))
-    private val planningArtifacts = FilePlanningArtifactStore(File(rootfsDir.parentFile ?: rootfsDir, "planning-artifacts.jsonl"))
+    private val approvals = FileApprovalStore(File(rootfsDir, "approvals.jsonl"))
+    private val planningArtifacts = FilePlanningArtifactStore(File(rootfsDir, "planning-artifacts.jsonl"))
     private val sandbox = Sandbox(runtime = runtime, rootfsDir = rootfsDir)
     private val capabilities = CapabilityRegistry(
         listOf(

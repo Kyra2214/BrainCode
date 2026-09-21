@@ -17,6 +17,7 @@ import com.brain.behavior.ValidatedLearning
 import com.brain.behavior.LearningCandidate
 import com.brain.memory.LayeredMemory
 import com.brain.planner.PlanoExecucao
+import com.brain.secretary.CreatePhase
 import com.brain.validation.ValidationEngine
 import com.brain.validation.ValidationSubject
 import com.brain.validation.ValidationResult
@@ -150,7 +151,8 @@ class PostExecutionGate(private val memory: LayeredMemory) {
         val doorE2E: ValidationResult? = when {
             createPhase != null && createStep != null -> {
                 val evidenceIds = createStep.executionEvidence + createStep.evidencias.map { it.toString() } +
-                    listOfNotNull(createStep.approvalId?.let { "approval:" + it })
+                    listOfNotNull(createStep.approvalId?.let { "approval:" + it }) +
+                    if (createPhase == CreatePhase.APPROVED.name) listOf("approval:secretary-designation") else emptyList()
                 validation.productPhase(
                     createPhase,
                     ValidationSubject(
