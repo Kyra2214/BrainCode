@@ -108,3 +108,13 @@ Uma auditoria posterior encontrou que a aprovação da criação estava apenas n
 ### Reabertura e correção da Fase 2 — Porta 1
 
 Uma auditoria identificou que a Porta 1 ainda não tinha um Planning Agent materializando um artefato persistente e que o `NEEDS_CLARIFICATION` ainda não era um contrato verificável de pergunta via `chat.respond`. A correção adiciona `PlanningAgent`, `PlanningArtifact` e `FilePlanningArtifactStore`, além de `ClarificationQuestion`, evento `ClarificationRequested` e evidência `chat:clarification-question`. Os testes unitários e a integração Android desses caminhos passaram localmente; CI, UI E2E e readiness permanecem pendentes para o novo HEAD.
+
+## Fase conversacional — adapter no-inference
+
+O `ChatResponseExecutor` agora recebe o `NoInferenceConversationEngine`, adapter Kotlin/Android baseado no núcleo conversacional determinístico de `TheShovel/no-inference`. O engine carrega padrões sociais, templates, aliases e knowledge como dados em `app/src/main/assets/no_inference/`, além de uma base local em português para explicações. Ele cobre saudações, despedidas, agradecimentos, identidade, estado social, lookup factual local, tópico, follow-up e fallback conversacional neutro.
+
+O caminho não altera a Porta 1: CHAT continua no fast path e não chama Planner, RequirementGate, Reasoning pesado, CodeAgent ou ResearchAgent para conversa simples. `ResponseComposer` continua sendo o ponto que transforma o resultado em texto e `PostExecutionGate` continua validando a resposta. Pesquisa e dados atuais permanecem no `CapabilityRegistry`/capability externa autorizada; o engine não finge que knowledge estática é dado atual.
+
+### Proveniência, licença e exclusões
+
+A origem é `https://github.com/TheShovel/no-inference`, licenciado sob AGPL-3.0; a cópia da licença foi preservada em `app/src/main/assets/no_inference/LICENSE`. A integração importou apenas recursos conversacionais e o adapter Android. CLI, TUI, servidor, API web, `cos` coding agent, editor, code generator, math solver, integrações externas e infraestrutura de execução do projeto de origem foram deliberadamente excluídos do runtime BrainCode. A distribuição do APK deve manter a oferta de código-fonte e os notices exigidos pela licença AGPL aplicáveis ao componente integrado.

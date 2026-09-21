@@ -12,7 +12,8 @@ data class ComposedChatResponse(
 
 /** Compõe texto conversacional a partir de dados já autorizados; não executa efeitos. */
 class ResponseComposer(
-    private val clock: Clock = Clock.systemDefaultZone()
+    private val clock: Clock = Clock.systemDefaultZone(),
+    private val conversationEngine: NoInferenceConversationEngine? = null
 ) {
     fun compose(
         prompt: String,
@@ -22,6 +23,7 @@ class ResponseComposer(
     ): ComposedChatResponse {
         val lower = prompt.lowercase(Locale.ROOT)
         val evidence = mutableListOf("chat:local-only", "chat:read-only")
+        val engineResponse = conversationEngine?.respond(prompt, context)
         val text = when {
             clarification -> {
                 evidence += "chat:clarification-question"
@@ -39,9 +41,18 @@ class ResponseComposer(
                 evidence += "chat:research-context-included"
                 "Pedido analisado: $prompt\nResumo baseado nas fontes autorizadas recebidas nesta etapa:\n$research"
             }
+            engineResponse != null -> {
+                evidence += engineResponse.evidence
+                if (engineResponse.topic != null) evidence += "chat:topic:${engineResponse.topic}"
+                engineResponse.text
+            }
             contextHasContent(context) -> {
                 evidence += "chat:context:read-only"
                 formatContext(context)
+            }
+            conversationEngine != null -> {
+                evidence += "chat:conversation-neutral-fallback"
+                "Posso conversar sobre isso, mas não reconheci uma resposta local confiável. Pode reformular a pergunta?"
             }
             else -> {
                 if (looksLikeFactualQuestion(lower)) {

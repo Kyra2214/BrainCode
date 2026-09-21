@@ -14,7 +14,8 @@ import java.time.Clock
 class ChatResponseExecutor(
     clock: Clock = Clock.systemDefaultZone(),
     private val contextProvider: () -> ConversationContext = { ConversationContext() },
-    private val composer: ResponseComposer = ResponseComposer(clock)
+    private val conversationEngine: NoInferenceConversationEngine? = null,
+    private val composer: ResponseComposer = ResponseComposer(clock, conversationEngine)
 ) : ActionExecutor {
     override fun execute(request: ActionRequest, capability: CapabilityDefinition, decision: PolicyDecision): ActionExecution {
         val prompt = request.parameters["parameter.0"]?.trim().orEmpty()

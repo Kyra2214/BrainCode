@@ -730,7 +730,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 val chatResponseExecutor = ChatResponseExecutor(
                     contextProvider = {
                         sessions.firstOrNull { it.id == activeSessionId }?.conversationContext ?: ConversationContext()
-                    }
+                    },
+                    conversationEngine = noInferenceEngine(getApplication())
                 )
                 brainController = BrainSandboxController(
                     prepared,

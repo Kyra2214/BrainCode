@@ -100,3 +100,11 @@ Não criar segundo cérebro, segundo orquestrador, segundo Gateway/Policy/Memory
 ## 10. Regra de mudança
 
 Antes de criar código: localizar implementação existente, confirmar caller, preservar contratos, integrar no caminho canônico, testar/evidenciar e atualizar esta documentação.
+
+## 11. Conversação simbólica offline-first
+
+Para `Door.CHAT` com rota `CONVERSATION`, o caminho canônico é `IntentEnvelope → BrainSandboxController fast path → chat.respond → ChatResponseExecutor → ResponseComposer → NoInferenceConversationEngine → PostExecutionGate leve → UI`. O `NoInferenceConversationEngine` é um adapter Android do núcleo conversacional determinístico do projeto TheShovel/no-inference: pattern matcher, templates, lookup de conhecimento local, memória factual limitada ao ciclo do executor, extração de tópico e follow-up. Ele não é um segundo cérebro, não autoriza capabilities e não executa código.
+
+O BrainCode continua dono de `CapabilityRegistry`, `PolicyBroker`, `ActionGateway`, memória persistente, EventStore, evidências e readiness. Perguntas de dados atuais continuam sendo classificadas pelo Intent Envelope e encaminhadas à capability apropriada; o engine simbólico não responde clima, cotação ou outro dado mutável a partir de conhecimento estático. O fallback de conversa é neutro e nunca usa o texto de requisitos/planejamento.
+
+Foram importados apenas recursos conversacionais sob `app/src/main/assets/no_inference/`: padrões sociais, aliases, templates explicativos, licença AGPL-3.0 e knowledge base local em português. CLI, TUI, servidor, coding agent `cos`, editor, code generator, math solver e APIs externas ficaram fora do runtime Android.

@@ -1,0 +1,22 @@
+[
+  {
+    "q": ["o que é um disjuntor", "o que e disjuntor", "explique disjuntor"],
+    "a": "Um disjuntor é um dispositivo de proteção elétrica que interrompe automaticamente o circuito quando detecta uma corrente acima do limite seguro, como em uma sobrecarga ou curto-circuito. Depois de eliminada a causa, ele pode ser rearmeado conforme as orientações do projeto e do fabricante."
+  },
+  {
+    "q": ["explique como funciona um motor elétrico", "como funciona um motor eletrico", "explique motor elétrico"],
+    "a": "Um motor elétrico transforma energia elétrica em movimento. A corrente percorre as bobinas e cria um campo magnético; a interação entre esse campo e o campo do rotor produz torque, fazendo o eixo girar. O controle de velocidade e torque depende do tipo de motor e do circuito de acionamento."
+  },
+  {
+    "q": ["quem inventou o telefone", "quem criou o telefone"],
+    "a": "Alexander Graham Bell recebeu uma patente importante para o telefone em 1876. A história também envolve contribuições anteriores e simultâneas de inventores como Antonio Meucci, Elisha Gray e Johann Philipp Reis, por isso a atribuição histórica é discutida."
+  },
+  {
+    "q": ["o que significa dns", "o que é dns", "o que e dns"],
+    "a": "DNS significa Domain Name System. É o sistema que associa nomes de domínio, como exemplo.com, a endereços IP usados pelos dispositivos para localizar servidores na rede."
+  },
+  {
+    "q": ["o que é inteligência artificial", "o que e inteligencia artificial", "me explique o que é inteligência artificial", "me explique o que e inteligencia artificial"],
+    "a": "Inteligência artificial é o campo que desenvolve sistemas capazes de executar tarefas que normalmente exigem capacidades humanas, como reconhecer padrões, compreender linguagem, fazer previsões e tomar decisões. Os resultados dependem dos dados, métodos e limites definidos para cada sistema."
+  }
+]

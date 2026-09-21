@@ -1,0 +1,22 @@
+{
+  "greetings": {
+    "patterns": ["^(?:olá|ola)$", "^(?:olá|ola) (?:boa noite|bom dia|boa tarde)$", "^oi$", "^oi (?:boa noite|bom dia|boa tarde)$", "^bom dia$", "^boa tarde$", "^boa noite$", "^como vai$", "^como você está$", "^como voce esta$"],
+    "response": ["Olá! Como posso ajudar?", "Oi! Estou pronto para conversar. Sobre o que você quer falar?", "Olá! Pode me fazer uma pergunta."]
+  },
+  "farewells": {
+    "patterns": ["^tchau$", "^até logo$", "^ate logo$", "^até mais$", "^ate mais$"],
+    "response": "Tchau! Quando quiser continuar, estarei aqui."
+  },
+  "thanks": {
+    "patterns": ["^obrigado$", "^obrigada$", "^valeu$", "^muito obrigado$", "^muito obrigada$"],
+    "response": ["De nada!", "Por nada! Se precisar, pode perguntar.", "Fico feliz em ajudar."]
+  },
+  "wellbeing": {
+    "patterns": ["^como você está\\??$", "^como voce esta\\??$", "^tudo bem\\??$"],
+    "response": "Estou bem e pronto para ajudar. Como você está?"
+  },
+  "identity": {
+    "patterns": ["^quem é você\\??$", "^quem e voce\\??$"],
+    "response": "Sou o BrainCode, com uma camada conversacional simbólica local e determinística."
+  }
+}
