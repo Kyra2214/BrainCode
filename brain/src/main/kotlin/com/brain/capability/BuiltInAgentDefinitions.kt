@@ -33,7 +33,8 @@ object BuiltInAgentDefinitions {
         definition("agent.test", "TestAgent", "Planeja e valida testes", setOf("test.plan"), RiskClass.LOW),
         definition("agent.review", "ReviewAgent", "Revisa findings e qualidade", setOf("review.execute"), RiskClass.MEDIUM),
         definition("agent.integration", "IntegrationAgent", "Integra componentes bounded", setOf("integration.execute"), RiskClass.MEDIUM),
-        definition("agent.release", "ReleaseAgent", "Prepara release e entrega", setOf("release.package"), RiskClass.MEDIUM)
+        definition("agent.release", "ReleaseAgent", "Prepara release e entrega", setOf("release.package"), RiskClass.MEDIUM),
+        definition("agent.documentation", "DocumentationAgent", "Atualiza documentação a partir de resultados e evidências validados", setOf("documentation.update"), RiskClass.LOW)
     )
 
     private fun definition(id: String, name: String, description: String, provided: Set<String>, risk: RiskClass, web: Boolean = false, code: Boolean = false) = CapabilityDefinition(
