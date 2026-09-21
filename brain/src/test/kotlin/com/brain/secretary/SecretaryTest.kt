@@ -47,6 +47,25 @@ class SecretaryTest {
     }
 
     @Test
+    fun `conversa sobre criar aplicativo nao abre porta de criacao`() {
+        assertEquals(
+            Door.CHAT,
+            secretary.classify("quero apenas conversar sobre como criar um aplicativo de lista de compras. não quero criar o aplicativo agora").door
+        )
+        assertEquals(
+            Door.CHAT,
+            secretary.classify("tenho uma ideia de app, mas só quero trocar ideia por enquanto").door
+        )
+    }
+
+    @Test
+    fun `aprovacao explicita continua abrindo criacao na fase approved`() {
+        val intent = secretary.classify("pode começar a desenvolver o app de lista de compras")
+        assertEquals(Door.CREATE, intent.door)
+        assertEquals(CreatePhase.APPROVED, intent.phase)
+    }
+
+    @Test
     fun `classificar rejeita prompt vazio`() {
         runCatching { secretary.classify(" ") }.onSuccess { error("prompt vazio deveria falhar") }
     }

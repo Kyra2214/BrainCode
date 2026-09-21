@@ -24,4 +24,12 @@ class ValidationContractRegistryTest {
         assertNotNull(contract)
         assertEquals("self-e2e:local.prompt.creator", contract.id)
     }
+
+    @Test
+    fun brain_analyze_recebe_contrato_leve() {
+        val contract = ValidationContractRegistry.contractForCapability("brain.analyze")
+        assertNotNull(contract)
+        assertEquals("self-e2e:agent.requirements.analyze", contract.id)
+        assertEquals("agent.requirements", ValidationContractRegistry.ownerForCapability("brain.analyze"))
+    }
 }

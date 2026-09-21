@@ -73,6 +73,16 @@ class ChatResponseExecutorTest {
     }
 
     @Test
+    fun `pergunta factual sem pesquisa nao finge ter entendido`() {
+        val result = ChatResponseExecutor().execute(request("Qual a temperatura de Rio das Ostras hoje"), capability, decision)
+
+        assertTrue(result.success)
+        assertTrue(result.evidence.contains("chat:factual-question-no-research"))
+        assertTrue(result.result!!.contains("não tenho essa informação sem pesquisar"))
+        assertTrue(result.result!!.contains("quer que eu pesquise agora"))
+    }
+
+    @Test
     fun `needs clarification produz pergunta via chat respond`() {
         val result = ChatResponseExecutor().execute(
             request("Qual estilo visual você prefere?", clarification = true), capability, decision

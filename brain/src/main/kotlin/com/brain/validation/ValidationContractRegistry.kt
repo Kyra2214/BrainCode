@@ -17,10 +17,21 @@ object ValidationContractRegistry {
         "sandbox.diagnose" to "agent.review",
         "prompt.library.generate" to "local.prompt.creator",
         "prompt.library.write" to "local.prompt.creator",
-        "chat.respond" to "agent.requirements"
+        "chat.respond" to "agent.requirements",
+        "brain.analyze" to "agent.requirements"
     )
 
     private val localContracts = mapOf(
+        "agent.requirements" to ValidationContract(
+            id = "self-e2e:agent.requirements.analyze",
+            capability = "brain.analyze",
+            level = ValidationLevel.LIGHT,
+            checks = listOf(
+                ValidationCheck("result-or-evidence", "entendimento do objetivo produziu resultado ou evidência") {
+                    it.result.isNotBlank() || it.evidence.isNotEmpty()
+                }
+            )
+        ),
         "local.prompt.creator" to ValidationContract(
             id = "self-e2e:local.prompt.creator",
             capability = "prompt.library.generate",

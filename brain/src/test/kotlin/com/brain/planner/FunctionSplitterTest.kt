@@ -81,6 +81,17 @@ class FunctionSplitterTest {
         assertFalse(plan.passos.any { it.capacidade == "sandbox.code" })
     }
 
+    @Test
+    fun `perguntas factuais de tempo real geram pesquisa`() {
+        assertTrue(KeywordFunctionSplitter().split("qual a temperatura de rio das ostras hoje").any { it.capacidade == "network.research" })
+        assertTrue(KeywordFunctionSplitter().split("quanto está o dólar agora").any { it.capacidade == "network.research" })
+    }
+
+    @Test
+    fun `pergunta conceitual nao gera pesquisa obrigatoria`() {
+        assertFalse(KeywordFunctionSplitter().split("me explica como funciona recursão").any { it.capacidade == "network.research" })
+    }
+
     private fun suspendPlan(block: suspend () -> Unit) {
         var failure: Throwable? = null
         block.startCoroutine(object : kotlin.coroutines.Continuation<Unit> {

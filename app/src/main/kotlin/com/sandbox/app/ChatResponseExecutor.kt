@@ -5,6 +5,7 @@ import com.brain.gateway.ActionExecution
 import com.brain.gateway.ActionExecutor
 import com.brain.gateway.ActionRequest
 import com.brain.policy.PolicyDecision
+import com.brain.text.TriggerLexicon
 import java.time.Clock
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -51,8 +52,13 @@ class ChatResponseExecutor(
                 formatContext(context)
             }
             else -> {
-                evidence += "chat:conversation"
-                "Entendi o pedido: $prompt\nPosso ajudar a organizar a ideia, os requisitos, as decisões e as pendências sem criar ou executar nada."
+                if (looksLikeFactualQuestion(lower)) {
+                    evidence += "chat:factual-question-no-research"
+                    "Isso parece pedir um dado atual (ex.: clima, cotação, hora real). Eu não tenho essa informação sem pesquisar — quer que eu pesquise agora?"
+                } else {
+                    evidence += "chat:conversation"
+                    "Entendi o pedido: $prompt\nPosso ajudar a organizar a ideia, os requisitos, as decisões e as pendências sem criar ou executar nada."
+                }
             }
         }
         val provenance = provenance(capability).toMutableList()
@@ -60,8 +66,10 @@ class ChatResponseExecutor(
         return ActionExecution(true, result = response, evidence = evidence, provenance = provenance)
     }
 
-    private fun asksTime(prompt: String): Boolean = listOf("que horas", "qual a hora", "horário", "horario").any { it in prompt }
-    private fun asksDate(prompt: String): Boolean = listOf("que dia", "qual a data", "data de hoje", "hoje é", "hoje e").any { it in prompt }
+    private fun asksTime(prompt: String): Boolean = TriggerLexicon.PERGUNTAS_HORA.any { it in prompt }
+    private fun asksDate(prompt: String): Boolean = TriggerLexicon.PERGUNTAS_DATA.any { it in prompt }
+    private fun looksLikeFactualQuestion(prompt: String): Boolean =
+        TriggerLexicon.INTERROGATIVOS.any { it in prompt } && TriggerLexicon.TEMAS_TEMPO_REAL.any { it in prompt }
     private fun contextHasContent(context: ConversationContext): Boolean =
         context.idea != null || context.requirements.isNotEmpty() || context.decisions.isNotEmpty() || context.pending.isNotEmpty()
 

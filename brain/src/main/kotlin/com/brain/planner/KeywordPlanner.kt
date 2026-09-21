@@ -8,6 +8,7 @@ import com.brain.secretary.DeterministicSecretary
 import com.brain.secretary.DoorPolicy
 import com.brain.secretary.OrderIntent
 import com.brain.text.IntentNegation
+import com.brain.text.TriggerLexicon
 
 /** Decompõe objetivo em funções declarativas; não autoriza nem executa. */
 fun interface FunctionSplitter {
@@ -29,15 +30,14 @@ class KeywordFunctionSplitter : FunctionSplitter {
         val pedidoVisualDePrompt = PromptDomain.classificar(normalizado) == PromptDomain.IMAGEM &&
             IntentNegation.hasAllowedOccurrence(normalizado, "transform", "alter", "modific", "edita", "conver", "recri", "aplic")
         val pedidoDePrompt = pedidoLiteralDePrompt || pedidoVisualDePrompt
-        val pesquisaExplicita = IntentNegation.hasAllowedOccurrence(normalizado,
-                "pesquis", "analis", "investig", "compar", "encontr", "document",
-                "mais atual", "mais recentes", "mudanças recentes", "técnicas atuais"
-            )
+        val pesquisaExplicita = IntentNegation.hasAllowedOccurrence(normalizado, TriggerLexicon.VERBOS_PESQUISA)
+        val perguntaFactual = TriggerLexicon.INTERROGATIVOS.any { it in normalizado } &&
+            TriggerLexicon.TEMAS_TEMPO_REAL.any { it in normalizado }
         // Prompts visuais se beneficiam de referências técnicas mesmo quando o usuário
         // não escreve literalmente "pesquise"; prompts de arquitetura/texto não devem
         // ganhar uma etapa de rede apenas por conter a palavra "prompt".
         val promptVisual = pedidoDePrompt && PromptDomain.classificar(normalizado) == PromptDomain.IMAGEM
-        val pesquisaNecessaria = pesquisaExplicita || promptVisual
+        val pesquisaNecessaria = pesquisaExplicita || perguntaFactual || promptVisual
         if (!normalizado.contains("criar documento") && pesquisaNecessaria) {
             passos += PassoPlano(
                 "pesquisar", "network.research", "evidência de pesquisa disponível",

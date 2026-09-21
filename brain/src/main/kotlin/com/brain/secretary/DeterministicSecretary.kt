@@ -2,6 +2,7 @@ package com.brain.secretary
 
 import com.brain.prompt.PromptDomain
 import com.brain.text.IntentNegation
+import com.brain.text.TriggerLexicon
 
 /** Secretário sem LLM: classifica intenção, fase e restrições de forma reproduzível. */
 class DeterministicSecretary {
@@ -32,9 +33,9 @@ class DeterministicSecretary {
     fun isApproval(prompt: String): Boolean = isApprovalSignal(prompt.trim().lowercase())
 
     private fun restrictions(text: String): Set<Restriction> = buildSet {
-        if (IntentNegation.hasNegatedOccurrence(text, WEB_TERMS)) add(Restriction.NO_WEB)
-        if (IntentNegation.hasNegatedOccurrence(text, PRODUCTION_TERMS)) add(Restriction.NO_PRODUCE)
-        if (IntentNegation.hasNegatedOccurrence(text, EXECUTION_TERMS)) add(Restriction.NO_EXECUTE)
+        if (IntentNegation.hasNegatedOccurrence(text, TriggerLexicon.WEB_TERMS)) add(Restriction.NO_WEB)
+        if (IntentNegation.hasNegatedOccurrence(text, TriggerLexicon.VERBOS_CRIACAO + TriggerLexicon.SUBSTANTIVOS_ENTREGAVEL)) add(Restriction.NO_PRODUCE)
+        if (IntentNegation.hasNegatedOccurrence(text, TriggerLexicon.EXECUTION_TERMS)) add(Restriction.NO_EXECUTE)
     }
 
     private fun isPrompt(text: String): Boolean {
@@ -45,23 +46,15 @@ class DeterministicSecretary {
     }
 
     private fun isCreation(text: String): Boolean {
-        if (SOFT_CREATION_CONTEXT.any { it in text }) return false
-        return IntentNegation.hasAllowedOccurrence(
-            text,
-            "criar aplicativo", "crie um aplicativo", "criar um app", "desenvolv", "implementar", "implemente", "construir", "construa", "montar um sistema", "criação", "desenvolvimento"
-        ) || (IntentNegation.hasAllowedOccurrence(text, "aplicativo", "aplicação", "software", "site", "sistema") &&
-            IntentNegation.hasAllowedOccurrence(text, "criar", "crie", "desenvolv", "implementar", "implemente", "constru"))
+        if (TriggerLexicon.CONTEXTO_SO_CONVERSA.any { it in text }) return false
+        if (TriggerLexicon.VETOS_EXPLICITOS_REGEX.any { Regex(it).containsMatchIn(text) }) return false
+        return IntentNegation.hasAllowedOccurrence(text, TriggerLexicon.VERBOS_CRIACAO) ||
+            (IntentNegation.hasAllowedOccurrence(text, TriggerLexicon.SUBSTANTIVOS_ENTREGAVEL) &&
+                IntentNegation.hasAllowedOccurrence(text, TriggerLexicon.VERBOS_CRIACAO))
     }
 
     private fun isApprovalSignal(text: String): Boolean = IntentNegation.hasAllowedOccurrence(
         text,
-            "pode começar", "pode iniciar", "comece o desenvolvimento", "inicie o desenvolvimento", "pode desenvolver", "pode implementar", "implemente", "execute o plano", "execute os testes", "pode executar"
+        TriggerLexicon.SINAIS_APROVACAO
     )
-
-    private companion object {
-        val WEB_TERMS = listOf("pesquis", "internet", "web", "fontes", "referências")
-        val PRODUCTION_TERMS = listOf("criar", "crie", "produzir", "escrever", "gerar", "desenvolver", "implementar", "projeto", "aplicativo", "sistema", "artefato")
-        val EXECUTION_TERMS = listOf("executar", "execute", "execução", "rodar", "compilar", "testar", "testes")
-        val SOFT_CREATION_CONTEXT = listOf("estou pensando em", "vamos discutir", "quero discutir", "apenas planejar", "só planejar", "tenho uma ideia")
-    }
 }
