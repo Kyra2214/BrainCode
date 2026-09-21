@@ -181,7 +181,7 @@ class BrainSandboxController(
     }
 
     fun resumePlan(plano: PlanoExecucao, runId: String, approvalId: String): ResultadoCiclo =
-        executeWithEvents(pendingCreatePlans[runId] ?: plano, runId) {
+        executeWithEvents(pendingCreatePlans[runId] ?: plano, runId, createPhase = pendingCreateScopes[runId]?.phase?.name) {
             attemptPlan, _ -> bridge.resume(attemptPlan, runId = runId, actor = actor, approvalId = approvalId, doorScope = pendingCreateScopes[runId])
         }.also { pendingCreateScopes.remove(runId); pendingCreatePlans.remove(runId) }
 
@@ -344,7 +344,7 @@ class BrainSandboxController(
             manifest = WorkflowManifest("brain-plan", "1.0.0", listOf(WorkflowNode("plan", "brain.plan", retryLimit = 0))),
             authorize = { it == "brain.plan" },
             execute = { node, attempt ->
-                cycle = executeWithEvents(plan, runId, if (intent == null) emptyList() else reasoning.requirements.map { it.text }) { attemptPlan, attemptRunId ->
+                cycle = executeWithEvents(plan, runId, if (intent == null) emptyList() else reasoning.requirements.map { it.text }, createPhase = planningIntent?.phase?.name) { attemptPlan, attemptRunId ->
                     bridge.authorizeAndExecute(attemptPlan, attemptRunId, actor, onPasso = { passo ->
                         emit(
                             attemptRunId,
@@ -437,6 +437,7 @@ class BrainSandboxController(
         plan: PlanoExecucao,
         runId: String,
         requirements: List<String> = emptyList(),
+        createPhase: String? = null,
         action: (PlanoExecucao, String) -> ResultadoCiclo
     ): ResultadoCiclo {
         emit(runId, "plan", "PlanCreated", mapOf("steps" to plan.passos.size.toString()))
@@ -494,7 +495,8 @@ class BrainSandboxController(
                 cycle = result,
                 requirements = requirements,
                 attempt = attempt,
-                previousValidationResultId = previousValidationResultId
+                previousValidationResultId = previousValidationResultId,
+                createPhase = createPhase
             )
             previousValidationResultId = postExecution.selfE2E.lastOrNull()?.resultId ?: postExecution.doorE2E?.resultId
             updateRoadmapFromValidation(runId, postExecution)
