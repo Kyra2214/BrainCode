@@ -115,11 +115,12 @@ class NoInferenceConversationEngine(
     }
 
     private fun lookupKnowledge(query: String): String? {
+        knowledge.firstOrNull { entry -> entry.questions.any { normalize(it) == query } }?.let { return it.answer }
         val normalizedEntries = knowledge.asSequence()
             .map { entry -> entry to entry.questions.maxByOrNull { overlap(normalize(it), query) } }
             .filter { (_, question) -> question != null }
             .map { (entry, question) -> entry to overlap(normalize(question!!), query) }
-            .filter { (_, score) -> score >= 0.55 }
+            .filter { (_, score) -> score >= 0.45 }
             .maxByOrNull { (_, score) -> score }
         return normalizedEntries?.first?.answer
     }
