@@ -53,7 +53,8 @@ class CompositeActionExecutorTest {
             category = com.brain.capability.CapabilityCategory.AGENT,
             ownerId = "test",
             origin = "test",
-            providedCapabilities = emptySet()
+            providedCapabilities = emptySet(),
+            provenance = listOf(CapabilityProvenance("test", "unit"))
         )
         val context = PolicyContext("run", "task", "agent", RiskClass.LOW, sandboxRequired = false)
         val decision = PolicyBroker(
