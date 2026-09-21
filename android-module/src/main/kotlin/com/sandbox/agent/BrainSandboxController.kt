@@ -55,6 +55,8 @@ import com.brain.secretary.OrderIntent
 import com.brain.secretary.Door
 import com.brain.secretary.CreatePhase
 import com.brain.core.CreationWorkflowPlanner
+import com.brain.core.Roadmap
+import com.brain.core.RoadmapValidationCoordinator
 import com.brain.planning.FilePlanningArtifactStore
 import com.brain.planning.PlanningArtifact
 import com.brain.planning.PlanningAgent
@@ -151,6 +153,7 @@ class BrainSandboxController(
     private val postExecutionGate = PostExecutionGate(layeredMemory)
     private val pendingCreateScopes = mutableMapOf<String, com.brain.secretary.DoorScope>()
     private val pendingCreatePlans = mutableMapOf<String, PlanoExecucao>()
+    private val activeRoadmaps = mutableMapOf<String, Roadmap>()
     @Volatile private var taskState: TaskState? = null
 
     /** Executa o primeiro caso de uso real do Brain dentro do Sandbox preparado. */
@@ -300,6 +303,7 @@ class BrainSandboxController(
         )
         if (planningIntent?.door == Door.CREATE && planningIntent.phase >= CreatePhase.APPROVED) {
             val creation = CreationWorkflowPlanner.build(planningIntent, reasoning.requirements.map { it.text })
+            activeRoadmaps[runId] = creation.roadmap
             emit(runId, "roadmap", "RoadmapCreated", mapOf("phases" to creation.roadmap.fases.size.toString(), "tasks" to creation.tasks.size.toString()))
             creation.assignments.forEach { assignment ->
                 emit(runId, assignment.taskId, "TaskAssigned", mapOf("specialist" to assignment.specialistId, "capability" to assignment.capability))
@@ -381,6 +385,28 @@ class BrainSandboxController(
             )
         }
         return finalCycle
+    }
+
+    private fun updateRoadmapFromValidation(runId: String, postExecution: ResultadoPosExecucao) {
+        val roadmap = activeRoadmaps[runId] ?: return
+        var updated = roadmap
+        (postExecution.selfE2E + listOfNotNull(postExecution.doorE2E)).forEach { validationResult ->
+            val taskId = validationResult.taskId ?: return@forEach
+            updated = RoadmapValidationCoordinator.apply(updated, validationResult)
+            emit(
+                runId,
+                "roadmap",
+                "RoadmapValidationUpdated",
+                mapOf(
+                    "taskId" to taskId,
+                    "status" to validationResult.status.name,
+                    "contractId" to validationResult.contractId,
+                    "attempt" to validationResult.attempt.toString(),
+                    "findingOwners" to validationResult.findingOwners.values.distinct().joinToString(",")
+                )
+            )
+        }
+        activeRoadmaps[runId] = updated
     }
 
     private fun blockedCycle(plan: PlanoExecucao, runId: String, reason: String): ResultadoCiclo =
@@ -471,6 +497,7 @@ class BrainSandboxController(
                 previousValidationResultId = previousValidationResultId
             )
             previousValidationResultId = postExecution.selfE2E.lastOrNull()?.resultId ?: postExecution.doorE2E?.resultId
+            updateRoadmapFromValidation(runId, postExecution)
             val finalResult = result.copy(
                 runId = runId,
                 posExecucao = postExecution.copy(revisionAttempts = revisionAttempts.toList())
