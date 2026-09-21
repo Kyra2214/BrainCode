@@ -27,12 +27,12 @@ object CreationWorkflowPlanner {
             podeResolverLocal = true
         )
         val tarefas = listOf(
-            Tarefa("requirements", "Consolidar requisitos e pendências: ${requirements.joinToString("; ").ifBlank { "nenhuma pendência explícita" }}"),
-            Tarefa("architecture", "Definir arquitetura do ${projectIntent.projectType}"),
-            Tarefa("implementation", "Implementar o escopo aprovado do ${projectIntent.projectType}"),
-            Tarefa("integration", "Integrar componentes e validar contratos"),
-            Tarefa("tests", "Executar testes, revisão e readiness"),
-            Tarefa("delivery", "Preparar resumo, Git autorizado e ZIP local")
+            Tarefa("requirements", "Consolidar requisitos e pendências: ${requirements.joinToString("; ").ifBlank { "nenhuma pendência explícita" }}", responsibleAgentId = "agent.requirements"),
+            Tarefa("architecture", "Definir arquitetura do ${projectIntent.projectType}", responsibleAgentId = "agent.architecture", dependencies = listOf("requirements")),
+            Tarefa("implementation", "Implementar o escopo aprovado do ${projectIntent.projectType}", responsibleAgentId = "agent.code", dependencies = listOf("architecture")),
+            Tarefa("integration", "Integrar componentes e validar contratos", responsibleAgentId = "agent.integration", dependencies = listOf("implementation")),
+            Tarefa("tests", "Executar testes, revisão e readiness", responsibleAgentId = "agent.test", dependencies = listOf("integration")),
+            Tarefa("delivery", "Preparar resumo, Git autorizado e ZIP local", responsibleAgentId = "agent.release", dependencies = listOf("tests"))
         )
         val fases = listOf(
             Fase("DISCUSSION", listOf(Modulo("requirements", listOf(Submodulo("discovery", listOf(tarefas[0])))))),
