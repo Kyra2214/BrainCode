@@ -107,6 +107,28 @@ class ValidationEngine {
             attempt
         )
 
+    fun productPhase(
+        phase: String,
+        subject: ValidationSubject,
+        stage: String = "door.create",
+        attempt: Int = 1
+    ): ValidationResult =
+        validate(
+            ValidationContract(
+                id = "door.create.phase." + phase.lowercase().replace(" ", "-"),
+                capability = subject.capability,
+                level = ValidationLevel.PRODUCT,
+                checks = listOf(
+                    ValidationCheck("phase.result-or-evidence", "fase produz resultado ou evidência") {
+                        it.result.isNotBlank() || it.evidence.isNotEmpty()
+                    }
+                )
+            ),
+            subject,
+            stage,
+            attempt
+        )
+
     fun promptContent(subject: ValidationSubject, stage: String = "door.prompt", attempt: Int = 1): ValidationResult {
         val checks = subject.requirements.mapIndexed { index, requirement ->
             ValidationCheck(
