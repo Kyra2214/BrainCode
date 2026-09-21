@@ -10,6 +10,7 @@ enum class FindingSeverity { BLOCKING, HIGH, MEDIUM, LOW }
 
 data class ValidationSubject(
     val capability: String,
+    val taskId: String? = null,
     val agentId: String? = null,
     val door: Door? = null,
     val intent: String = "",
@@ -47,6 +48,7 @@ data class ValidationContract(
 data class ValidationResult(
     val status: ValidationStatus,
     val contractId: String,
+    val taskId: String? = null,
     val capability: String,
     val agentId: String? = null,
     val stage: String = "",
@@ -76,6 +78,7 @@ class ValidationEngine {
             return ValidationResult(
                 status = ValidationStatus.FAIL,
                 contractId = contract.id,
+                taskId = subject.taskId,
                 capability = contract.capability,
                 agentId = subject.agentId,
                 stage = stage,
@@ -102,6 +105,7 @@ class ValidationEngine {
         return ValidationResult(
             status = status,
             contractId = contract.id,
+            taskId = subject.taskId,
             capability = contract.capability,
             agentId = subject.agentId,
             stage = stage,
