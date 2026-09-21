@@ -107,6 +107,31 @@ class ValidationEngine {
             attempt
         )
 
+    fun promptContent(subject: ValidationSubject, stage: String = "door.prompt", attempt: Int = 1): ValidationResult {
+        val checks = subject.requirements.mapIndexed { index, requirement ->
+            ValidationCheck(
+                id = "prompt.requirement.$index",
+                description = "requisito do prompt presente",
+                severity = FindingSeverity.HIGH,
+                owner = FindingOwner.AGENT
+            ) { com.brain.behavior.RequirementMatcher.isPresent(requirement, it.result) }
+        }
+        return validate(
+            ValidationContract(
+                id = "door.prompt.content",
+                capability = subject.capability,
+                level = ValidationLevel.CONTENT,
+                checks = checks + ValidationCheck(
+                    "prompt.non-empty",
+                    "prompt final não vazio"
+                ) { it.result.isNotBlank() }
+            ),
+            subject,
+            stage,
+            attempt
+        )
+    }
+
     fun lightChat(subject: ValidationSubject, stage: String = "door.chat", attempt: Int = 1): ValidationResult =
         validate(
             ValidationContract(
