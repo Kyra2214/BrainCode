@@ -420,6 +420,7 @@ class BrainSandboxController(
         val candidates = mutableListOf<Pair<ResultadoCiclo, ResultadoPosExecucao>>()
         var previousOutputSignature: String? = null
         var previousFindingsSignature: String? = null
+        var previousValidationResultId: String? = null
         while (attempt <= MAX_EXECUTION_ATTEMPTS) {
             val attemptRunId = "$runId:attempt-$attempt"
             emit(runId, "execution", "AttemptStarted", mapOf("attempt" to attempt.toString(), "attemptRunId" to attemptRunId))
@@ -465,8 +466,11 @@ class BrainSandboxController(
             val postExecution = postExecutionGate.evaluate(
                 plan = currentPlan,
                 cycle = result,
-                requirements = requirements
+                requirements = requirements,
+                attempt = attempt,
+                previousValidationResultId = previousValidationResultId
             )
+            previousValidationResultId = postExecution.selfE2E.lastOrNull()?.resultId ?: postExecution.doorE2E?.resultId
             val finalResult = result.copy(
                 runId = runId,
                 posExecucao = postExecution.copy(revisionAttempts = revisionAttempts.toList())
@@ -478,6 +482,13 @@ class BrainSandboxController(
                 mapOf(
                     "selfE2E" to postExecution.selfE2E.joinToString(",") { it.status.name },
                     "doorE2E" to (postExecution.doorE2E?.status?.name ?: "NOT_APPLICABLE"),
+                    "contractIds" to (postExecution.selfE2E.map { it.contractId } + listOfNotNull(postExecution.doorE2E?.contractId)).joinToString(","),
+                    "agentIds" to postExecution.selfE2E.mapNotNull { it.agentId }.distinct().joinToString(","),
+                    "failedChecks" to (postExecution.selfE2E.flatMap { it.failedChecks } + (postExecution.doorE2E?.failedChecks ?: emptyList())).distinct().joinToString(","),
+                    "findingOwners" to (postExecution.selfE2E.flatMap { it.findingOwners.values } + (postExecution.doorE2E?.findingOwners?.values ?: emptyList())).distinct().joinToString(","),
+                    "evidenceIds" to (postExecution.selfE2E.flatMap { it.evidenceIds } + (postExecution.doorE2E?.evidenceIds ?: emptyList())).distinct().joinToString(","),
+                    "resultIds" to (postExecution.selfE2E.map { it.resultId } + listOfNotNull(postExecution.doorE2E?.resultId)).joinToString(","),
+                    "previousResultId" to (postExecution.selfE2E.firstOrNull()?.previousResultId ?: postExecution.doorE2E?.previousResultId ?: ""),
                     "attempt" to attempt.toString()
                 )
             )
