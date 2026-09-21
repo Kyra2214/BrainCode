@@ -180,7 +180,7 @@ Uma etapa só fecha com evidência + PASS. Tarefas independentes podem executar 
 
 ## 5.1. Mapa de especialistas
 
-Não integrar os agentes declarados em massa. Um agente só pode ficar AVAILABLE quando possuir capability distinta, executor real, ValidationContract e caso de uso.
+Não integrar os agentes declarados em massa. Atualmente existem 14 definições bounded (incluindo Documentation), mas permanecem UNAVAILABLE enquanto não houver executor dedicado + contrato + Self-E2E conectado ao fluxo. Um agente só pode ficar AVAILABLE quando possuir capability distinta, executor real, ValidationContract e caso de uso.
 
 ### Grupo A — núcleo atual
 
@@ -230,6 +230,8 @@ Critérios:
 Implementar `ValidationContract`, `ValidationResult`, checks e routing de findings.
 
 ### E2E-2 — Engine + vertical slice da Porta 1
+
+Implementação inicial já conectada: `ValidationEngine` em `:brain`, Self-E2E/ Door E2E anexados ao `PostExecutionGate`, `ValidationCompleted` registrado no EventStore e clarificação passando pela mesma pipeline. A consolidação continua condicionada a CI/UI E2E/readiness verdes no mesmo HEAD.
 
 - integrar `ValidationEngine` ao `PostExecutionGate`;
 - caminho de esclarecimento não pode retornar antes da validação;
