@@ -8,7 +8,6 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
-
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -43,9 +42,6 @@ class BrainCodeJourneyE2ETest {
             }
         }
 
-        // Do not wait for "Enviar" here: that button is intentionally disabled
-        // while the composer is empty. Sandbox readiness is represented by the
-        // message field becoming enabled; the test fills it only after this gate.
         composeRule.waitUntil(timeoutMillis = 120_000) {
             runCatching {
                 composeRule.onNode(hasSetTextAction(), useUnmergedTree = true)
@@ -131,7 +127,7 @@ class BrainCodeJourneyE2ETest {
                     .fetchSemanticsNodes().isNotEmpty()
             }
         } catch (failure: Throwable) {
-            onRoot(useUnmergedTree = true).printToLog("BRAINCODE_CLARIFICATION_FAILURE")
+            composeRule.onRoot(useUnmergedTree = true).printToLog("BRAINCODE_CLARIFICATION_FAILURE")
             throw failure
         }
     }
