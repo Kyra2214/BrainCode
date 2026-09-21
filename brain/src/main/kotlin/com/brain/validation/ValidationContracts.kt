@@ -17,7 +17,8 @@ data class ValidationSubject(
     val restrictions: Set<String> = emptySet(),
     val result: String = "",
     val evidence: List<String> = emptyList(),
-    val missingRequirements: List<String> = emptyList()
+    val missingRequirements: List<String> = emptyList(),
+    val requiresInput: Boolean = false
 )
 
 data class ValidationCheck(
@@ -69,7 +70,7 @@ class ValidationEngine {
         val missingEvidence = contract.requiredEvidence.filterNot { required -> subject.evidence.any { it.startsWith(required) } }
         val failedIds = (failed.map { it.id } + missingEvidence.map { "evidence:$it" }).distinct()
         val status = when {
-            subject.missingRequirements.isNotEmpty() && contract.level == ValidationLevel.LIGHT -> ValidationStatus.NEEDS_INPUT
+            subject.requiresInput && contract.level == ValidationLevel.LIGHT -> ValidationStatus.NEEDS_INPUT
             failedIds.isEmpty() -> ValidationStatus.PASS
             else -> ValidationStatus.FAIL
         }
