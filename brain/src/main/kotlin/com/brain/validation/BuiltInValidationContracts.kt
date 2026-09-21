@@ -28,7 +28,7 @@ object BuiltInValidationContracts {
             capability = id,
             level = ValidationLevel.AGENT,
             checks = listOf(
-                ValidationCheck("result-or-evidence", "especialista produz resultado ou evidência")
+                ValidationCheck("result-or-evidence", "especialista produz resultado ou evidência") { it.result.isNotBlank() || it.evidence.isNotEmpty() }
             )
         )
     }
