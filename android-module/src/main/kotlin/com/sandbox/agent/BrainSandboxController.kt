@@ -471,6 +471,16 @@ class BrainSandboxController(
                 runId = runId,
                 posExecucao = postExecution.copy(revisionAttempts = revisionAttempts.toList())
             )
+            emit(
+                attemptRunId,
+                "validation",
+                "ValidationCompleted",
+                mapOf(
+                    "selfE2E" to postExecution.selfE2E.joinToString(",") { it.status.name },
+                    "doorE2E" to (postExecution.doorE2E?.status?.name ?: "NOT_APPLICABLE"),
+                    "attempt" to attempt.toString()
+                )
+            )
             candidates += result to postExecution
             val outputSignature = result.resposta.orEmpty().trim()
             val findingsSignature = postExecution.critique.findings.joinToString("|") { "${it.code}:${it.message}" }
