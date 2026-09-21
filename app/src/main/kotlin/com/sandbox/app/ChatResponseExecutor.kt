@@ -66,10 +66,12 @@ class ChatResponseExecutor(
         return ActionExecution(true, result = response, evidence = evidence, provenance = provenance)
     }
 
-    private fun asksTime(prompt: String): Boolean = TriggerLexicon.PERGUNTAS_HORA.any { it in prompt }
-    private fun asksDate(prompt: String): Boolean = TriggerLexicon.PERGUNTAS_DATA.any { it in prompt }
+    private fun asksTime(prompt: String): Boolean = TriggerLexicon.matches(prompt, TriggerLexicon.PERGUNTAS_HORA)
+    private fun asksDate(prompt: String): Boolean = TriggerLexicon.matches(prompt, TriggerLexicon.PERGUNTAS_DATA)
     private fun looksLikeFactualQuestion(prompt: String): Boolean =
-        TriggerLexicon.INTERROGATIVOS.any { it in prompt } && TriggerLexicon.TEMAS_TEMPO_REAL.any { it in prompt }
+        (TriggerLexicon.matches(prompt, TriggerLexicon.INTERROGATIVOS) &&
+            TriggerLexicon.matches(prompt, TriggerLexicon.TEMAS_TEMPO_REAL)) ||
+            TriggerLexicon.matches(prompt, TriggerLexicon.CONSULTAS_TEMPO_REAL_SEM_INTERROGATIVO)
     private fun contextHasContent(context: ConversationContext): Boolean =
         context.idea != null || context.requirements.isNotEmpty() || context.decisions.isNotEmpty() || context.pending.isNotEmpty()
 

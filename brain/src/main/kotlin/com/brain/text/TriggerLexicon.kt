@@ -88,6 +88,8 @@ object TriggerLexicon {
 
     val TEMAS_TEMPO_REAL = listOf(
         "temperatura", "clima", "tempo vai fazer", "previsão do tempo", "previsao do tempo",
+        "tempo hoje", "tempo agora", "como está o tempo", "como esta o tempo", "tempo em", "clima em", "temperatura em",
+        "vai fazer sol", "vai fazer frio", "vai fazer calor",
         "chuva", "vai chover", "sol", "umidade", "vento", "cotação", "cotacao", "dólar", "dolar",
         "euro", "bitcoin", "cripto", "criptomoeda", "bolsa de valores",
         "preço", "preco", "valor atual", "quanto custa", "promoção", "promocao", "desconto",
@@ -99,16 +101,30 @@ object TriggerLexicon {
         "neste momento", "recente", "recentes", "última", "ultima", "últimas", "ultimas", "mais recente"
     )
 
+    val CONSULTAS_TEMPO_REAL_SEM_INTERROGATIVO = listOf(
+        "tempo hoje", "tempo agora", "tempo em", "clima em", "temperatura em"
+    )
+
     val PERGUNTAS_HORA = listOf(
         "que horas", "qual a hora", "qual hora", "horário", "horario", "que horas são", "que horas sao",
         "horas agora", "me diz a hora", "hora atual", "hora certa"
     )
 
     val PERGUNTAS_DATA = listOf(
-        "que dia", "qual a data", "qual data", "data de hoje", "hoje é", "hoje e",
+        "que dia", "qual a data", "qual data", "data de hoje",
         "que dia é hoje", "que dia e hoje", "dia de hoje", "data atual", "em que dia estamos", "que dia estamos"
     )
 
-    val WEB_TERMS = listOf("pesquis", "internet", "web", "fontes", "referências", "referencias", "google", "buscar na net")
+    val WEB_TERMS = listOf("pesquisar", "pesquise", "pesquisa", "pesquisando", "pesquisado", "internet", "web", "fontes", "referências", "referencias", "google", "buscar na net")
     val EXECUTION_TERMS = listOf("executar", "execute", "execução", "execucao", "rodar", "compilar", "testar", "testes", "rodando")
+
+    /**
+     * Casamento seguro de termo do léxico: exige fronteira de palavra nos dois
+     * lados, para evitar que termos curtos casem dentro de outras palavras.
+     */
+    fun matches(texto: String, termos: List<String>): Boolean =
+        termos.any { termo ->
+            Regex("(?<![\\p{L}\\p{N}])" + Regex.escape(termo.lowercase()) + "(?![\\p{L}\\p{N}])")
+                .containsMatchIn(texto.lowercase())
+        }
 }

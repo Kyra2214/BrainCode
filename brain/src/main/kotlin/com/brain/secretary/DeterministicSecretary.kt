@@ -41,12 +41,12 @@ class DeterministicSecretary {
     private fun isPrompt(text: String): Boolean {
         if (text.startsWith("/")) return true
         val visualTransformation = PromptDomain.classificar(text) == PromptDomain.IMAGEM &&
-            IntentNegation.hasAllowedOccurrence(text, "transform", "alter", "modific", "edita", "conver", "recri", "aplic")
+            IntentNegation.hasAllowedOccurrence(text, "transforme", "transformar", "transformando", "alteração", "alteracao", "altere", "modifique", "modificar", "edite", "editar", "converta", "converter", "recrie", "recriar", "aplique", "aplicar")
         return IntentNegation.hasAllowedOccurrence(text, "prompt", "template de prompt", "melhore este prompt", "otimize este prompt") || visualTransformation
     }
 
     private fun isCreation(text: String): Boolean {
-        if (TriggerLexicon.CONTEXTO_SO_CONVERSA.any { it in text }) return false
+        if (TriggerLexicon.matches(text, TriggerLexicon.CONTEXTO_SO_CONVERSA)) return false
         if (TriggerLexicon.VETOS_EXPLICITOS_REGEX.any { Regex(it).containsMatchIn(text) }) return false
         return IntentNegation.hasAllowedOccurrence(text, TriggerLexicon.VERBOS_CRIACAO) &&
             (IntentNegation.hasAllowedOccurrence(text, TriggerLexicon.SUBSTANTIVOS_ENTREGAVEL) ||

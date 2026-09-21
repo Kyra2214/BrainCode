@@ -23,7 +23,7 @@ object IntentNegation {
         return terms.flatMap { term ->
             val value = term.trim().lowercase()
             if (value.isEmpty()) emptyList()
-            else Regex("(?<![\\p{L}\\p{N}])${Regex.escape(value)}").findAll(normalized)
+            else Regex("(?<![\\p{L}\\p{N}])${Regex.escape(value)}(?![\\p{L}\\p{N}])").findAll(normalized)
                 .map { it.range.first to it.range.last + 1 }
                 .toList()
         }
