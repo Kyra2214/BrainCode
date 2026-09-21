@@ -19,7 +19,7 @@ A regra da auditoria foi **código como fonte da verdade**. Documentação anter
 
 - Existe um cluster concreto de UI órfã em `MainActivity.kt`: `ToolsAndApiScreen`, `SandboxValidationScreen` e `OperationsScreen`; `ChatboxSection` é órfã transitiva.
 - A maior parte da funcionalidade dessas telas já foi absorvida pela Thread/Settings e pelos comandos operacionais.
-- `FastIntentClassifier`, `KeywordPlanner`, `KeywordFunctionSplitter`, `DurableJobRunner`, `CapabilityDiscovery`, `Dispatcher` e `ActionGateway` possuem wiring de produção no HEAD auditado.
+- `KeywordPlanner`, `KeywordFunctionSplitter`, `DurableJobRunner`, `CapabilityDiscovery`, `Dispatcher` e `ActionGateway` possuem wiring de produção; o `FastIntentClassifier` legado foi removido e o caminho único agora é `BrainInputInterpreter` → `IntentEnvelope` → `BrainRouter`.
 - `skills_catalog.json` e `explorer_china_seed.json` estão ligados ao runtime atual.
 - Os três RootFS formam uma cadeia 0.3.3 → 0.4.1 → 0.5.0. O Dockerfile base declara `default-jdk` e `gradle`; ausência de Java em runtime deve ser investigada na materialização/PATH/seleção.
 - `BuiltInCatalog.tools` está vazio porque ferramentas gerais são fornecidas pelo RootFS; plugins opcionais são separados.

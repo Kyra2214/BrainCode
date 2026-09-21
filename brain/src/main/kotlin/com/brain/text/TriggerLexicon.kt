@@ -31,7 +31,7 @@ object TriggerLexicon {
         "aplicativo", "app", "aplicação", "aplicacao", "software", "sistema",
         "site", "página web", "pagina web", "plataforma", "ferramenta",
         "programa", "script", "bot", "api", "serviço", "servico",
-        "projeto", "produto digital", "mvp", "protótipo", "prototipo"
+        "projeto", "plano", "produto digital", "mvp", "protótipo", "prototipo"
     )
 
     val SINAIS_APROVACAO = listOf(

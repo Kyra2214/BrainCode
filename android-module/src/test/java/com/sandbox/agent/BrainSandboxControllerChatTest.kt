@@ -38,6 +38,9 @@ class BrainSandboxControllerChatTest {
             assertTrue(cycle.passos.single().resultado!!.contains("Resposta conversacional"))
             assertFalse(cycle.passos.any { it.capacidade.orEmpty().startsWith("workspace.") || it.capacidade.orEmpty().startsWith("sandbox.") })
             assertTrue(controller.localEvents("chat-port").any { it.type == "DoorDesignated" && it.payload["door"] == "CHAT" })
+            assertTrue(controller.localEvents("chat-port").any { it.type == "IntentEnvelopeCreated" && it.payload["route"] == "CONVERSATION" })
+            assertTrue(controller.localEvents("chat-port").any { it.type == "RouteDecided" && it.payload["route"] == "CONVERSATION" })
+            assertFalse(controller.localEvents("chat-port").any { it.type == "PlanningArtifactCreated" || it.type == "ClarificationRequested" })
             assertTrue(cycle.posExecucao?.selfE2E?.all { it.passed } == true)
             assertEquals(com.brain.validation.ValidationStatus.PASS, cycle.posExecucao?.doorE2E?.status)
         } finally {
@@ -68,7 +71,7 @@ class BrainSandboxControllerChatTest {
                     }
                 )
             )
-            val objective = "Quero discutir fotografia"
+            val objective = "Faça isso."
             val intent = DeterministicSecretary().classify(objective)
             assertEquals(Door.CHAT, intent.door)
 
@@ -80,10 +83,11 @@ class BrainSandboxControllerChatTest {
             assertEquals("chat.respond", step.capacidade)
             assertEquals(StatusPasso.APROVADO, step.status)
             assertTrue(cycle.resposta!!.contains("Preciso de um esclarecimento"))
-            assertTrue(cycle.resposta!!.contains("sujeito principal"))
-            assertTrue(cycle.resposta!!.contains("Qual é a sua preferência?"))
+            assertTrue(cycle.resposta!!.contains("Qual ação ou objeto"))
             assertFalse(cycle.passos.any { it.capacidade.orEmpty().startsWith("workspace.") || it.capacidade.orEmpty().startsWith("sandbox.") })
-            assertTrue(controller.localEvents("chat-clarification").any { it.type == "ClarificationRequested" && it.payload["missing"] == "sujeito principal" })
+            assertTrue(controller.localEvents("chat-clarification").any { it.type == "IntentEnvelopeCreated" && it.payload["route"] == "CLARIFY" })
+            assertTrue(controller.localEvents("chat-clarification").any { it.type == "RouteDecided" && it.payload["route"] == "CLARIFY" })
+            assertFalse(controller.localEvents("chat-clarification").any { it.type == "PlanningArtifactCreated" })
             assertTrue(step.capacidade == "chat.respond")
             assertTrue(cycle.posExecucao?.selfE2E?.all { it.passed } == true)
             assertEquals(com.brain.validation.ValidationStatus.NEEDS_INPUT, cycle.posExecucao?.doorE2E?.status)

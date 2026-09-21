@@ -30,7 +30,7 @@ class ChatClarificationFlowTest {
                 authorizedAccountIds = setOf("android:provider-a", "android:provider-b"),
                 capabilityExecutors = mapOf("chat.respond" to ChatResponseExecutor())
             )
-            val objective = "Quero discutir fotografia"
+            val objective = "Faça isso."
             val intent = DeterministicSecretary().classify(objective)
             assertEquals(Door.CHAT, intent.door)
 
@@ -47,9 +47,11 @@ class ChatClarificationFlowTest {
             assertTrue("cycle=$cycle", cycle.aprovado)
             assertFalse(cycle.passos.any { it.status == StatusPasso.NEGADO_PELA_POLICY })
             assertTrue(content, content.startsWith("Preciso de um esclarecimento"))
-            assertTrue(content, content.contains("sujeito principal"))
+            assertTrue(content, content.contains("Qual ação ou objeto"))
             assertEquals(GeneratedContentType.CLARIFICATION, type)
             assertFalse(cycle.passos.any { it.capacidade.orEmpty().startsWith("workspace.") || it.capacidade.orEmpty().startsWith("sandbox.") })
+            assertTrue(controller.localEvents("chat-flow").any { it.type == "IntentEnvelopeCreated" && it.payload["route"] == "CLARIFY" })
+            assertFalse(controller.localEvents("chat-flow").any { it.type == "PlanningArtifactCreated" })
         } finally {
             root.deleteRecursively()
         }

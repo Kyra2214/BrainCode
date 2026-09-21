@@ -38,6 +38,9 @@ import com.brain.retrieval.PromptLibraryRetrievalSource
 import com.brain.retrieval.Retrieval
 import com.brain.retrieval.RetrievalQuery
 import com.brain.reasoning.ReasoningEngine
+import com.brain.intent.BrainInputInterpreter
+import com.brain.intent.IntentEnvelope
+import com.brain.intent.Route
 import com.brain.behavior.PlanningGate
 import com.brain.behavior.RequirementGate
 import com.brain.behavior.GateStatus
@@ -88,6 +91,7 @@ class BrainSandboxController(
     private val revisionFixer: RevisionFixer = FindingsRevisionFixer(),
     private val secretary: com.brain.secretary.DeterministicSecretary = com.brain.secretary.DeterministicSecretary()
 ) {
+    private val inputInterpreter = BrainInputInterpreter(secretary)
     private val behaviorDiagnostics = BehaviorDiagnostics(EventStoreBehaviorTraceSink(events, "android-local"))
     private val dynamicCapabilityProviders = capabilityProviders
     private val approvals = FileApprovalStore(File(rootfsDir, "approvals.jsonl"))
@@ -209,18 +213,48 @@ class BrainSandboxController(
         onPasso: (ResultadoPasso) -> Unit = {},
         intent: OrderIntent? = null
     ): ResultadoCiclo {
+        val designatedIntent = intent ?: secretary.classify(objective)
+        val envelope = inputInterpreter.interpret(objective, designatedIntent)
         emit(runId, "chat", "TaskCreated", mapOf("objective" to objective.take(500)))
-        intent?.let { designated ->
-            emit(
-                runId,
-                "secretary",
-                "DoorDesignated",
-                mapOf(
-                    "door" to designated.door.name,
-                    "phase" to designated.phase.name,
-                    "restrictions" to designated.restrictions.joinToString(",") { it.name }
-                )
+        emit(runId, "interpreter", "IntentEnvelopeCreated", envelopePayload(envelope))
+        emit(runId, "router", "RouteDecided", envelopePayload(envelope))
+        emit(
+            runId,
+            "secretary",
+            "DoorDesignated",
+            mapOf(
+                "door" to designatedIntent.door.name,
+                "phase" to designatedIntent.phase.name,
+                "restrictions" to designatedIntent.restrictions.joinToString(",") { it.name }
             )
+        )
+        if (envelope.route != Route.CREATION) {
+            val fastPlan = fastPathPlan(objective, envelope)
+            val fastResult = executeWithEvents(fastPlan, runId, createPhase = designatedIntent.phase.name) { attemptPlan, attemptRunId ->
+                bridge.authorizeAndExecute(
+                    attemptPlan,
+                    attemptRunId,
+                    actor,
+                    onPasso = { passo ->
+                        emit(
+                            attemptRunId,
+                            passo.passoId,
+                            "StepCompleted",
+                            mapOf(
+                                "passoId" to passo.passoId,
+                                "status" to passo.status.name,
+                                "motivo" to (passo.motivo ?: "")
+                            )
+                        )
+                        onPasso(passo)
+                    },
+                    doorScope = designatedIntent.scope
+                )
+            }
+            if (!fastResult.aprovado) {
+                emit(runId, "router", "RouteRejected", mapOf("route" to envelope.route.name, "reason" to "fast-path-not-approved"))
+            }
+            return fastResult
         }
         val reasoning = reasoningEngine.analyze(objective)
         val references = objective.lineSequence().filter { it.startsWith("Referências resolvidas:", ignoreCase = true) }.toList()
@@ -229,7 +263,7 @@ class BrainSandboxController(
         emit(runId, "planning", "PlanningArtifactCreated", mapOf("artifactId" to planningArtifact.artifactId, "status" to planningArtifact.status.name, "requirements" to planningArtifact.requirements.size.toString(), "pending" to planningArtifact.pending.size.toString(), "references" to planningArtifact.references.size.toString()))
         val requirementGateResult = requirementGate.evaluate(reasoning)
         if (!requirementGateResult.isSuccessful) {
-            if (requirementGateResult.status == GateStatus.NEEDS_CLARIFICATION && intent?.door == com.brain.secretary.Door.CHAT) {
+            if (requirementGateResult.status == GateStatus.NEEDS_CLARIFICATION && designatedIntent.door == com.brain.secretary.Door.CHAT) {
                 val clarification = ClarificationQuestion.from(objective, requirementGateResult.issues)
                 emit(runId, "requirements", "ClarificationRequested", mapOf("missing" to clarification.missingRequirements.joinToString("|"), "question" to clarification.question))
                 val clarificationPlan = PlanoExecucao(
@@ -262,7 +296,7 @@ class BrainSandboxController(
                             )
                             onPasso(passo)
                         },
-                        doorScope = intent.scope
+                            doorScope = designatedIntent.scope
                     )
                 }
                 return if (clarificationCycle.resposta.isNullOrBlank() &&
@@ -282,13 +316,12 @@ class BrainSandboxController(
         }
         taskState = TaskState(objective).withReasoning(reasoning)
         layeredMemory.rememberEpisode(objective, Provenance("brain:task-created", confidence = 1.0))
-        val planningIntent = if (intent?.door == Door.CREATE && intent.phase < CreatePhase.APPROVED) {
-            intent.copy(phase = CreatePhase.APPROVED, scope = intent.scope.copy(phase = CreatePhase.APPROVED))
-        } else intent
-        val planner = com.brain.planner.KeywordPlanner(if (planningIntent == null) com.brain.planner.KeywordFunctionSplitter() else com.brain.planner.DoorAwareSplitter(secretary))
+        val planningIntent = if (designatedIntent.door == Door.CREATE && designatedIntent.phase < CreatePhase.APPROVED) {
+            designatedIntent.copy(phase = CreatePhase.APPROVED, scope = designatedIntent.scope.copy(phase = CreatePhase.APPROVED))
+        } else designatedIntent
+        val planner = com.brain.planner.KeywordPlanner(com.brain.planner.DoorAwareSplitter(secretary))
         val basePlan = runBlockingPlanner {
-            if (planningIntent == null) planner.planejar(reasoning.objective, reasoning)
-            else planner.planejar(reasoning.objective, planningIntent, reasoning)
+            planner.planejar(reasoning.objective, planningIntent, reasoning)
         }
         if (basePlan.passos.any { it.capacidade == "brain.analyze" } && !apiKeyAvailable()) {
             emit(runId, "reasoning", "LocalFallbackSelected", mapOf("reason" to "api-unavailable"))
@@ -302,7 +335,7 @@ class BrainSandboxController(
         val plan = basePlan.copy(
             assumptions = basePlan.assumptions + treeAssumptions + if (promptHit != null) setOf("prompt-template:${promptHit.id}") else emptySet()
         )
-        if (planningIntent?.door == Door.CREATE && planningIntent.phase >= CreatePhase.APPROVED) {
+        if (planningIntent.door == Door.CREATE && planningIntent.phase >= CreatePhase.APPROVED) {
             val creation = CreationWorkflowPlanner.build(planningIntent, reasoning.requirements.map { it.text })
             activeRoadmaps[runId] = creation.roadmap
             emit(runId, "roadmap", "RoadmapCreated", mapOf("phases" to creation.roadmap.fases.size.toString(), "tasks" to creation.tasks.size.toString()))
@@ -311,7 +344,7 @@ class BrainSandboxController(
                 emit(runId, assignment.taskId, "SpecialistSelected", mapOf("specialist" to assignment.specialistId))
             }
         }
-        if (intent?.door == Door.CREATE && intent.phase < CreatePhase.APPROVED) {
+        if (designatedIntent.door == Door.CREATE && designatedIntent.phase < CreatePhase.APPROVED) {
             val gatedStep = plan.passos.firstOrNull { it.capacidade.startsWith("workspace.") || it.capacidade.startsWith("sandbox.") }
             if (gatedStep != null) {
                 val approval = approvals.create(
@@ -325,7 +358,7 @@ class BrainSandboxController(
                 )
                 pendingCreateScopes[runId] = planningIntent!!.scope
                 pendingCreatePlans[runId] = plan
-                emit(runId, "secretary", "CreateApprovalRequested", mapOf("approvalId" to approval.request.id, "phase" to intent.phase.name, "nextPhase" to CreatePhase.APPROVED.name))
+                emit(runId, "secretary", "CreateApprovalRequested", mapOf("approvalId" to approval.request.id, "phase" to designatedIntent.phase.name, "nextPhase" to CreatePhase.APPROVED.name))
                 return ResultadoCiclo(
                     plan.objetivo,
                     runId,
@@ -345,7 +378,7 @@ class BrainSandboxController(
             manifest = WorkflowManifest("brain-plan", "1.0.0", listOf(WorkflowNode("plan", "brain.plan", retryLimit = 0))),
             authorize = { it == "brain.plan" },
             execute = { node, attempt ->
-                cycle = executeWithEvents(plan, runId, if (intent == null) emptyList() else reasoning.requirements.map { it.text }, createPhase = planningIntent?.phase?.name) { attemptPlan, attemptRunId ->
+                cycle = executeWithEvents(plan, runId, reasoning.requirements.map { it.text }, createPhase = planningIntent.phase.name) { attemptPlan, attemptRunId ->
                     bridge.authorizeAndExecute(attemptPlan, attemptRunId, actor, onPasso = { passo ->
                         emit(
                             attemptRunId,
@@ -422,6 +455,47 @@ class BrainSandboxController(
         }
         activeRoadmaps[runId] = updated
     }
+
+    private fun fastPathPlan(objective: String, envelope: IntentEnvelope): PlanoExecucao {
+        val capability = when (envelope.route) {
+            Route.CAPABILITY -> requireNotNull(envelope.targetCapability)
+            Route.CONVERSATION, Route.CLARIFY, Route.LLM_FALLBACK -> "chat.respond"
+            Route.CREATION -> error("rota CREATION não pertence ao fast path")
+        }
+        val parameters = if (envelope.route == Route.CLARIFY) {
+            listOf(
+                "Qual ação ou objeto você deseja que eu use para executar isso?",
+                "clarification.status=NEEDS_CLARIFICATION"
+            )
+        } else {
+            listOf(objective)
+        }
+        return PlanoExecucao(
+            objetivo = objective,
+            passos = listOf(
+                PassoPlano(
+                    id = "intent-${envelope.route.name.lowercase()}",
+                    capacidade = capability,
+                    criterioSucesso = "resposta da rota ${envelope.route.name} não vazia",
+                    parametros = parameters,
+                    riskClass = RiskClass.LOW
+                )
+            )
+        )
+    }
+
+    private fun envelopePayload(envelope: IntentEnvelope): Map<String, String> = mapOf(
+        "door" to envelope.door.name,
+        "intent" to envelope.intent.name,
+        "route" to envelope.route.name,
+        "action" to (envelope.action ?: ""),
+        "targetCapability" to (envelope.targetCapability ?: ""),
+        "requiresLiveData" to envelope.requiresLiveData.toString(),
+        "confidence" to envelope.confidence.toString(),
+        "source" to envelope.source.name,
+        "entities" to envelope.entities.entries.sortedBy { it.key }.joinToString(",") { "${it.key}=${it.value}" },
+        "rationale" to envelope.rationale.take(500)
+    )
 
     private fun blockedCycle(plan: PlanoExecucao, runId: String, reason: String): ResultadoCiclo =
         ResultadoCiclo(

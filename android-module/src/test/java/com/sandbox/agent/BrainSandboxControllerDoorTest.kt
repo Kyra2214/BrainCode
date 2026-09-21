@@ -39,7 +39,7 @@ class BrainSandboxControllerDoorTest {
     }
 
     @Test
-    fun `planning artifact persiste contexto e lacuna vira pergunta chat respond`() {
+    fun `planning artifact persiste contexto e lacuna bloqueia somente a criacao`() {
         val root = Files.createTempDirectory("door-planning-").toFile()
         try {
             val runtime = ManagedSandboxRuntime(TestLauncher(root), FileExecutionLogRepository(File(root, "logs")), sessionId = "session-planning")
@@ -50,17 +50,17 @@ class BrainSandboxControllerDoorTest {
                     ActionExecution(true, result = request.parameters["parameter.0"], evidence = listOf("chat:clarification-question"))
                 })
             )
-            val intent = DeterministicSecretary().classify("Crie uma imagem")
-            val cycle = controller.executeObjective("Crie uma imagem", "door-planning", intent = intent)
+            val intent = DeterministicSecretary().classify("Crie um aplicativo")
+            val cycle = controller.executeObjective("Crie um aplicativo", "door-planning", intent = intent)
             val artifact = requireNotNull(controller.planningArtifact("door-planning"))
 
-            assertEquals("Crie uma imagem", artifact.idea)
+            assertEquals("Crie um aplicativo", artifact.idea)
             assertTrue(artifact.pending.isNotEmpty())
             assertEquals(com.brain.planning.PlanningStatus.NEEDS_CLARIFICATION, artifact.status)
-            assertTrue(cycle.passos.any { it.capacidade == "chat.respond" })
-            assertTrue(cycle.passos.flatMap { it.executionEvidence }.contains("chat:clarification-question"))
+            assertTrue(cycle.passos.any { it.capacidade == "brain.requirements" })
+            assertFalse(cycle.passos.any { it.capacidade == "chat.respond" })
             assertTrue(controller.localEvents("door-planning").any { it.type == "PlanningArtifactCreated" })
-            assertTrue(controller.localEvents("door-planning").any { it.type == "ClarificationRequested" })
+            assertTrue(controller.localEvents("door-planning").any { it.type == "IntentEnvelopeCreated" && it.payload["route"] == "CREATION" })
         } finally {
             root.deleteRecursively()
         }
