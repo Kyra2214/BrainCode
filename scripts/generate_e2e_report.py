@@ -8,10 +8,7 @@ patterns = [
     "app/build/outputs/androidTest-results/connected/**/*.xml",
     "**/build/outputs/androidTest-results/connected/**/*.xml",
 ]
-files = []
-for pattern in patterns:
-    files.extend(glob.glob(pattern, recursive=True))
-files = sorted(set(files))
+files = sorted(set(path for pattern in patterns for path in glob.glob(pattern, recursive=True)))
 
 tests = failures = errors = skipped = 0
 rows = []
@@ -38,9 +35,10 @@ for path in files:
         rows.append((status, cls, name, case.attrib.get("time", "")))
 
 passed = tests - failures - errors - skipped
-if not files:
+
+if not files or tests == 0:
     status = "NOT_EXECUTED"
-elif tests and failures == 0 and errors == 0:
+elif failures == 0 and errors == 0 and skipped == 0:
     status = "PASS"
 else:
     status = "FAIL"
@@ -70,5 +68,6 @@ if not rows:
 os.makedirs("e2e-report", exist_ok=True)
 open("e2e-report/BrainCode-E2E-Report.md", "w", encoding="utf-8").write("\n".join(lines) + "\n")
 print("\n".join(lines))
-if status == "FAIL":
+
+if status != "PASS":
     raise SystemExit(1)
