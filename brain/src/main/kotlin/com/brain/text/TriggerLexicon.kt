@@ -89,7 +89,7 @@ object TriggerLexicon {
     val TEMAS_TEMPO_REAL = listOf(
         "temperatura", "clima", "tempo vai fazer", "previsão do tempo", "previsao do tempo",
         "chuva", "vai chover", "sol", "umidade", "vento", "cotação", "cotacao", "dólar", "dolar",
-        "euro", "bitcoin", "cripto", "criptomoeda", "ação", "ações", "acao", "acoes", "bolsa de valores",
+        "euro", "bitcoin", "cripto", "criptomoeda", "bolsa de valores",
         "preço", "preco", "valor atual", "quanto custa", "promoção", "promocao", "desconto",
         "placar", "resultado do jogo", "campeonato", "jogo de hoje", "quem ganhou",
         "notícia", "noticia", "notícias", "noticias", "novidade", "manchete",
