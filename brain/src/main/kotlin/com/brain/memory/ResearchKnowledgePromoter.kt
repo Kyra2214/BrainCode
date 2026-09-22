@@ -1,5 +1,8 @@
 package com.brain.memory
 
+import com.brain.conversation.ConversationContext
+import com.brain.conversation.ConversationInterpreter
+import com.brain.conversation.NoOpConversationInterpreter
 import com.brain.research.ResearchRequest
 import com.brain.research.ResearchRunResult
 import com.brain.research.ResearchSecurityPolicy
@@ -10,7 +13,8 @@ import java.time.Duration
 /** Promove somente sínteses com quality gate para o Knowledge Store oficial. */
 class ResearchKnowledgePromoter(
     private val cycle: KnowledgeLearningCycle = KnowledgeLearningCycle(),
-    private val clock: Clock = Clock.systemUTC()
+    private val clock: Clock = Clock.systemUTC(),
+    private val interpreter: ConversationInterpreter = NoOpConversationInterpreter
 ) {
     fun promote(request: ResearchRequest, result: ResearchRunResult): KnowledgeEntry? {
         if (result.answer.isBlank() || result.citations.isEmpty()) return null
@@ -19,6 +23,7 @@ class ResearchKnowledgePromoter(
         if (result.confidence < 0.5) return null
         val now = clock.millis()
         val expires = now + if (isTemporal(request.query)) Duration.ofHours(6).toMillis() else Duration.ofDays(180).toMillis()
+        val structure = interpreter.extrairEstrutura(request.query, ConversationContext(requestId = "research-promotion"))
         val entry = cycle.observeExternal(
             problem = request.query,
             answer = result.answer,
@@ -28,7 +33,11 @@ class ResearchKnowledgePromoter(
             providerConfidence = result.confidence,
             citations = result.citations.map { KnowledgeCitation(it.url, it.excerpt.ifBlank { it.title }) },
             expiresAtEpochMs = expires,
-            provenance = KnowledgeProvenance.WEB_RESEARCH
+            provenance = KnowledgeProvenance.WEB_RESEARCH,
+            intent = structure.intent,
+            normalizedQuery = structure.normalizedQuery,
+            entities = structure.entities,
+            capabilities = listOf("network.research", "chat.respond")
         )
         return cycle.confirm(entry.id, result.confidence, entry.source)
     }

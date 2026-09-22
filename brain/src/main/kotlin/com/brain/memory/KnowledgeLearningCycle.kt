@@ -3,6 +3,8 @@ package com.brain.memory
 /** Ciclo que separa candidato externo de conhecimento validado. */
 class KnowledgeLearningCycle(private val memory: KnowledgeMemory? = null, private val conversationId: String? = null) {
     private val scopedMemory: KnowledgeMemory get() = memory ?: KnowledgeMemoryRegistry.current(conversationId)
+    /** Memória usada pelo adapter que combina recall textual e estruturado. */
+    fun memoryForIntegration(): KnowledgeMemory = scopedMemory
     fun recall(problem: String, scope: KnowledgeScope = KnowledgeScope.GLOBAL, ownerId: String? = null, projectId: String? = null): KnowledgeEntry? =
         scopedMemory.findValidated(problem, scope = scope, ownerId = ownerId, projectId = projectId)
 
@@ -27,7 +29,11 @@ class KnowledgeLearningCycle(private val memory: KnowledgeMemory? = null, privat
         ownerId: String? = null,
         projectId: String? = null,
         expiresAtEpochMs: Long? = null,
-        provenance: KnowledgeProvenance = KnowledgeProvenance.LOCAL_BUILTIN
+        provenance: KnowledgeProvenance = KnowledgeProvenance.LOCAL_BUILTIN,
+        intent: String? = null,
+        entities: Map<String, String> = emptyMap(),
+        capabilities: List<String> = emptyList(),
+        normalizedQuery: String? = null
     ): KnowledgeEntry = scopedMemory.saveCandidate(
         KnowledgeEntry(
             problem = problem,
@@ -43,7 +49,10 @@ class KnowledgeLearningCycle(private val memory: KnowledgeMemory? = null, privat
             projectId = projectId,
             expiresAtEpochMs = expiresAtEpochMs,
             provenance = provenance,
-            normalizedQuery = problem.trim().lowercase().replace(Regex("\\s+"), " ")
+            intent = intent,
+            entities = entities.toMap(),
+            capabilities = capabilities.distinct(),
+            normalizedQuery = normalizedQuery ?: problem.trim().lowercase().replace(Regex("\\s+"), " ")
         )
     )
 

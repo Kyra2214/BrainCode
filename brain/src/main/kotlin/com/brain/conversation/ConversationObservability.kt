@@ -1,5 +1,7 @@
 package com.brain.conversation
 
+import com.brain.events.BrainEvent
+import com.brain.events.EventStore
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
@@ -53,4 +55,29 @@ class ConversationMetrics {
 
     private fun ConcurrentHashMap<String, AtomicLong>.snapshot(): Map<String, Long> =
         entries.associate { it.key to it.value.get() }.toSortedMap()
+}
+
+/** Ponte opcional entre evidências do fluxo e a trilha hash-chain persistente. */
+class EventStoreConversationEvidence(
+    private val store: EventStore,
+    private val runId: String,
+    private val sessionId: String,
+    private val taskId: String
+) {
+    private var sequence = 0L
+
+    @Synchronized
+    fun append(evidence: String, hop: String = "conversation") {
+        store.append(
+            BrainEvent(
+                runId = runId,
+                sessionId = sessionId,
+                taskId = taskId,
+                type = "conversation.evidence",
+                sequence = sequence++,
+                payload = mapOf("evidence" to evidence.take(256), "hop" to hop.take(64)),
+                idempotencyKey = "$runId:$taskId:$sequence:$evidence"
+            )
+        )
+    }
 }

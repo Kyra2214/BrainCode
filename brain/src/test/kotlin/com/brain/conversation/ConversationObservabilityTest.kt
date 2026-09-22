@@ -1,7 +1,9 @@
 package com.brain.conversation
 
+import com.brain.events.InMemoryEventStore
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class ConversationObservabilityTest {
     @Test
@@ -34,5 +36,16 @@ class ConversationObservabilityTest {
         assertEquals(0L, snapshot.cacheMisses)
         assertEquals(emptyMap(), snapshot.llmCallsByHop)
         assertEquals(emptyMap(), snapshot.secretaryRejectedByStage)
+    }
+
+    @Test
+    fun `evidencia conversacional e persistida no event store`() {
+        val store = InMemoryEventStore()
+        val sink = EventStoreConversationEvidence(store, "run", "session", "task")
+        sink.append("chat:cache:hit:layer1", "recall")
+        sink.append("chat:llm:interpreter", "interpreter")
+
+        assertEquals(listOf("chat:cache:hit:layer1", "chat:llm:interpreter"), store.replay().map { it.payload["evidence"] })
+        assertTrue(store.verifyIntegrity())
     }
 }

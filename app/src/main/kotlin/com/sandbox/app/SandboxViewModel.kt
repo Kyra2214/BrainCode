@@ -732,6 +732,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     )
                 )
                 val conversationKnowledgeCycle = com.brain.memory.KnowledgeLearningCycle()
+                val conversationGateway = ConversationBrainGatewayAdapter(brainApiGateway)
                 val chatResponseExecutor = ChatResponseExecutor(
                     contextProvider = {
                         sessions.firstOrNull { it.id == activeSessionId }?.conversationContext ?: ConversationContext()
@@ -739,7 +740,21 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     conversationEngine = noInferenceEngine(getApplication()),
                     researchFallback = automaticConversationResearch,
                     knowledgeCycle = conversationKnowledgeCycle,
-                    knowledgePromoter = com.brain.memory.ResearchKnowledgePromoter(conversationKnowledgeCycle)
+                    knowledgePromoter = com.brain.memory.ResearchKnowledgePromoter(
+                        conversationKnowledgeCycle,
+                        interpreter = com.brain.conversation.LlmConversationInterpreter(
+                            conversationGateway,
+                            accounts = apiProviders.map { "android:${it.id}" }.toSet()
+                        )
+                    ),
+                    structuredInterpreter = com.brain.conversation.LlmConversationInterpreter(
+                        conversationGateway,
+                        accounts = apiProviders.map { "android:${it.id}" }.toSet()
+                    ),
+                    outputReviewer = com.brain.conversation.LlmOutputReviewer(
+                        conversationGateway,
+                        accounts = apiProviders.map { "android:${it.id}" }.toSet()
+                    )
                 )
                 brainController = BrainSandboxController(
                     prepared,

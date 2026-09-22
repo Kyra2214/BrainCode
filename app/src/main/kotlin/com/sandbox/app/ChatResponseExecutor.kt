@@ -18,6 +18,9 @@ import com.brain.secretary.UserResponse
 import com.brain.secretary.ConversationCandidate
 import com.brain.text.InformationalQuestionClassifier
 import com.brain.conversation.ConversationMetrics
+import com.brain.conversation.ConversationKnowledgeFlow
+import com.brain.conversation.ConversationInterpreter
+import com.brain.conversation.OutputReviewer
 import java.time.Clock
 
 /**
@@ -32,6 +35,8 @@ class ChatResponseExecutor(
     private val researchFallback: WebResearchAgent? = null,
     private val knowledgeCycle: KnowledgeLearningCycle? = null,
     private val knowledgePromoter: ResearchKnowledgePromoter? = null,
+    private val structuredInterpreter: ConversationInterpreter? = null,
+    private val outputReviewer: OutputReviewer? = null,
     private val secretaryGate: DeterministicSecretaryGate = DeterministicSecretaryGate(),
     val metrics: ConversationMetrics = ConversationMetrics(),
     private val maxRecoveryAttempts: Int = 1
@@ -46,7 +51,11 @@ class ChatResponseExecutor(
         val suppliedResearch = request.parameters["parameter.1"]?.trim().orEmpty()
         val isClarification = request.parameters.values.any { it.startsWith("clarification.status=NEEDS_CLARIFICATION") }
         val context = contextProvider()
-        val learned = knowledgeCycle?.recall(prompt)
+        val evidence = mutableListOf("chat:conversation")
+        val structuredRecall = if (knowledgeCycle != null && structuredInterpreter != null) {
+            ConversationKnowledgeFlow(knowledgeCycleMemory(knowledgeCycle), structuredInterpreter, metrics) { evidence += it }.recall(prompt, context)
+        } else null
+        val learned = structuredRecall?.entry ?: knowledgeCycle?.recall(prompt)
         when {
             learned == null -> metrics.recordCacheMiss()
             learned.intent != null -> metrics.recordCacheHit("layer1")
@@ -58,7 +67,7 @@ class ChatResponseExecutor(
         val localMiss = localResponse == null || localResponse.intent == "knowledge.unknown"
         val informational = isInformationalQuestion(prompt)
         val shouldRecover = suppliedResearch.isBlank() && !isClarification && localMiss && informational && researchFallback != null
-        val evidence = mutableListOf("chat:conversation")
+        structuredRecall?.structure?.let { evidence += "chat:llm:interpreter" }
         var researchResult: ResearchRunResult? = null
 
         if (localMiss && shouldRecover && maxRecoveryAttempts == 1) {
@@ -102,6 +111,20 @@ class ChatResponseExecutor(
         }
 
         val requestId = request.actionId
+        if (outputReviewer != null) {
+            val review = outputReviewer.conferir(prompt, finalText)
+            metrics.recordLlmCall("reviewer", "standard", review.respondeAoPedido && review.completo)
+            evidence += "chat:llm:reviewer"
+            if (!review.respondeAoPedido || !review.completo) {
+                metrics.recordSecretary("content", accepted = false)
+                return ActionExecution(
+                    false,
+                    error = "QC da LLM rejeitou a resposta: ${review.observacoes.joinToString("; ")}",
+                    evidence = evidence + "chat:gate:content:rejected",
+                    provenance = provenance(capability)
+                )
+            }
+        }
         evidence += "chat:request:$requestId"
         val conversation = ConversationResult(finalText, status, evidence, requestId = requestId, prompt = prompt)
         val evaluation = secretaryGate.evaluate(conversation, recoveryAvailable = shouldRecover && researchResult == null)
@@ -145,6 +168,9 @@ class ChatResponseExecutor(
 
     private fun isInformationalQuestion(prompt: String): Boolean =
         InformationalQuestionClassifier.isRecoverable(prompt)
+
+    private fun knowledgeCycleMemory(cycle: KnowledgeLearningCycle): com.brain.memory.KnowledgeMemory =
+        cycle.memoryForIntegration()
 
     private fun provenance(capability: CapabilityDefinition) = listOf("app:ChatResponseExecutor", "capability:${capability.id}")
 }
