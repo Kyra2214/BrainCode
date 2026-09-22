@@ -53,7 +53,16 @@ class ChatResponseExecutor(
         val context = contextProvider()
         val evidence = mutableListOf("chat:conversation")
         val structuredRecall = if (knowledgeCycle != null && structuredInterpreter != null) {
-            ConversationKnowledgeFlow(knowledgeCycleMemory(knowledgeCycle), structuredInterpreter, metrics) { evidence += it }.recall(prompt, context)
+            ConversationKnowledgeFlow(knowledgeCycleMemory(knowledgeCycle), structuredInterpreter, metrics) { evidence += it }.recall(
+                prompt,
+                com.brain.conversation.ConversationContext(
+                    requestId = request.actionId,
+                    metadata = mapOf(
+                        "idea" to (context.idea ?: ""),
+                        "requirements" to context.requirements.joinToString("|")
+                    ).filterValues { it.isNotBlank() }
+                )
+            )
         } else null
         val learned = structuredRecall?.entry ?: knowledgeCycle?.recall(prompt)
         when {
