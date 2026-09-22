@@ -14,6 +14,7 @@ import com.brain.secretary.ConversationResult
 import com.brain.secretary.ConversationStatus
 import com.brain.secretary.DeterministicSecretaryGate
 import com.brain.secretary.SecretaryDecision
+import com.brain.text.InformationalQuestionClassifier
 import java.time.Clock
 
 /**
@@ -118,12 +119,8 @@ class ChatResponseExecutor(
         )
     }
 
-    private fun isInformationalQuestion(prompt: String): Boolean {
-        val normalized = prompt.lowercase()
-        return prompt.contains("?") || normalized.startsWith("o que ") || normalized.startsWith("qual ") ||
-            normalized.startsWith("quais ") || normalized.startsWith("como ") || normalized.startsWith("quem ") ||
-            normalized.contains("explique") || normalized.contains("como funciona")
-    }
+    private fun isInformationalQuestion(prompt: String): Boolean =
+        InformationalQuestionClassifier.isRecoverable(prompt)
 
     private fun provenance(capability: CapabilityDefinition) = listOf("app:ChatResponseExecutor", "capability:${capability.id}")
 }

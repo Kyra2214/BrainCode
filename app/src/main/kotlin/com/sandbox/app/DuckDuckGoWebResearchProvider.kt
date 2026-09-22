@@ -69,8 +69,7 @@ class DuckDuckGoWebResearchProvider(
         return runCatching { java.net.URLDecoder.decode(candidate, "UTF-8") }.getOrDefault(candidate)
     }
 
-    private fun stripHtml(fragment: String): String =
-        fragment.replace(Regex("<[^>]+>"), "").replace("&amp;", "&").replace("&#x27;", "'").trim()
+    private fun stripHtml(fragment: String): String = HtmlTextDecoder.decode(fragment)
 
     private fun hostOf(url: String): String = runCatching { URL(url).host }.getOrDefault("web")
 }

@@ -62,6 +62,5 @@ class WikipediaWebResearchProvider(
         }
     }
 
-    private fun stripHtml(fragment: String): String =
-        fragment.replace(Regex("<[^>]+>"), "").replace("&amp;", "&").replace("&quot;", "\"").trim()
+    private fun stripHtml(fragment: String): String = HtmlTextDecoder.decode(fragment)
 }

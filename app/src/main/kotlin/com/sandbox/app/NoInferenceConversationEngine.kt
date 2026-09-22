@@ -2,6 +2,7 @@ package com.sandbox.app
 
 import org.json.JSONArray
 import org.json.JSONObject
+import com.brain.text.InformationalQuestionClassifier
 import java.util.Locale
 
 /** Resultado estruturado do engine simbólico; não executa capabilities nem efeitos. */
@@ -127,16 +128,18 @@ class NoInferenceConversationEngine(
     }
 
     private fun overlap(a: String, b: String): Double {
-        val stop = setOf("o", "a", "os", "as", "um", "uma", "é", "e", "de", "do", "da", "que", "como", "me", "um")
+        val stop = setOf("o", "a", "os", "as", "um", "uma", "é", "e", "de", "do", "da", "que", "como", "me",
+            "explique", "explica", "fale", "falar", "sobre", "descreva", "descrever", "funciona")
         val left = a.split(Regex("[^\\p{L}\\p{N}]+" )).filter { it.length > 2 && it !in stop }.toSet()
         val right = b.split(Regex("[^\\p{L}\\p{N}]+" )).filter { it.length > 2 && it !in stop }.toSet()
         if (left.isEmpty()) return 0.0
-        return left.intersect(right).size.toDouble() / left.size.toDouble()
+        val shared = left.intersect(right)
+        if (shared.isEmpty()) return 0.0
+        return shared.size.toDouble() / left.size.toDouble()
     }
 
-    private fun isInformational(query: String): Boolean = listOf(
-        "o que é", "o que e", "o que significa", "explique", "como funciona", "quem inventou", "quem criou"
-    ).any { query.startsWith(it) || query.contains(" $it") }
+    private fun isInformational(query: String): Boolean =
+        InformationalQuestionClassifier.isRecoverable(query)
 
     private fun extractTopic(query: String): String? {
         val patterns = listOf(
@@ -151,7 +154,7 @@ class NoInferenceConversationEngine(
     private fun normalize(text: String): String = text.lowercase(Locale.ROOT).trim().replace(Regex("\\s+"), " ")
 
     private fun loadPatterns(): List<PatternEntry> {
-        val files = listOf("social_patterns.json", "extended_social_patterns.json", "slang_patterns.json", "pt_br_social_patterns.json")
+        val files = listOf("pt_br_social_patterns.json", "social_patterns.json", "extended_social_patterns.json", "slang_patterns.json")
         return files.flatMap { file ->
             val root = JSONObject(assets("no_inference/patterns/$file"))
             root.keys().asSequence().filterNot { it.startsWith("_") }.flatMap { category ->

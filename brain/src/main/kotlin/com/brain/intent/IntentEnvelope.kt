@@ -6,6 +6,7 @@ import com.brain.secretary.OrderIntent
 import com.brain.capability.CapabilityRegistry
 import com.brain.text.IntentNegation
 import com.brain.text.TriggerLexicon
+import com.brain.text.InformationalQuestionClassifier
 import java.util.Locale
 
 /** Categorias observáveis da intenção antes de qualquer planejamento ou execução. */
@@ -234,14 +235,8 @@ class BrainInputInterpreter(
     private fun isNavigation(text: String): Boolean =
         Regex("(?i)\\b(ab(r|ra)|abra|abrir|mostre|mostrar|liste|listar)\\b.*\\b(catálogo|catalogo|capacidades|comandos)\\b").containsMatchIn(text)
 
-    private fun isInformationalQuestion(text: String): Boolean {
-        val asks = text.contains("?") || text.startsWith("qual ") || text.startsWith("quais ") ||
-            text.startsWith("como ") || text.startsWith("o que ") || text.startsWith("explique") || text.startsWith("explica")
-        val explanatory = text.contains("explic") || text.contains("como funciona") ||
-            text.contains("o que é") || text.contains("o que e") || text.contains("qual a melhor") ||
-            text.contains("qual o melhor") || text.contains("quais tecnologias") || text.contains("que tecnologias")
-        return asks && explanatory
-    }
+    private fun isInformationalQuestion(text: String): Boolean =
+        InformationalQuestionClassifier.isRecoverable(text)
 
     private fun extractLocation(text: String): String? {
         val match = Regex("(?i)\\b(?:em|de)\\s+(.+?)(?=\\s+(?:hoje|agora|amanhã|amanha|neste momento)\\b|[?!.;,]|$)").find(text)
