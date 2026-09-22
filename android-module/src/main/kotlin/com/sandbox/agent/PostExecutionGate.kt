@@ -279,10 +279,16 @@ class PostExecutionGate(private val memory: LayeredMemory) {
         }.distinct()
         val checks = plan.passos.map { step ->
             val result = cycle.passos.firstOrNull { it.passoId == step.id }
+            val evidence = result?.executionEvidence.orEmpty()
+            val response = result?.userResponse
+            val recoveryRequested = "chat:orchestrator:recovery" in evidence
+            val evidenceComplete = "chat:secretary:accept" in evidence &&
+                evidence.any { it.startsWith("chat:request:") } &&
+                (!recoveryRequested || "chat:websearch:executed" in evidence)
             VerificationCheck(
                 criterionId = step.id,
-                passed = result?.status == StatusPasso.APROVADO && result?.resultado?.isNotBlank() == true,
-                detail = if (result?.status == StatusPasso.APROVADO && result?.resultado?.isNotBlank() == true) "resposta conversacional produzida" else "resposta conversacional ausente",
+                passed = result?.status == StatusPasso.APROVADO && response?.text?.isNotBlank() == true && evidenceComplete,
+                detail = if (result?.status == StatusPasso.APROVADO && response?.text?.isNotBlank() == true && evidenceComplete) "UserResponse aceita e correlacionada" else "UserResponse/evidência Secretary ausente",
                 evidenceId = evidenceIds.firstOrNull()
             )
         }
