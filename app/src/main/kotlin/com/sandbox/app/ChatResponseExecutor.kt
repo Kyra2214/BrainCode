@@ -14,6 +14,7 @@ import com.brain.secretary.ConversationResult
 import com.brain.secretary.ConversationStatus
 import com.brain.secretary.DeterministicSecretaryGate
 import com.brain.secretary.SecretaryDecision
+import com.brain.secretary.UserResponse
 import com.brain.text.InformationalQuestionClassifier
 import java.time.Clock
 
@@ -55,7 +56,7 @@ class ChatResponseExecutor(
         if (localMiss && shouldRecover && maxRecoveryAttempts == 1) {
             evidence += "chat:secretary:block"
             evidence += "chat:orchestrator:recovery"
-            researchResult = requireNotNull(researchFallback).research(ResearchRequest(prompt))
+            researchResult = requireNotNull(researchFallback).research(ResearchRequest(prompt, requestId = request.actionId, conversationId = request.parameters["conversationId"]))
             evidence += "chat:websearch:executed"
             if (researchResult.sources.isNotEmpty() && researchResult.evidence.isNotEmpty()) {
                 evidence += "chat:websearch:evidence"
@@ -92,7 +93,9 @@ class ChatResponseExecutor(
             }
         }
 
-        val conversation = ConversationResult(finalText, status, evidence)
+        val requestId = request.actionId
+        evidence += "chat:request:$requestId"
+        val conversation = ConversationResult(finalText, status, evidence, requestId = requestId, prompt = prompt)
         val evaluation = secretaryGate.evaluate(conversation, recoveryAvailable = shouldRecover && researchResult == null)
         if (evaluation.decision != SecretaryDecision.ACCEPT) {
             return ActionExecution(
@@ -105,17 +108,17 @@ class ChatResponseExecutor(
 
         evidence += "chat:secretary:accept"
         if (researchResult?.answer?.isNotBlank() == true) {
-            knowledgePromoter?.promote(ResearchRequest(prompt), researchResult)
+            knowledgePromoter?.promote(ResearchRequest(prompt, requestId = request.actionId, conversationId = request.parameters["conversationId"]), researchResult)
         }
         val provenance = provenance(capability).toMutableList()
         if (researchResult != null) provenance += "research:auto-fallback-after-local-miss"
         if (researchResult != null) provenance += "source:dependency:network.research"
         return ActionExecution(
             true,
-            result = finalText,
             evidence = evidence.distinct(),
             provenance = provenance.distinct(),
-            researchSources = researchResult?.sources.orEmpty()
+            researchSources = researchResult?.sources.orEmpty(),
+            userResponse = UserResponse(finalText, evidence.distinct(), requestId, request.parameters["conversationId"])
         )
     }
 
