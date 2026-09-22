@@ -6,6 +6,15 @@ class KnowledgeLearningCycle(private val memory: KnowledgeMemory? = null, privat
     fun recall(problem: String, scope: KnowledgeScope = KnowledgeScope.GLOBAL, ownerId: String? = null, projectId: String? = null): KnowledgeEntry? =
         scopedMemory.findValidated(problem, scope = scope, ownerId = ownerId, projectId = projectId)
 
+    fun recall(
+        problem: String,
+        intent: String,
+        entities: Map<String, String>,
+        scope: KnowledgeScope = KnowledgeScope.GLOBAL,
+        ownerId: String? = null,
+        projectId: String? = null
+    ): KnowledgeEntry? = scopedMemory.findValidatedStructured(problem, intent, entities, scope = scope, ownerId = ownerId, projectId = projectId)
+
     fun observeExternal(
         problem: String,
         answer: String,
@@ -33,7 +42,8 @@ class KnowledgeLearningCycle(private val memory: KnowledgeMemory? = null, privat
             ownerId = ownerId,
             projectId = projectId,
             expiresAtEpochMs = expiresAtEpochMs,
-            provenance = provenance
+            provenance = provenance,
+            normalizedQuery = problem.trim().lowercase().replace(Regex("\\s+"), " ")
         )
     )
 
