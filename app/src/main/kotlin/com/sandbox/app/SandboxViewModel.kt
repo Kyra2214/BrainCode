@@ -722,16 +722,24 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     promptLibrary = promptLibrary,
                     improver = GatewayPromptImprover(brainApiGateway)
                 )
-                val webResearchExecutor = WebResearchExecutor(
-                    provider = com.brain.research.CompositeWebResearchProvider(
-                        listOf(DuckDuckGoWebResearchProvider(), WikipediaWebResearchProvider())
+                val webResearchProvider = com.brain.research.CompositeWebResearchProvider(
+                    listOf(DuckDuckGoWebResearchProvider(), WikipediaWebResearchProvider())
+                )
+                val webResearchExecutor = WebResearchExecutor(provider = webResearchProvider)
+                val automaticConversationResearch = com.brain.research.WebResearchAgent(
+                    com.brain.research.WebProviderSet(
+                        search = listOf(com.brain.research.LegacySearchProviderAdapter(webResearchProvider))
                     )
                 )
+                val conversationKnowledgeCycle = com.brain.memory.KnowledgeLearningCycle()
                 val chatResponseExecutor = ChatResponseExecutor(
                     contextProvider = {
                         sessions.firstOrNull { it.id == activeSessionId }?.conversationContext ?: ConversationContext()
                     },
-                    conversationEngine = noInferenceEngine(getApplication())
+                    conversationEngine = noInferenceEngine(getApplication()),
+                    researchFallback = automaticConversationResearch,
+                    knowledgeCycle = conversationKnowledgeCycle,
+                    knowledgePromoter = com.brain.memory.ResearchKnowledgePromoter(conversationKnowledgeCycle)
                 )
                 brainController = BrainSandboxController(
                     prepared,

@@ -15,7 +15,9 @@ class KnowledgeLearningCycle(private val memory: KnowledgeMemory = KnowledgeMemo
         citations: List<KnowledgeCitation> = emptyList(),
         scope: KnowledgeScope = KnowledgeScope.GLOBAL,
         ownerId: String? = null,
-        projectId: String? = null
+        projectId: String? = null,
+        expiresAtEpochMs: Long? = null,
+        provenance: KnowledgeProvenance = KnowledgeProvenance.LOCAL_BUILTIN
     ): KnowledgeEntry = memory.saveCandidate(
         KnowledgeEntry(
             problem = problem,
@@ -28,7 +30,9 @@ class KnowledgeLearningCycle(private val memory: KnowledgeMemory = KnowledgeMemo
             citations = citations.distinctBy { it.uri + "|" + it.quote },
             scope = scope,
             ownerId = ownerId,
-            projectId = projectId
+            projectId = projectId,
+            expiresAtEpochMs = expiresAtEpochMs,
+            provenance = provenance
         )
     )
 

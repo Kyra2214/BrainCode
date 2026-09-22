@@ -21,6 +21,7 @@ data class KnowledgeCitation(
 ) { init { require(uri.isNotBlank() && quote.isNotBlank()) { "citação exige uri e quote" } } }
 
 enum class KnowledgeScope { GLOBAL, USER, PROJECT }
+enum class KnowledgeProvenance { LOCAL_BUILTIN, USER_PROVIDED, WEB_RESEARCH }
 
 data class KnowledgeCorrection(
     val previousAnswer: String,
@@ -45,7 +46,9 @@ data class KnowledgeEntry(
     val scope: KnowledgeScope = KnowledgeScope.GLOBAL,
     val ownerId: String? = null,
     val projectId: String? = null,
-    val correctionHistory: List<KnowledgeCorrection> = emptyList()
+    val correctionHistory: List<KnowledgeCorrection> = emptyList(),
+    val expiresAtEpochMs: Long? = null,
+    val provenance: KnowledgeProvenance = KnowledgeProvenance.LOCAL_BUILTIN
 )
 
 interface KnowledgeMemory {
@@ -61,7 +64,7 @@ class InMemoryKnowledgeMemory : KnowledgeMemory {
 
     @Synchronized override fun findValidated(problem: String, minScore: Double, scope: KnowledgeScope, ownerId: String?, projectId: String?): KnowledgeEntry? =
         entries.values.asSequence()
-            .filter { it.validated && it.scope == scope }
+            .filter { it.validated && it.scope == scope && (it.expiresAtEpochMs == null || it.expiresAtEpochMs > System.currentTimeMillis()) }
             .filter { scope != KnowledgeScope.USER || it.ownerId == ownerId }
             .filter { scope != KnowledgeScope.PROJECT || it.projectId == projectId }
             .map { it to similarity(problem, it.problem) }
@@ -69,7 +72,9 @@ class InMemoryKnowledgeMemory : KnowledgeMemory {
             .maxByOrNull { it.second }?.first
 
     @Synchronized override fun saveCandidate(entry: KnowledgeEntry): KnowledgeEntry {
-        val duplicate = entries.values.firstOrNull { it.fingerprint == entry.fingerprint }
+        val duplicate = entries.values.firstOrNull {
+            it.fingerprint == entry.fingerprint || similarity(it.problem, entry.problem) >= 0.75
+        }
         if (duplicate != null) return duplicate
         entries[entry.id] = entry
         return entry
@@ -103,7 +108,10 @@ class InMemoryKnowledgeMemory : KnowledgeMemory {
         if (left.isEmpty() || right.isEmpty()) return 0.0
         return (2.0 * left.intersect(right).size / (left.size + right.size)).coerceIn(0.0, 1.0)
     }
-    private fun tokens(value: String): Set<String> = value.lowercase(Locale.ROOT).replace(Regex("[^\\p{L}\\p{N}_]+"), " ").split(' ').filter { it.length >= 3 }.toSet()
+    private fun tokens(value: String): Set<String> = value.lowercase(Locale.ROOT)
+        .replace(Regex("\\b(o que|me explica|explique|como funciona|fale sobre|fala sobre|sobre|qual|quais)\\b"), " ")
+        .replace(Regex("[^\\p{L}\\p{N}_]+"), " ")
+        .split(' ').filter { it.length >= 3 }.toSet()
 }
 
 fun fingerprintFor(problem: String, answer: String): String = MessageDigest.getInstance("SHA-256")

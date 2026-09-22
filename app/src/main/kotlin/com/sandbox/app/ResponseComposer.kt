@@ -19,11 +19,13 @@ class ResponseComposer(
         prompt: String,
         research: String = "",
         clarification: Boolean = false,
-        context: ConversationContext = ConversationContext()
+        context: ConversationContext = ConversationContext(),
+        localLookupCompleted: Boolean = false,
+        precomputedConversation: ConversationResponse? = null
     ): ComposedChatResponse {
         val lower = prompt.lowercase(Locale.ROOT)
         val evidence = mutableListOf("chat:local-only", "chat:read-only")
-        val engineResponse = conversationEngine?.respond(prompt, context)
+        val engineResponse = if (localLookupCompleted) precomputedConversation else conversationEngine?.respond(prompt, context)
         val text = when {
             clarification -> {
                 evidence += "chat:clarification-question"
@@ -39,7 +41,7 @@ class ResponseComposer(
             }
             research.isNotBlank() -> {
                 evidence += "chat:research-context-included"
-                "Pedido analisado: $prompt\nResumo baseado nas fontes autorizadas recebidas nesta etapa:\n$research"
+                research.trim()
             }
             engineResponse != null -> {
                 evidence += engineResponse.evidence

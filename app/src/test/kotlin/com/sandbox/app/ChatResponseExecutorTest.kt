@@ -10,6 +10,10 @@ import com.brain.policy.ApprovalRequired
 import com.brain.policy.Decision
 import com.brain.policy.PolicyContext
 import com.brain.policy.PolicyDecision
+import com.brain.research.ResearchResult
+import com.brain.research.SearchProvider
+import com.brain.research.WebProviderSet
+import com.brain.research.WebResearchAgent
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
@@ -124,6 +128,40 @@ class ChatResponseExecutorTest {
         assertTrue(result.result!!.contains("esclarecimento"))
         assertTrue(result.evidence.contains("chat:clarification-question"))
     }
+
+    @Test
+    fun `local hit nao chama WebResearch`() {
+        var calls = 0
+        val research = WebResearchAgent(WebProviderSet(search = listOf(SearchProvider { calls++; error("não deveria pesquisar") })))
+        val result = ChatResponseExecutor(conversationEngine = engine(), researchFallback = research)
+            .execute(request("o que é um disjuntor?"), capability, decision)
+
+        assertTrue(result.result!!.contains("disjuntor", ignoreCase = true))
+        assertEquals(0, calls)
+        assertFalse(result.provenance.contains("research:auto-fallback-after-local-miss"))
+    }
+
+    @Test
+    fun `local miss pesquisa automaticamente sem pedir aprovação`() {
+        var calls = 0
+        val research = WebResearchAgent(WebProviderSet(search = listOf(SearchProvider { request ->
+            calls++
+            assertTrue(request.query.contains("Kotlin", ignoreCase = true))
+            Result.success(listOf(ResearchResult("q", "test", "Kotlin", "https://kotlinlang.org", "Kotlin é uma linguagem de programação", java.time.Instant.now(), .9)))
+        })))
+        val result = ChatResponseExecutor(conversationEngine = engine(), researchFallback = research)
+            .execute(request("O que é Kotlin?"), capability, decision)
+
+        assertTrue(result.success)
+        assertEquals(1, calls)
+        assertTrue(result.result!!.contains("Kotlin é uma linguagem"))
+        assertFalse(result.result!!.contains("Quer que eu pesquise", ignoreCase = true))
+        assertTrue(result.provenance.contains("research:auto-fallback-after-local-miss"))
+    }
+
+    private fun engine(): NoInferenceConversationEngine = NoInferenceConversationEngine(assets = { path ->
+        java.io.File("src/main/assets/$path").readText()
+    })
 
     private fun request(prompt: String, research: String? = null, clarification: Boolean = false): ActionRequest = ActionRequest(
         actionId = "chat-test",
