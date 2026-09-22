@@ -31,6 +31,7 @@ import com.brain.behavior.RevisionAction
 import com.brain.behavior.VerificationResult
 import com.brain.behavior.VerificationStatus
 import com.brain.validation.ValidationResult
+import com.brain.secretary.UserResponse
 
 
 enum class StatusPasso { APROVADO, REPROVADO, NEGADO_PELA_POLICY, AGUARDANDO_APROVACAO, BLOQUEADO_POR_DEPENDENCIA }
@@ -42,6 +43,9 @@ data class ResultadoPasso(
     val decisaoRouter: RoutingDecision? = null,
     val execucao: AgentSandboxSession.CommandOutcome? = null,
     val resultado: String? = null,
+    /** Conteúdo interno para dependências; não é uma resposta de usuário. */
+    val payloadInterno: String? = null,
+    val userResponse: UserResponse? = null,
     val evidencias: List<EvidenciaComando> = emptyList(),
     val motivo: String? = null,
     val approvalId: String? = null,
@@ -71,7 +75,8 @@ data class ResultadoCiclo(
     val concluido: Boolean
         get() = passos.isNotEmpty() && passos.all { it.status == StatusPasso.APROVADO } && (posExecucao == null || posExecucao.aprovado)
     val aprovado: Boolean get() = concluido
-    val resposta: String? get() = passos.asSequence().mapNotNull { it.resultado }.lastOrNull()
+    /** Somente respostas liberadas pelo Secretary podem ser consumidas pela UI. */
+    val resposta: String? get() = passos.asSequence().mapNotNull { it.userResponse?.text }.lastOrNull()
     val researchSources: List<ResearchResult> get() = passos.flatMap { it.researchSources }.distinctBy { it.url }
     val promptReasoning: PromptReasoningTrace? get() = passos.mapNotNull { it.promptReasoning }.reduceOrNull { a, b -> a.merge(b) }
 }
@@ -143,7 +148,7 @@ class CicloExecucaoPlano(
             }
             // Context Builder mínimo: resultado textual das dependências já concluídas vira
             // parâmetro extra do passo (ex.: contexto do WebResearch chega ao Prompt Creator).
-            val contextoDependencias = passo.dependeDe.mapNotNull { resultadosPorId[it]?.resultado }
+            val contextoDependencias = passo.dependeDe.mapNotNull { resultadosPorId[it]?.payloadInterno ?: resultadosPorId[it]?.resultado }
             val passoComContexto = if (contextoDependencias.isEmpty()) passo else passo.copy(parametros = passo.parametros + contextoDependencias)
             val resultado = processarPasso(passoComContexto, autorizado.authorizations.getValue(passo.id), autorizado.decisions[passo.id])
             resultados += resultado
@@ -249,7 +254,9 @@ class CicloExecucaoPlano(
                 passo.id,
                 if (dispatch.status == DispatchStatus.DISPATCHED) StatusPasso.APROVADO else StatusPasso.REPROVADO,
                 decisaoPolicy = dispatch.gateway?.decision ?: decision,
-                resultado = dispatch.gateway?.execution?.result,
+                resultado = dispatch.gateway?.execution?.userResponse?.text,
+                payloadInterno = dispatch.gateway?.execution?.internalPayload,
+                userResponse = dispatch.gateway?.execution?.userResponse,
                 decisaoRouter = decisaoRouter,
                 motivo = dispatch.reason ?: if (dispatch.status == DispatchStatus.DISPATCHED) null else "Dispatcher não executou a capability",
                 actionId = "${passo.id}:${passo.id}",

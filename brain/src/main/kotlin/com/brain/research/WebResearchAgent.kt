@@ -58,7 +58,7 @@ class WebResearchAgent(
             sourceQuality = quality,
             confidence = (found.map { it.confidence }.average().coerceIn(0.0, 1.0)),
             failedSources = failures,
-            execution = ResearchExecutionMetadata(runId(), started, finished, steps = 1, providerIds = listOf(providerId), networkUsed = true),
+            execution = ResearchExecutionMetadata(runId(), started, finished, steps = 1, providerIds = listOf(providerId), networkUsed = true, requestId = request.requestId, conversationId = request.conversationId),
             diagnostic = failures.takeIf { it.isNotEmpty() }?.joinToString("; ") { it.diagnostic },
             userMessage = if (quality == SourceQuality.REJECTED) "Encontrei fontes insuficientes para uma resposta confiável." else null
         )
@@ -69,7 +69,7 @@ class WebResearchAgent(
         return ResearchRunResult(
             answer = "",
             failedSources = failures,
-            execution = ResearchExecutionMetadata(runId(), started, finished, 0, emptyList(), networkUsed = false),
+            execution = ResearchExecutionMetadata(runId(), started, finished, 0, emptyList(), networkUsed = false, requestId = request.requestId, conversationId = request.conversationId),
             diagnostic = diagnostic,
             userMessage = "Não consegui concluir a pesquisa agora. Posso tentar novamente ou responder apenas com conhecimento local."
         )

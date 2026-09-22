@@ -41,7 +41,7 @@ class ResponseComposer(
             }
             research.isNotBlank() -> {
                 evidence += "chat:research-context-included"
-                research.trim()
+                synthesizeResearch(prompt, research)
             }
             engineResponse != null -> {
                 evidence += engineResponse.evidence
@@ -75,6 +75,23 @@ class ResponseComposer(
         (TriggerLexicon.matches(prompt, TriggerLexicon.INTERROGATIVOS) &&
             TriggerLexicon.matches(prompt, TriggerLexicon.TEMAS_TEMPO_REAL)) ||
             TriggerLexicon.matches(prompt, TriggerLexicon.CONSULTAS_TEMPO_REAL_SEM_INTERROGATIVO)
+
+    private fun synthesizeResearch(prompt: String, raw: String): String {
+        val topicTerms = Regex("[\\p{L}\\p{N}]{4,}").findAll(prompt.lowercase(Locale.ROOT))
+            .map { it.value }.filterNot { it in setOf("como", "funciona", "sobre", "explique", "fale", "qual", "quais") }.toSet()
+        val cleaned = raw
+            .replace(Regex("<[^>]+>"), " ")
+            .replace(Regex("https?://\\S+"), "")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        val sentences = cleaned.split(Regex("(?<=[.!?])\\s+|\\n+"))
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .filter { topicTerms.isEmpty() || topicTerms.any { term -> it.lowercase(Locale.ROOT).contains(term) } }
+            .take(4)
+        return if (sentences.isEmpty()) "Encontrei fontes, mas não há conteúdo suficientemente relacionado ao tema para responder com segurança."
+        else sentences.joinToString(" ").take(1600)
+    }
     private fun contextHasContent(context: ConversationContext): Boolean =
         context.idea != null || context.requirements.isNotEmpty() || context.decisions.isNotEmpty() || context.pending.isNotEmpty()
 

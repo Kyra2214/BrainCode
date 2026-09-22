@@ -11,6 +11,7 @@ import com.brain.research.ResearchResult
 import com.brain.prompt.PromptReasoningTrace
 import com.brain.observability.ExecutionTrace
 import com.brain.observability.TraceStage
+import com.brain.secretary.UserResponse
 
 /** Pedido declarativo; não transporta comando ou shell arbitrário. */
 data class ActionRequest(
@@ -46,7 +47,11 @@ data class ActionExecution(
      * preenchido por executores que sabem o custo real (ex.: escalonamento para IA paga). */
     val custo: Double = 0.0,
     /** Exceção transitória do executor pode ser repetida pelo orquestrador. */
-    val retryable: Boolean = false
+    val retryable: Boolean = false,
+    /** Payload interno para dependências; nunca é conteúdo exibível por si só. */
+    val internalPayload: String? = null,
+    /** Único texto autorizado a atravessar a fronteira para a UI. */
+    val userResponse: UserResponse? = null
 )
 
 enum class ActionLifecycle { CREATED, PLANNED, AUTHORIZED, DISPATCHED, RUNNING, SUCCEEDED, FAILED, BLOCKED, RETRYING, CANCELLED }

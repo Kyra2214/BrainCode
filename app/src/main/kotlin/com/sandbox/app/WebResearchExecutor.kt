@@ -33,20 +33,20 @@ class WebResearchExecutor(
         if (query.isBlank()) {
             return ActionExecution(
                 success = true,
-                result = "WebResearch indisponível: nenhuma consulta foi informada. Prosseguindo com conhecimento local.",
+                internalPayload = "WebResearch indisponível: nenhuma consulta foi informada. Prosseguindo com conhecimento local.",
                 evidence = listOf("web-research:sem-consulta"),
                 provenance = provenance(capability)
             )
         }
 
         val output = researchAgent.research(
-            ResearchRequest(query = query, constraints = com.brain.research.ResearchConstraints(maxSources = maxResultados))
+            ResearchRequest(query = query, constraints = com.brain.research.ResearchConstraints(maxSources = maxResultados), requestId = request.actionId, conversationId = request.parameters["conversationId"])
         )
         val resultados = output.sources
         if (resultados.isEmpty()) {
             return ActionExecution(
                 success = true,
-                result = "WebResearch indisponível. ${output.userMessage ?: "Prosseguindo com conhecimento local."}",
+                internalPayload = "WebResearch indisponível. ${output.userMessage ?: "Prosseguindo com conhecimento local."}",
                 evidence = listOf("web-research:indisponivel", "web-research:diagnostic:${output.diagnostic?.take(160).orEmpty()}"),
                 provenance = provenance(capability)
             )
@@ -54,7 +54,7 @@ class WebResearchExecutor(
 
         return ActionExecution(
             success = true,
-            result = output.answer,
+            internalPayload = output.answer,
             evidence = resultados.map { evidenciaDe(it) } + output.citations.map { "web-research:citation=${it.index}:${it.url}" } + "web-research:quality=${output.sourceQuality}",
             provenance = provenance(capability),
             researchSources = resultados
