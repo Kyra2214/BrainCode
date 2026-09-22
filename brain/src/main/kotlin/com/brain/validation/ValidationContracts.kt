@@ -221,7 +221,7 @@ class ValidationEngine {
                         "NO_WEB" !in it.restrictions || it.evidence.none { evidence -> evidence.startsWith("web:") }
                     }
                 ),
-                requiredEvidence = listOf("chat:")
+                requiredEvidence = listOf("chat:", "chat:secretary:accept", "chat:request:")
             ),
             subject, stage, attempt, previousResultId
         )

@@ -120,6 +120,13 @@ fun fingerprintFor(problem: String, answer: String): String = MessageDigest.getI
 
 object KnowledgeMemoryRegistry {
     @Volatile private var currentMemory: KnowledgeMemory = InMemoryKnowledgeMemory()
+    private val conversationMemories = java.util.concurrent.ConcurrentHashMap<String, KnowledgeMemory>()
     fun current(): KnowledgeMemory = currentMemory
     fun install(memory: KnowledgeMemory) { currentMemory = memory }
+    fun current(conversationId: String?): KnowledgeMemory = conversationId?.takeIf { it.isNotBlank() }?.let {
+        conversationMemories.computeIfAbsent(it) { InMemoryKnowledgeMemory() }
+    } ?: currentMemory
+    fun install(memory: KnowledgeMemory, conversationId: String?) {
+        if (conversationId.isNullOrBlank()) currentMemory = memory else conversationMemories[conversationId] = memory
+    }
 }

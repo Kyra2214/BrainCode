@@ -15,6 +15,7 @@ import com.brain.secretary.ConversationStatus
 import com.brain.secretary.DeterministicSecretaryGate
 import com.brain.secretary.SecretaryDecision
 import com.brain.secretary.UserResponse
+import com.brain.secretary.ConversationCandidate
 import com.brain.text.InformationalQuestionClassifier
 import java.time.Clock
 
@@ -113,12 +114,19 @@ class ChatResponseExecutor(
         val provenance = provenance(capability).toMutableList()
         if (researchResult != null) provenance += "research:auto-fallback-after-local-miss"
         if (researchResult != null) provenance += "source:dependency:network.research"
+        val candidate = ConversationCandidate(requestId, prompt, status = status, source = if (researchResult != null) "web-research" else "local", evidence = evidence.distinct(), text = finalText)
+        val promoted = secretaryGate.accept(candidate) ?: return ActionExecution(
+            false,
+            error = "Secretário rejeitou o candidato na promoção final",
+            evidence = evidence + "chat:secretary:block",
+            provenance = provenance(capability)
+        )
         return ActionExecution(
             true,
             evidence = evidence.distinct(),
             provenance = provenance.distinct(),
             researchSources = researchResult?.sources.orEmpty(),
-            userResponse = UserResponse(finalText, evidence.distinct(), requestId, request.parameters["conversationId"])
+            userResponse = promoted.copy(conversationId = request.parameters["conversationId"])
         )
     }
 

@@ -1,9 +1,10 @@
 package com.brain.memory
 
 /** Ciclo que separa candidato externo de conhecimento validado. */
-class KnowledgeLearningCycle(private val memory: KnowledgeMemory = KnowledgeMemoryRegistry.current()) {
+class KnowledgeLearningCycle(private val memory: KnowledgeMemory? = null, private val conversationId: String? = null) {
+    private val scopedMemory: KnowledgeMemory get() = memory ?: KnowledgeMemoryRegistry.current(conversationId)
     fun recall(problem: String, scope: KnowledgeScope = KnowledgeScope.GLOBAL, ownerId: String? = null, projectId: String? = null): KnowledgeEntry? =
-        memory.findValidated(problem, scope = scope, ownerId = ownerId, projectId = projectId)
+        scopedMemory.findValidated(problem, scope = scope, ownerId = ownerId, projectId = projectId)
 
     fun observeExternal(
         problem: String,
@@ -18,7 +19,7 @@ class KnowledgeLearningCycle(private val memory: KnowledgeMemory = KnowledgeMemo
         projectId: String? = null,
         expiresAtEpochMs: Long? = null,
         provenance: KnowledgeProvenance = KnowledgeProvenance.LOCAL_BUILTIN
-    ): KnowledgeEntry = memory.saveCandidate(
+    ): KnowledgeEntry = scopedMemory.saveCandidate(
         KnowledgeEntry(
             problem = problem,
             answer = answer,
@@ -38,9 +39,9 @@ class KnowledgeLearningCycle(private val memory: KnowledgeMemory = KnowledgeMemo
 
     /** O Critic chama isto somente depois de validar a resposta. */
     fun confirm(knowledgeId: String, confidence: Double, source: KnowledgeSource? = null): KnowledgeEntry? =
-        memory.confirm(knowledgeId, confidence, source)
+        scopedMemory.confirm(knowledgeId, confidence, source)
 
     /** O Critic pode substituir uma resposta errada sem perder a trilha original. */
     fun correct(knowledgeId: String, correctedAnswer: String, confidence: Double): KnowledgeEntry? =
-        memory.recordCorrection(knowledgeId, correctedAnswer, confidence)
+        scopedMemory.recordCorrection(knowledgeId, correctedAnswer, confidence)
 }

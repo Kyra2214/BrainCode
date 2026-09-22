@@ -2,7 +2,7 @@ package com.brain.secretary
 
 /** Decisão única do gate de saída humana. */
 enum class SecretaryDecision { ACCEPT, BLOCK }
-en
+
 enum class BlockReason {
     LOCAL_KNOWLEDGE_MISS, FALLBACK_RESPONSE, EMPTY_RESPONSE, INTERNAL_ERROR,
     NON_USER_FACING_RESPONSE, INCOMPLETE_RESPONSE
@@ -51,7 +51,19 @@ class DeterministicSecretaryGate {
         return SecretaryEvaluation(SecretaryDecision.ACCEPT)
     }
 
+    /** Promove um candidato interno a UserResponse somente após a avaliação do gate. */
+    fun accept(candidate: ConversationCandidate, recoveryAvailable: Boolean = false): UserResponse? {
+        val evaluation = evaluate(
+            ConversationResult(candidate.text, candidate.status, candidate.evidence, candidate.requestId, candidate.prompt),
+            recoveryAvailable
+        )
+        return if (evaluation.decision == SecretaryDecision.ACCEPT) {
+            UserResponse(candidate.text.trim(), candidate.evidence, candidate.requestId, candidate.requestId)
+        } else null
+    }
+
     private fun isSemanticallyRelated(prompt: String, response: String): Boolean {
+        if (Regex("(?i)\\b(oi|olá|ola|bom dia|boa tarde|boa noite)\\b").containsMatchIn(prompt)) return true
         val stop = setOf("como", "funciona", "sobre", "qual", "quais", "explique", "fale", "o", "que", "é", "e", "a", "de", "do", "da", "um", "uma")
         val questionTerms = tokens(prompt).filter { it !in stop }
         if (questionTerms.isEmpty()) return true
