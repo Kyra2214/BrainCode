@@ -53,13 +53,13 @@ class ResponseComposer(
                 formatContext(context)
             }
             conversationEngine != null -> {
-                evidence += "chat:conversation-neutral-fallback"
-                "Posso conversar sobre isso, mas não reconheci uma resposta local confiável. Pode reformular a pergunta?"
+                evidence += "chat:conversation:local-miss"
+                "Não tenho conhecimento suficiente para responder a essa pergunta com segurança neste momento."
             }
             else -> {
                 if (looksLikeFactualQuestion(lower)) {
-                    evidence += "chat:factual-question-no-research"
-                    "Isso parece pedir um dado atual (ex.: clima, cotação, hora real). Eu não tenho essa informação sem pesquisar — quer que eu pesquise agora?"
+                    evidence += "chat:conversation:local-miss"
+                    "Não tenho conhecimento suficiente para responder a essa pergunta com segurança neste momento."
                 } else {
                     evidence += "chat:conversation"
                     "Entendi o pedido: $prompt\nPosso ajudar a organizar a ideia, os requisitos, as decisões e as pendências sem criar ou executar nada."

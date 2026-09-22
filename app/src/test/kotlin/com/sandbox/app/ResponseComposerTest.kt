@@ -29,7 +29,7 @@ class ResponseComposerTest {
         assertTrue(date.text.contains("21/09/2026"))
         assertTrue(date.evidence.any { it.startsWith("chat:clock:") })
         assertFalse(weather.text.startsWith("Hoje é"))
-        assertTrue(weather.evidence.contains("chat:factual-question-no-research"))
+        assertTrue(weather.evidence.contains("chat:conversation:local-miss"))
     }
 
     @Test

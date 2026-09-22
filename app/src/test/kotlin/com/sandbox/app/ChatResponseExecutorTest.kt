@@ -92,9 +92,9 @@ class ChatResponseExecutorTest {
         val result = ChatResponseExecutor().execute(request("Qual a temperatura de Rio das Ostras hoje"), capability, decision)
 
         assertTrue(result.success)
-        assertTrue(result.evidence.contains("chat:factual-question-no-research"))
-        assertTrue(result.result!!.contains("não tenho essa informação sem pesquisar"))
-        assertTrue(result.result!!.contains("quer que eu pesquise agora"))
+        assertTrue(result.evidence.contains("chat:conversation:local-miss"))
+        assertTrue(result.result!!.contains("Não tenho conhecimento suficiente"))
+        assertFalse(result.result!!.contains("quer que eu pesquise agora", ignoreCase = true))
     }
 
     @Test
@@ -102,7 +102,7 @@ class ChatResponseExecutorTest {
         val result = ChatResponseExecutor().execute(request("tempo hoje em rio das ostras"), capability, decision)
 
         assertTrue(result.success)
-        assertTrue(result.evidence.contains("chat:factual-question-no-research"))
+        assertTrue(result.evidence.contains("chat:conversation:local-miss"))
         assertFalse(result.evidence.any { it.startsWith("chat:clock:") })
         assertFalse(result.result!!.startsWith("Hoje é"))
     }
@@ -157,6 +157,12 @@ class ChatResponseExecutorTest {
         assertTrue(result.result!!.contains("Kotlin é uma linguagem"))
         assertFalse(result.result!!.contains("Quer que eu pesquise", ignoreCase = true))
         assertTrue(result.provenance.contains("research:auto-fallback-after-local-miss"))
+        assertTrue(result.evidence.contains("chat:conversation"))
+        assertTrue(result.evidence.contains("chat:secretary:block"))
+        assertTrue(result.evidence.contains("chat:websearch:executed"))
+        assertTrue(result.evidence.contains("chat:websearch:evidence"))
+        assertTrue(result.evidence.contains("chat:conversation:synthesis"))
+        assertTrue(result.evidence.contains("chat:secretary:accept"))
     }
 
     private fun engine(): NoInferenceConversationEngine = NoInferenceConversationEngine(assets = { path ->

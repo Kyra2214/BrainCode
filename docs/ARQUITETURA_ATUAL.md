@@ -120,3 +120,11 @@ O `WebResearchAgent` é determinístico e provider-agnostic. `SearchProvider`, `
 `AgentRegistry` registra especialistas por categoria, contrato, capability, provenance e licença: `conversation.no-inference`, `research.brain-harness` e `web.providers`. O Router continua selecionando por capability/contrato; o nome dos projetos externos não é autoridade de roteamento.
 
 Após uma pesquisa automática bem-sucedida, `ResearchKnowledgePromoter` usa o `KnowledgeLearningCycle`/`KnowledgeMemory` existente para promover somente sínteses com quality gate, citations e confiança suficientes. A entrada estruturada recebe `WEB_RESEARCH`, referências, TTL para perguntas temporais e deduplicação por similaridade; conteúdo com prompt injection não é promovido. O próximo pedido equivalente tenta primeiro esse conhecimento validado e, se expirado ou ausente, volta ao WebResearch.
+
+## 13. Single Human Interface Rule
+
+O **Secretário é o único componente autorizado a emitir comunicação destinada ao usuário ou à UI**. Conversation, WebSearch, Research, Code Agent, Planner, Critic, providers e ferramentas produzem somente resultados internos. A única fronteira de saída é `Secretário → UserResponse → UI`.
+
+No ciclo textual, Conversation tenta primeiro o conhecimento local. Um resultado local concreto segue para o gate determinístico do Secretário e pode ser aceito sem pesquisa. Quando há `LOCAL_KNOWLEDGE_MISS` e existe recuperação informacional disponível, o Secretário bloqueia o fallback, o Orquestrador aciona `WebSearch`, o `ResearchResult` estruturado retorna à Conversation e somente a síntese natural volta ao Secretário para validação final. Snippets, diagnósticos, metadados e erros permanecem internos.
+
+Os contratos `SecretaryDecision` (`ACCEPT` ou `BLOCK`), `BlockReason`, `ConversationStatus`, `ConversationResult` e `UserResponse` tornam essa separação verificável. A recuperação é limitada a uma tentativa (`maxRecoveryAttempts = 1`), evitando loops. Falhas honestas após o esgotamento das rotas também atravessam o Secretário antes da UI. A promoção para o Knowledge Store ocorre somente depois de `ACCEPT`, preservando provenance `WEB_RESEARCH`, TTL temporal e as proteções de HTTPS, allowlist/blocklist, qualidade de fonte, sanitização e prompt-injection.

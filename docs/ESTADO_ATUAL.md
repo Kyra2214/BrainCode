@@ -136,3 +136,11 @@ SearchClaw foi usado como referência de harness de pesquisa, plano, quality gat
 ### Proveniência, licença e exclusões
 
 A origem é `https://github.com/TheShovel/no-inference`, licenciado sob AGPL-3.0; a cópia da licença foi preservada em `app/src/main/assets/no_inference/LICENSE`. A integração importou apenas recursos conversacionais e o adapter Android. CLI, TUI, servidor, API web, `cos` coding agent, editor, code generator, math solver, integrações externas e infraestrutura de execução do projeto de origem foram deliberadamente excluídos do runtime BrainCode. A distribuição do APK deve manter a oferta de código-fonte e os notices exigidos pela licença AGPL aplicáveis ao componente integrado.
+
+## Ciclo textual — única interface humana
+
+O novo contrato está implementado no núcleo e no executor Android. `ConversationResult`, `ConversationStatus`, `SecretaryDecision`, `BlockReason`, `SecretaryEvaluation` e `UserResponse` tipam a fronteira; `DeterministicSecretaryGate` é o gate centralizado e determinístico. A rota local segue `Conversation → Secretary ACCEPT → UI`. Em `LOCAL_KNOWLEDGE_MISS`, quando a pergunta é informacional e há provider disponível, segue `Conversation → Secretary BLOCK → Orchestrator → WebSearch → ResearchResult → Conversation synthesis → Secretary ACCEPT → UI`.
+
+O `ChatResponseExecutor` registra evidências explícitas (`chat:conversation`, `chat:secretary:block`, `chat:websearch:executed`, `chat:websearch:evidence`, `chat:conversation:synthesis` e `chat:secretary:accept`), limita a recuperação a uma tentativa e só promove conhecimento depois do `ACCEPT`. WebSearch nunca devolve texto diretamente à UI; fontes, citations, evidence e diagnósticos continuam internos. Fallbacks neutros e perguntas do tipo “quer que eu pesquise?” foram removidos da saída final.
+
+O teste de contrato `TextConversationContractsTest` impede que fallback, resultado bruto ou resposta sem evidência atravessem o gate. O teste Android do executor comprova o fast path local e a recuperação automática com as seis evidências mínimas do ciclo. CI, UI E2E e APK devem ser executados no novo commit antes da declaração de conclusão.
