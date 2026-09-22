@@ -1,33 +1,51 @@
 package com.brain.secretary
 
+import com.brain.conversation.IntentAdvisor
+import com.brain.conversation.NoOpIntentAdvisor
 import com.brain.prompt.PromptDomain
 import com.brain.text.IntentNegation
 import com.brain.text.TriggerLexicon
 
 /** Secretário sem LLM: classifica intenção, fase e restrições de forma reproduzível. */
-class DeterministicSecretary {
+class DeterministicSecretary(
+    private val intentAdvisor: IntentAdvisor = NoOpIntentAdvisor
+) {
     fun classify(prompt: String): OrderIntent {
         val original = prompt.trim()
         require(original.isNotBlank()) { "prompt não pode ser vazio" }
         val normalized = original.lowercase()
         val restrictions = restrictions(normalized)
-        val door = when {
+        val deterministicDoor = when {
             isPrompt(normalized) -> Door.PROMPT
             isCreation(normalized) -> Door.CREATE
             else -> Door.CHAT
         }
-        val phase = when (door) {
-            Door.CHAT -> CreatePhase.CHAT
-            Door.PROMPT -> CreatePhase.PROMPT
-            Door.CREATE -> if (isApprovalSignal(normalized)) CreatePhase.APPROVED else CreatePhase.DISCUSSION
-        }
+        val precisaRevisaoLLM = hasAmbiguousCreationSignal(normalized)
+        val door = if (precisaRevisaoLLM) runCatching {
+            intentAdvisor.revisarClassificacao(
+                original,
+                OrderIntent(
+                    originalPrompt = original,
+                    door = deterministicDoor,
+                    phase = phaseFor(deterministicDoor, normalized),
+                    restrictions = restrictions,
+                    explicit = isPrompt(normalized) || isCreation(normalized),
+                    precisaRevisaoLLM = true
+                )
+            ).door
+        }.getOrDefault(deterministicDoor) else deterministicDoor
+        val phase = phaseFor(door, normalized)
         val scope = DoorScope(
             door = door,
             phase = phase,
             restrictions = restrictions,
             externalAccountsAllowed = DoorPolicy.externalAccountsAllowed(door)
         )
-        return OrderIntent(original, door, phase, restrictions, scope, explicit = isPrompt(normalized) || isCreation(normalized))
+        return OrderIntent(
+            original, door, phase, restrictions, scope,
+            explicit = (door != Door.CHAT) && (isPrompt(normalized) || isCreation(normalized)),
+            precisaRevisaoLLM = precisaRevisaoLLM
+        )
     }
 
     fun isApproval(prompt: String): Boolean = isApprovalSignal(prompt.trim().lowercase())
@@ -52,6 +70,17 @@ class DeterministicSecretary {
         return IntentNegation.hasAllowedOccurrence(text, TriggerLexicon.VERBOS_CRIACAO) &&
             (IntentNegation.hasAllowedOccurrence(text, TriggerLexicon.SUBSTANTIVOS_ENTREGAVEL) ||
                 IntentNegation.hasAllowedOccurrence(text, "criar projeto", "abrir um projeto", "subir o projeto"))
+    }
+
+    private fun hasAmbiguousCreationSignal(text: String): Boolean =
+        IntentNegation.hasAllowedOccurrence(text, TriggerLexicon.VERBOS_CONVERSACIONAIS) &&
+            IntentNegation.hasAllowedOccurrence(text, TriggerLexicon.SUBSTANTIVOS_ENTREGAVEL) &&
+            !TriggerLexicon.VETOS_EXPLICITOS_REGEX.any { Regex(it).containsMatchIn(text) }
+
+    private fun phaseFor(door: Door, text: String): CreatePhase = when (door) {
+        Door.CHAT -> CreatePhase.CHAT
+        Door.PROMPT -> CreatePhase.PROMPT
+        Door.CREATE -> if (isApprovalSignal(text)) CreatePhase.APPROVED else CreatePhase.DISCUSSION
     }
 
     /** Perguntas sobre como criar explicam uma solução; não autorizam criação. */

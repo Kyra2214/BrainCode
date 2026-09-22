@@ -61,7 +61,9 @@ data class OrderIntent(
     val phase: CreatePhase,
     val restrictions: Set<Restriction> = emptySet(),
     val scope: DoorScope = DoorScope(door, phase, restrictions),
-    val explicit: Boolean = false
+    val explicit: Boolean = false,
+    /** Verdadeiro quando sinais conversacionais e de criação colidem. */
+    val precisaRevisaoLLM: Boolean = false
 ) {
     init {
         require(originalPrompt.isNotBlank()) { "ordem original não pode ser vazia" }

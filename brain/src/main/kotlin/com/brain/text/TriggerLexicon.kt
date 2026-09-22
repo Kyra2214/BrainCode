@@ -34,6 +34,13 @@ object TriggerLexicon {
         "projeto", "plano", "produto digital", "mvp", "protótipo", "prototipo"
     )
 
+    /** Verbos que indicam discussão, não autorização para produzir um artefato. */
+    val VERBOS_CONVERSACIONAIS = listOf(
+        "discutir", "discuta", "discutindo", "conversar", "converse",
+        "conversando", "debater", "debata", "debater sobre", "falar sobre",
+        "trocar ideia", "refletir sobre"
+    )
+
     val SINAIS_APROVACAO = listOf(
         "pode começar", "pode comecar", "pode iniciar", "comece", "comece o desenvolvimento",
         "inicie", "inicie o desenvolvimento", "pode desenvolver", "pode implementar",
