@@ -76,10 +76,6 @@ class ChatResponseExecutor(
                 evidence += "chat:conversation:synthesis"
                 status = ConversationStatus.ANSWER_READY
             }
-            localMiss && !isClarification && informational -> {
-                finalText = "Não tenho conhecimento suficiente para responder a essa pergunta com segurança neste momento."
-                status = ConversationStatus.ANSWER_READY
-            }
             else -> {
                 val composed = composer.compose(
                     prompt = prompt,
