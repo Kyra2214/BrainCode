@@ -235,11 +235,11 @@ class BrainInputInterpreter(
         Regex("(?i)\\b(ab(r|ra)|abra|abrir|mostre|mostrar|liste|listar)\\b.*\\b(catálogo|catalogo|capacidades|comandos)\\b").containsMatchIn(text)
 
     private fun isInformationalQuestion(text: String): Boolean {
-        val asks = text.contains("?") || TriggerLexicon.matches(
-            text,
-            TriggerLexicon.INTERROGATIVOS + listOf("como funciona", "qual a melhor", "qual o melhor", "quais tecnologias")
-        )
-        val explanatory = Regex("(?i)\\b(explique|explica|como funciona|o que é|o que e|qual a melhor|qual o melhor|quais tecnologias|que tecnologias)\\b").containsMatchIn(text)
+        val asks = text.contains("?") || text.startsWith("qual ") || text.startsWith("quais ") ||
+            text.startsWith("como ") || text.startsWith("o que ") || text.startsWith("explique") || text.startsWith("explica")
+        val explanatory = text.contains("explic") || text.contains("como funciona") ||
+            text.contains("o que é") || text.contains("o que e") || text.contains("qual a melhor") ||
+            text.contains("qual o melhor") || text.contains("quais tecnologias") || text.contains("que tecnologias")
         return asks && explanatory
     }
 
