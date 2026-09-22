@@ -23,7 +23,13 @@ data class JanelaLimite(
     val tokensPorDia: Long? = null
 )
 
-enum class PapelPipeline { PLANEJAMENTO, PRODUCAO_DE_ARTEFATO, ESCRITA_DE_PROMPT, EXECUCAO_CODIGO }
+enum class PapelPipeline {
+    PLANEJAMENTO,
+    PRODUCAO_DE_ARTEFATO,
+    ESCRITA_DE_PROMPT,
+    EXECUCAO_CODIGO,
+    CONVERSACAO
+}
 
 /**
  * Estado observado em tempo real — isto é o que o roteador realmente
