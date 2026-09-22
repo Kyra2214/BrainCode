@@ -54,7 +54,7 @@ class ChatResponseExecutor(
         if (localMiss && shouldRecover && maxRecoveryAttempts == 1) {
             evidence += "chat:secretary:block"
             evidence += "chat:orchestrator:recovery"
-            researchResult = researchFallback.research(ResearchRequest(prompt))
+            researchResult = requireNotNull(researchFallback).research(ResearchRequest(prompt))
             evidence += "chat:websearch:executed"
             if (researchResult.sources.isNotEmpty() && researchResult.evidence.isNotEmpty()) {
                 evidence += "chat:websearch:evidence"
