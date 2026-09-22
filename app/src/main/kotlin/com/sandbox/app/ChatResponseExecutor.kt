@@ -17,6 +17,7 @@ import com.brain.secretary.SecretaryDecision
 import com.brain.secretary.UserResponse
 import com.brain.secretary.ConversationCandidate
 import com.brain.text.InformationalQuestionClassifier
+import com.brain.conversation.ConversationMetrics
 import java.time.Clock
 
 /**
@@ -32,6 +33,7 @@ class ChatResponseExecutor(
     private val knowledgeCycle: KnowledgeLearningCycle? = null,
     private val knowledgePromoter: ResearchKnowledgePromoter? = null,
     private val secretaryGate: DeterministicSecretaryGate = DeterministicSecretaryGate(),
+    val metrics: ConversationMetrics = ConversationMetrics(),
     private val maxRecoveryAttempts: Int = 1
 ) : ActionExecutor {
     init { require(maxRecoveryAttempts in 0..1) { "o ciclo textual permite no máximo uma recuperação" } }
@@ -45,6 +47,11 @@ class ChatResponseExecutor(
         val isClarification = request.parameters.values.any { it.startsWith("clarification.status=NEEDS_CLARIFICATION") }
         val context = contextProvider()
         val learned = knowledgeCycle?.recall(prompt)
+        when {
+            learned == null -> metrics.recordCacheMiss()
+            learned.intent != null -> metrics.recordCacheHit("layer1")
+            else -> metrics.recordCacheHit("layer2")
+        }
         val localResponse = learned?.let {
             ConversationResponse(it.answer, "knowledge.learned", evidence = listOf("knowledge:validated", "knowledge:${it.provenance.name}"))
         } ?: conversationEngine?.respond(prompt, context)
@@ -99,6 +106,7 @@ class ChatResponseExecutor(
         val conversation = ConversationResult(finalText, status, evidence, requestId = requestId, prompt = prompt)
         val evaluation = secretaryGate.evaluate(conversation, recoveryAvailable = shouldRecover && researchResult == null)
         if (evaluation.decision != SecretaryDecision.ACCEPT) {
+            metrics.recordSecretary("content", accepted = false)
             return ActionExecution(
                 false,
                 error = "Secretário bloqueou a saída: ${evaluation.reason}",
@@ -107,6 +115,7 @@ class ChatResponseExecutor(
             )
         }
 
+        metrics.recordSecretary("content", accepted = true)
         evidence += "chat:secretary:accept"
         if (researchResult?.answer?.isNotBlank() == true) {
             knowledgePromoter?.promote(ResearchRequest(prompt, requestId = request.actionId, conversationId = request.parameters["conversationId"]), researchResult)
@@ -115,12 +124,16 @@ class ChatResponseExecutor(
         if (researchResult != null) provenance += "research:auto-fallback-after-local-miss"
         if (researchResult != null) provenance += "source:dependency:network.research"
         val candidate = ConversationCandidate(requestId, prompt, status = status, source = if (researchResult != null) "web-research" else "local", evidence = evidence.distinct(), text = finalText)
-        val promoted = secretaryGate.accept(candidate) ?: return ActionExecution(
-            false,
-            error = "Secretário rejeitou o candidato na promoção final",
-            evidence = evidence + "chat:secretary:block",
-            provenance = provenance(capability)
-        )
+        val promoted = secretaryGate.accept(candidate) ?: run {
+            metrics.recordSecretary("form", accepted = false)
+            return ActionExecution(
+                false,
+                error = "Secretário rejeitou o candidato na promoção final",
+                evidence = evidence + "chat:secretary:block",
+                provenance = provenance(capability)
+            )
+        }
+        metrics.recordSecretary("form", accepted = true)
         return ActionExecution(
             true,
             evidence = evidence.distinct(),
