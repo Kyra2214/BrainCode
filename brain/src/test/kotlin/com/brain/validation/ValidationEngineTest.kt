@@ -15,7 +15,7 @@ class ValidationEngineTest {
                 capability = "chat.respond",
                 door = Door.CHAT,
                 result = "Entendi seu pedido.",
-                evidence = listOf("chat:conversation")
+                evidence = listOf("chat:conversation", "chat:secretary:accept", "chat:request:test")
             )
         )
         assertEquals(ValidationStatus.PASS, result.status)

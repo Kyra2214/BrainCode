@@ -254,7 +254,11 @@ class CicloExecucaoPlano(
                 passo.id,
                 if (dispatch.status == DispatchStatus.DISPATCHED) StatusPasso.APROVADO else StatusPasso.REPROVADO,
                 decisaoPolicy = dispatch.gateway?.decision ?: decision,
-                resultado = dispatch.gateway?.execution?.userResponse?.text,
+                resultado = if (passo.capacidade == "chat.respond") {
+                    dispatch.gateway?.execution?.userResponse?.text
+                } else {
+                    dispatch.gateway?.execution?.result ?: dispatch.gateway?.execution?.internalPayload
+                },
                 payloadInterno = dispatch.gateway?.execution?.internalPayload,
                 userResponse = dispatch.gateway?.execution?.userResponse,
                 decisaoRouter = decisaoRouter,
