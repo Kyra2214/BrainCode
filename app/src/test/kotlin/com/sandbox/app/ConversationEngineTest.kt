@@ -62,7 +62,7 @@ class ConversationEngineTest {
     fun `unknown tem fallback conversacional neutro no composer`() {
         val composer = ResponseComposer(conversationEngine = engine())
         val response = composer.compose("uma frase sem intenção clara")
-        assertTrue(response.text.contains("reformular", ignoreCase = true))
+        assertTrue(response.text.contains("Não tenho conhecimento suficiente", ignoreCase = true))
         assertFalse(response.text.contains("requisitos", ignoreCase = true))
     }
 
