@@ -281,14 +281,23 @@ class PostExecutionGate(private val memory: LayeredMemory) {
             val result = cycle.passos.firstOrNull { it.passoId == step.id }
             val evidence = result?.executionEvidence.orEmpty()
             val response = result?.userResponse
+            val researchStep = step.capacidade == "network.research"
             val recoveryRequested = "chat:orchestrator:recovery" in evidence
             val evidenceComplete = "chat:secretary:accept" in evidence &&
                 evidence.any { it.startsWith("chat:request:") } &&
                 (!recoveryRequested || "chat:websearch:executed" in evidence)
+            val stepPassed = if (researchStep) {
+                result?.status == StatusPasso.APROVADO &&
+                    (result.resultado?.isNotBlank() == true || evidence.isNotEmpty() || result.evidencias.isNotEmpty())
+            } else {
+                result?.status == StatusPasso.APROVADO && response?.text?.isNotBlank() == true && evidenceComplete
+            }
             VerificationCheck(
                 criterionId = step.id,
-                passed = result?.status == StatusPasso.APROVADO && response?.text?.isNotBlank() == true && evidenceComplete,
-                detail = if (result?.status == StatusPasso.APROVADO && response?.text?.isNotBlank() == true && evidenceComplete) "UserResponse aceita e correlacionada" else "UserResponse/evidência Secretary ausente",
+                passed = stepPassed,
+                detail = if (stepPassed) {
+                    if (researchStep) "pesquisa aprovada com evidência própria" else "UserResponse aceita e correlacionada"
+                } else if (researchStep) "pesquisa/evidência ausente" else "UserResponse/evidência Secretary ausente",
                 evidenceId = evidenceIds.firstOrNull()
             )
         }
