@@ -15,6 +15,7 @@ object ValidationContractRegistry {
         "sandbox.build" to "agent.code",
         "sandbox.test" to "agent.test",
         "sandbox.diagnose" to "agent.review",
+        "sandbox.health" to "agent.review",
         "prompt.library.generate" to "local.prompt.creator",
         "prompt.library.write" to "local.prompt.creator",
         "chat.respond" to "agent.requirements",

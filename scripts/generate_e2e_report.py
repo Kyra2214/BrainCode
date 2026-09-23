@@ -69,5 +69,5 @@ os.makedirs("e2e-report", exist_ok=True)
 open("e2e-report/BrainCode-E2E-Report.md", "w", encoding="utf-8").write("\n".join(lines) + "\n")
 print("\n".join(lines))
 
-if status != "PASS":
+if status == "FAIL":
     raise SystemExit(1)

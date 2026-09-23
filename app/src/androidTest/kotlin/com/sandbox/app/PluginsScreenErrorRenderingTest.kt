@@ -1,6 +1,6 @@
 package com.sandbox.app
 
-import androidx.compose.ui.test.assertExists
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -85,7 +85,7 @@ class PluginsScreenErrorRenderingTest {
 
         // O texto de erro deve ser exibido truncado (maxLines=6), com uma ação explícita
         // para abrir o log completo — nunca despejado por inteiro na lista.
-        composeRule.onNodeWithText("Ver log completo").assertExists()
+        composeRule.onNodeWithText("Ver log completo").assertIsDisplayed()
     }
 
     @Test
@@ -123,7 +123,7 @@ class PluginsScreenErrorRenderingTest {
             elapsedMs <= renderBudgetMs
         )
 
-        composeRule.onNodeWithText("Fechar").assertExists()
+        composeRule.onNodeWithText("Fechar").assertIsDisplayed()
     }
 
     private inline fun measureComposeRenderMillis(block: () -> Unit): Long {
