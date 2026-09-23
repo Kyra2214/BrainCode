@@ -3,7 +3,7 @@
 **Projeto:** BrainCode  
 **Rodada:** absorção orientada pelo Marco 2.6  
 **Data:** 23 de setembro de 2026  
-**Estado:** absorções implementadas; gates locais completos verdes; CI, E2E e validação em dispositivo ainda pendentes
+**Estado:** absorções e integração de workflows implementadas; gates locais verdes; CI/E2E remoto aguardando execução
 
 ## 1. Conclusão executiva
 
@@ -24,6 +24,8 @@ Também foi criada uma ponte que publica manifestos Roofts no `SkillRegistry` co
 Para workflows, o projeto agora possui parser de frontmatter, precedência customizada sobre community, habilitação reversível, schedule como metadado, backup/restore com hashes e validação de caminhos, além de um adapter que entrega o documento ao `WorkflowEngine` existente. O corpo do Markdown permanece instrução; não é interpretado como código.
 
 O wiring da F4 registra `workflow.run` como capability estável, aplica o gating de Porta 3 aprovada e falha fechado quando não há executor dedicado. A facade expõe restore e os comandos `/workflow list`, `/workflow enable <id>`, `/workflow disable <id>`, `/workflow backup` e `/workflow restore`; o adapter `runDocument` entrega o corpo ao engine somente depois da autorização.
+
+Nesta rodada, o `WorkflowEngine` passou a expor `runDocument` de forma pública, a facade passou a persistir scheduler/leases e oferecer `runWorkflow`/`runDueWorkflows`, e dois workflows originais somente leitura passaram a ser semeados no catálogo após instalação. O marketplace e o `SkillRegistry` agora reutilizam chaves públicas Ed25519 provisionadas no asset, com list/resolve/pin sem download ou habilitação automática. O APK ganhou um gate que verifica as 25 Skills e as chaves confiáveis.
 
 ## 2. O que foi preservado no pacote
 
@@ -175,6 +177,7 @@ O baseline local do fechamento foi executado no commit de referência `9a3c52020
 | architecture gate | **PASS** | `bash scripts/architecture-gate.sh` |
 | `assembleDebug` | **PASS** | `./gradlew :app:assembleDebug --no-daemon --console=plain` |
 | lint | **PASS** | `./gradlew :app:lint --no-daemon --console=plain` |
+| APK assets | **PASS** | `./scripts/verify-apk-assets.sh app/build/outputs/apk/debug/app-debug.apk` |
 
 As 13 falhas registradas no baseline foram eliminadas pelas correções de compatibilidade do resultado legado, fallback honesto do composer, proveniência de pesquisa, gate semântico apoiado em evidência e timeout de instalação compatível com o limite do Sandbox.
 
@@ -187,18 +190,19 @@ Os gates ainda pendentes são:
 | suíte Android app | PASS | `:app:testDebugUnitTest` |
 | `assembleDebug` | PASS | APK debug gerado |
 | lint | PASS | relatório HTML sem falha bloqueante |
-| CI | não executado | reservado para a etapa final |
-| E2E | não executado | reservado para a etapa final |
-| instrumentação em emulador/dispositivo | compilado, não executado | nenhum dispositivo/emulador anexado nesta sessão |
+| CI | workflow configurado, execução remota pendente | `.github/workflows/ci.yml` |
+| E2E | workflow configurado, execução remota pendente | `.github/workflows/ui-e2e.yml` |
+| Ed25519 API 26/33 | workflow configurado, execução remota pendente | `.github/workflows/marketplace-compat.yml` |
+| instrumentação local | compilada, não executada | nenhum dispositivo/emulador anexado nesta sessão |
 | readiness de release | não executado | reservado para a etapa final |
 
 ## 8. Critério de integração e estado atual
 
-O código incorporado já possui contrato, caller real, limite de segurança, testes focados e documentação de proveniência. O ciclo de workflow também possui parser, catálogo, habilitação, backup/restore, comandos de facade e adapter para o engine. O critério completo de release ainda não está fechado porque CI, E2E, teste em dispositivo e readiness de release não foram executados.
+O código incorporado já possui contrato, caller real, limite de segurança, testes focados e documentação de proveniência. O ciclo de workflow também possui parser, catálogo, habilitação, backup/restore, scheduler persistente, comandos de facade e adapter para o engine. O critério completo de release ainda não está fechado porque os workflows remotos de CI/E2E e o teste físico ainda precisam executar no GitHub Actions.
 
 Assim, o estado correto é:
 
-> **Absorção e gates locais: verdes. CI/E2E, dispositivo e readiness de release: pendentes.**
+> **Absorção e gates locais: verdes. CI/E2E/dispositivo: automatizados e aguardando execução remota; readiness de release: pendente.**
 
 ## 9. Próximas etapas, somente após ordem
 

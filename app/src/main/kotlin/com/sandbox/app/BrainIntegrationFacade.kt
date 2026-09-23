@@ -30,8 +30,20 @@ import com.brain.skill.TrustLevel
 import com.brain.skill.RooftsSkillManifestBridge
 import com.brain.workflow.WorkflowCatalog
 import com.brain.workflow.WorkflowDocument
+import com.brain.workflow.WorkflowEngine
+import com.brain.workflow.WorkflowLeaseStore
+import com.brain.workflow.WorkflowNode
+import com.brain.workflow.WorkflowRunResult
+import com.brain.workflow.WorkflowScheduler
+import com.brain.workflow.WorkflowStepResult
+import com.brain.workflow.WorkflowStatus
+import com.brain.workflow.WorkflowMarketplaceRegistry
+import com.brain.workflow.WorkflowPackageManifest
 import java.io.File
 import java.time.Instant
+import java.util.Base64
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * Fachada Android para os subsistemas Brain locais e persistentes.
@@ -44,16 +56,24 @@ import java.time.Instant
  * Fase 2).
  */
 class BrainIntegrationFacade(private val context: Context, private val stateDir: File) {
-    private val skills = SkillRegistry()
+    private val trustedSigningKeys = loadTrustedSigningKeys()
+    private val skills = SkillRegistry(trustedSigningKeys, File(stateDir, "revoked-skills.tsv"))
     private val memory: ExperienceMemory = FileExperienceMemory(File(stateDir, "memory.jsonl"))
     private val discovery = ExplorerIntelligencePipeline()
     private val delivery = ObservableDelivery()
     private val promptGenerator = DefaultPromptGenerator()
     private val events: EventStore = FileEventStore(File(stateDir, "events.jsonl"))
     private val workflowCatalog = WorkflowCatalog(File(stateDir, "workflows"))
+    private val marketplace = WorkflowMarketplaceRegistry(trustedSigningKeys)
+    private val workflowScheduler = WorkflowScheduler(File(stateDir, "workflows/scheduler.json"))
+    private val workflowEngine = WorkflowEngine(
+        File(stateDir, "workflows/runs.json"),
+        WorkflowLeaseStore(File(stateDir, "workflows/lease.json"))
+    )
 
     init {
         stateDir.mkdirs()
+        seedBuiltInWorkflows()
         skills.register(
             SkillManifest(
                 id = "sandbox-health",
@@ -81,14 +101,83 @@ class BrainIntegrationFacade(private val context: Context, private val stateDir:
         }
     }
 
+    private fun seedBuiltInWorkflows() {
+        val names = listOf("organizar-contexto", "revisar-seguranca")
+        names.forEach { id ->
+            val destination = File(stateDir, "workflows/available/community/$id/WORKFLOW.md")
+            if (destination.isFile) return@forEach
+            runCatching {
+                destination.parentFile?.mkdirs()
+                context.assets.open("workflows/community/$id/WORKFLOW.md").use { input ->
+                    destination.outputStream().use { output -> input.copyTo(output) }
+                }
+            }
+        }
+    }
+
     fun enabledSkills(): List<SkillRecord> = skills.listEnabled()
 
     fun availableWorkflows(): List<WorkflowDocument> = workflowCatalog.list()
     fun enabledWorkflows(): List<WorkflowDocument> = workflowCatalog.enabled()
-    fun enableWorkflow(id: String): WorkflowDocument = workflowCatalog.enable(id)
-    fun disableWorkflow(id: String) = workflowCatalog.disable(id)
+    fun enableWorkflow(id: String): WorkflowDocument = workflowCatalog.enable(id).also { workflowScheduler.register(it) }
+    fun disableWorkflow(id: String) { workflowCatalog.disable(id); workflowScheduler.unregister(id) }
     fun backupWorkflows(output: File) = workflowCatalog.backup(output)
     fun restoreWorkflows(input: File) = workflowCatalog.restore(input)
+    fun listMarketplaceManifests(): List<WorkflowPackageManifest> = marketplace.list()
+    fun resolveMarketplaceManifest(id: String, version: String): WorkflowPackageManifest? = marketplace.resolve(id, version)
+    fun pinMarketplaceManifest(manifest: WorkflowPackageManifest): WorkflowPackageManifest = marketplace.pin(manifest)
+    fun scheduledWorkflows() = enabledWorkflows().mapNotNull { workflowScheduler.get(it.id) }
+
+    /** Executa um documento somente quando o caller fornece a decisão do PolicyBroker. */
+    fun runWorkflow(
+        id: String,
+        runId: String,
+        idempotencyKey: String = "workflow:$id:$runId",
+        authorize: (String) -> Boolean,
+        executeBody: (WorkflowDocument, WorkflowNode, Int) -> WorkflowStepResult
+    ): WorkflowRunResult {
+        val document = workflowCatalog.resolve(id) ?: throw NoSuchElementException("workflow não encontrado: $id")
+        check(workflowCatalog.isEnabled(id)) { "workflow desabilitado: $id" }
+        val result = workflowEngine.runDocument(
+            document = document,
+            runId = runId,
+            idempotencyKey = idempotencyKey,
+            authorize = authorize,
+            executeBody = { _, node, attempt -> executeBody(document, node, attempt) }
+        )
+        emit(runId, "workflow.run", "Workflow${result.status.name}", mapOf("workflowId" to id, "status" to result.status.name, "steps" to result.steps.size.toString()))
+        return result
+    }
+
+    /** Consome apenas os schedules vencidos; o executor continua sendo fornecido pelo gateway autorizado. */
+    fun runDueWorkflows(
+        owner: String,
+        now: Instant = Instant.now(),
+        authorize: (String) -> Boolean,
+        executeBody: (WorkflowDocument, WorkflowNode, Int) -> WorkflowStepResult
+    ): List<WorkflowRunResult> = workflowScheduler.due(now).mapNotNull { due ->
+        val claimed = runCatching { workflowScheduler.claim(due.id, owner, now) }.getOrNull() ?: return@mapNotNull null
+        val result = runCatching {
+            runWorkflow(due.id, "scheduled:${due.id}:${claimed.nextRun}", authorize = authorize, executeBody = executeBody)
+        }.getOrElse { error ->
+            WorkflowRunResult("scheduled:${due.id}:${claimed.nextRun}", "workflow:${due.id}:${claimed.nextRun}", WorkflowStatus.FAILED, emptyList(), error.message)
+        }
+        if (result.status != WorkflowStatus.RUNNING) workflowScheduler.complete(due.id, owner, now)
+        result
+    }
+
+    private fun loadTrustedSigningKeys(): Map<String, ByteArray> = runCatching {
+        val json = JSONObject(context.assets.open("braincode/trusted-signing-keys.json").bufferedReader().use { it.readText() })
+        val keys = json.optJSONArray("keys") ?: JSONArray()
+        buildMap {
+            for (index in 0 until keys.length()) {
+                val item = keys.getJSONObject(index)
+                if (item.optString("status") == "active" && item.optString("algorithm") == "Ed25519") {
+                    put(item.getString("keyId"), Base64.getDecoder().decode(item.getString("publicKeyDerBase64")))
+                }
+            }
+        }
+    }.getOrDefault(emptyMap())
 
     suspend fun recordExperience(runId: String, success: Boolean) {
         memory.registrar(

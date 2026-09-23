@@ -146,6 +146,27 @@ class WorkflowEngine(private val stateFile: File? = null, private val leaseStore
         } finally { lease?.let { leaseStore?.release(it) } }
     }
 
+    /**
+     * Executa um WORKFLOW.md sem interpretar o Markdown como código.
+     * O caller transforma o corpo em uma instrução para o gateway autorizado;
+     * esta camada aplica manifest, lease, retry, timeout e idempotência.
+     */
+    fun runDocument(
+        document: WorkflowDocument,
+        runId: String,
+        idempotencyKey: String,
+        authorize: (String) -> Boolean,
+        executeBody: (String, WorkflowNode, Int) -> WorkflowStepResult,
+        isCancelled: () -> Boolean = { false }
+    ): WorkflowRunResult = run(
+        manifest = document.executionManifest("workflow.run"),
+        runId = runId,
+        idempotencyKey = idempotencyKey,
+        authorize = authorize,
+        execute = { node, attempt -> executeBody(document.body, node, attempt) },
+        isCancelled = isCancelled
+    )
+
     fun result(idempotencyKey: String): WorkflowRunResult? = synchronized(lock) { completedRuns[idempotencyKey] }
 
     private fun executeBatch(

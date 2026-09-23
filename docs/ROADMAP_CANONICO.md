@@ -60,7 +60,9 @@ Cada item marcado como concluído aponta para código de produção e um teste q
 | Workflows: parser, catálogo custom/community, enable/disable e schedule | [x] | `WorkflowCatalog` e `WorkflowScheduler` no núcleo | `WorkflowDocumentTest`, `WorkflowInfrastructureTest` |
 | Workflows: backup/restore seguro | [x] | `BrainIntegrationFacade.backupWorkflows`/`restoreWorkflows` e `WorkflowCatalog.restore` | `WorkflowDocumentTest` cobre zip-slip, caminho absoluto, hash adulterado e atomicidade |
 | Workflows: capability estável e comandos operacionais | [x] | `BrainSandboxController` registra `workflow.run`; `SandboxViewModel` expõe list/enable/disable/backup/restore | `PolicyBrokerDoorTest`, `CompositeActionExecutorTest` e `WorkflowDocumentTest` cobrem Porta 3, fail-closed e `runDocument` |
+| Workflows: execução autorizada e scheduler no app | [x] | `BrainIntegrationFacade.runWorkflow`/`runDueWorkflows` usa engine, lease e scheduler persistente | `WorkflowDocumentTest`, `WorkflowInfrastructureTest` e gates locais |
 | Marketplace: manifesto HTTPS pinado e assinatura Ed25519 | [x] | `WorkflowMarketplaceRegistry.pin` | `WorkflowInfrastructureTest` cobre assinatura válida e cinco rejeições |
+| Marketplace: chaves confiáveis e compatibilidade Android | [x] | `BrainIntegrationFacade` carrega asset de chaves e compartilha o mapa com os registries | `Ed25519CompatibilityInstrumentedTest` em API 26/33 via CI |
 | Conteúdo executável externo, scripts/hooks e download automático | [ ] | Nenhum por decisão de segurança | ADR T-601 e decisão E/F; não implementar sem novo gate |
 | Prompts do PDF do projeto3 | [ ] | Nenhum; licença ainda não comprovada | T-701 bloqueia T-702/T-703 |
 

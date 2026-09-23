@@ -56,6 +56,8 @@ Os casos `brain/src/test/resources/catalog/roofts-skill-evaluation-cases.json` s
 
 CI, E2E, emulador/dispositivo e readiness de release ainda não foram executados nesta sessão.
 
+A segunda rodada adicionou `WorkflowEngine.runDocument`, scheduler persistente com ciclo due/claim/complete, dois workflows originais somente leitura, chaves públicas Ed25519 compartilhadas entre marketplace e `SkillRegistry`, workflow de compatibilidade API 26/33 e gate de assets do APK. Os gates locais continuam verdes; CI, E2E e execução física aguardam o GitHub Actions.
+
 ## Referências estudadas, não incorporadas
 
 `nikilster/clawflows` foi auditado no commit `f1e4094752b0359c7a3089720457a536a4ae2813` conforme `An#U00e1lisedeCodigos/Manus/deep/06-clawflows.md`. Seu formato `WORKFLOW.md` e ciclo de habilitação foram absorvidos nativamente no adapter do `WorkflowEngine`; nenhum código Clawflows, CLI, symlink, scheduler ou workflow comunitário foi copiado nesta rodada.

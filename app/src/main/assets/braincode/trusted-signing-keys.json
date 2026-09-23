@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "keys": [
+    {
+      "keyId": "braincode-dev-2026",
+      "algorithm": "Ed25519",
+      "publicKeyDerBase64": "MCowBQYDK2VwAyEANcLZktVHHFp9EeS+PVFb5ysNaohEPMrsdpMfuXCJowI=",
+      "status": "active",
+      "purpose": "development marketplace manifests"
+    }
+  ]
+}

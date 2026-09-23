@@ -99,7 +99,7 @@ class WorkflowDocumentTest {
             idempotencyKey = "idem-document",
             authorize = { capability -> authorizedCapability = capability; capability == "workflow.run" },
             executeBody = { body, node, attempt ->
-                receivedBody = body.body
+                receivedBody = body
                 assertEquals("workflow.run", node.capability)
                 WorkflowStepResult(node.id, success = true, attempts = attempt, evidence = listOf("workflow-body:received"))
             }
