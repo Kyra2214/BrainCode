@@ -18,7 +18,9 @@ class CodeGenerationExecutor(
     private val workspace: WorkspaceManager,
     private val activeProjectName: () -> String,
     /** Catálogo de skills de metodologia do RootFS 0.6 (item 4/5 do plano); vazio = sem contexto extra. */
-    private val rooftsSkills: List<RooftsSkill> = emptyList()
+    private val rooftsSkills: List<RooftsSkill> = emptyList(),
+    /** Catálogo lazy: metadados ficam leves e o corpo só é lido depois da seleção. */
+    private val rooftsSkillCatalog: RooftsSkillCatalog? = null
 ) : ActionExecutor {
     override fun execute(
         request: ActionRequest,
@@ -33,7 +35,9 @@ class CodeGenerationExecutor(
             // Seleção 100% local (sem custo de API) de quais skills de metodologia do RootFS 0.6
             // são relevantes para este objetivo — a Porta 3 continua usando API desde o início
             // (item 3.1 do PLANO_ESCALONAMENTO), a IA só recebe mais contexto sobre como abordar a tarefa.
-            val skillsSelecionadas = RooftsSkillSelector.select(objective, rooftsSkills)
+            val ativacao = rooftsSkillCatalog?.activate(request.actionId, objective)
+            val skillsSelecionadas = ativacao?.skills
+                ?: RooftsSkillSelector.select(objective, rooftsSkills)
             val prompt = """
                 Gere um projeto executável para o objetivo abaixo.
                 Responda somente com blocos de arquivos no formato exato:
@@ -59,7 +63,10 @@ class CodeGenerationExecutor(
                 evidence = written.map { "file:$it" } +
                     "provider:${response.providerId}" +
                     "model:${response.modelId}" +
-                    skillsSelecionadas.map { "skill-rootfs06:${it.id}" },
+                    skillsSelecionadas.map { "skill-rootfs06:${it.id}" } +
+                    (ativacao?.activationPlan?.activations.orEmpty().map {
+                        "skill-activation:${it.skillId}:${it.approvalStatus.name.lowercase()}:confidence=${it.confidence}"
+                    }),
                 provenance = provenance(capability)
             )
         } catch (error: IllegalStateException) {

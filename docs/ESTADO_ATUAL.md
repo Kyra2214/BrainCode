@@ -144,15 +144,3 @@ O novo contrato está implementado no núcleo e no executor Android. `Conversati
 O `ChatResponseExecutor` registra evidências explícitas (`chat:conversation`, `chat:secretary:block`, `chat:websearch:executed`, `chat:websearch:evidence`, `chat:conversation:synthesis` e `chat:secretary:accept`), limita a recuperação a uma tentativa e só promove conhecimento depois do `ACCEPT`. WebSearch nunca devolve texto diretamente à UI; fontes, citations, evidence e diagnósticos continuam internos. Fallbacks neutros e perguntas do tipo “quer que eu pesquise?” foram removidos da saída final.
 
 O teste de contrato `TextConversationContractsTest` impede que fallback, resultado bruto ou resposta sem evidência atravessem o gate. O teste Android do executor comprova o fast path local e a recuperação automática com as seis evidências mínimas do ciclo. CI, UI E2E e APK devem ser executados no novo commit antes da declaração de conclusão.
-
-## Atualização das últimas 9 horas — 23/09/2026
-
-Os cinco commits mais recentes consolidaram a Fase 12 no HEAD `19fa294`. O ciclo Android agora preserva o resultado da integração e o fluxo de evidências da conversa. O dispatcher suporta fallback de conta dentro do escopo autorizado, capabilities sem argumentos permanecem válidas durante revisão, e a seleção de Roofts Skill e a instalação confiável têm cobertura dedicada. O teste de visibilidade de conta foi colocado no módulo `app`, que é a fronteira correta para esse comportamento.
-
-### Evidências do CI atual
-
-No workflow CI `35847234728`, os relatórios registraram **450 testes unitários**, dos quais **449 passaram**. O módulo `brain` passou com 360 testes. O `android-module` passou com 89 de 90 testes. O APK debug foi montado, o lint passou e o artefato foi publicado.
-
-O único caso falho foi `BrainSandboxControllerExecutionTraceTest`, no cenário `ciclo real via BrainSandboxController produz trace para TASK, CAPABILITY, POLICY e EVIDENCE`. O teste não encontrou o executável `sandbox-health` no workspace temporário, e o relatório classificou a causa como `contract.missing` e `agent.unavailable`. A falha permanece aberta como problema de fixture/harness do teste. O status final do workflow foi mantido como falha para não mascarar esse resultado.
-
-O inventário completo dos commits, das mudanças e dos testes está em [`docs/ATUALIZACAO_ULTIMAS_9_HORAS_2026-09-23.md`](ATUALIZACAO_ULTIMAS_9_HORAS_2026-09-23.md).

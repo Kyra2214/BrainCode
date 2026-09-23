@@ -31,7 +31,11 @@ data class SkillManifest(
     val contentHash: String? = null,
     val signature: String? = null,
     val signatureKeyId: String? = null,
-    val signatureAlgorithm: String? = null
+    val signatureAlgorithm: String? = null,
+    val exclusions: Set<String> = emptySet(),
+    val resources: Set<String> = emptySet(),
+    val tools: Set<String> = emptySet(),
+    val networkPolicy: String = "none"
 )
 
 enum class TrustLevel { CORE, VERIFIED, COMMUNITY, UNTRUSTED }

@@ -42,4 +42,55 @@ class RooftsSkillLoaderTest {
         val skill = RooftsSkillLoader.parse(conteudo, idFallback = "pasta-x")
         assertEquals("pasta-x", skill?.id)
     }
+
+    @Test
+    fun `carrega triggers exclusoes recursos hash e caminho sem autorizar nada`() {
+        val conteudo = """
+            ---
+            name: secure-review
+            description: Review code before release.
+            triggers: [review, release]
+            avoid_when:
+              - marketing copy
+            resources: [references/security.md]
+            ---
+
+            # Secure Review
+            Use evidence and preserve the policy boundary.
+        """.trimIndent()
+
+        val skill = RooftsSkillLoader.parse(conteudo, idFallback = "fallback", sourcePath = "assets/secure/SKILL.md")
+
+        assertEquals(setOf("review", "release"), skill?.triggers)
+        assertEquals(setOf("marketing copy"), skill?.exclusions)
+        assertEquals(setOf("references/security.md"), skill?.resources)
+        assertEquals("assets/secure/SKILL.md", skill?.sourcePath)
+        assertEquals(64, skill?.contentHash?.length)
+        assertEquals("MIT", skill?.license)
+    }
+
+    @Test
+    fun `metadata-only preserva manifesto mas deixa corpo vazio`() {
+        val conteudo = """
+            ---
+            name: lazy-skill
+            description: Select only when needed.
+            resources: [references/guide.md]
+            ---
+
+            # Large body
+            This body must be loaded only after selection.
+        """.trimIndent()
+
+        val metadata = RooftsSkillLoader.parse(
+            conteudo,
+            idFallback = "fallback",
+            sourcePath = "roofts/0.6/skills/lazy-skill/SKILL.md",
+            includeBody = false
+        )
+
+        assertEquals("lazy-skill", metadata?.id)
+        assertEquals("", metadata?.body)
+        assertEquals(setOf("references/guide.md"), metadata?.resources)
+    }
 }

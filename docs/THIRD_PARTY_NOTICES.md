@@ -22,5 +22,20 @@ Termux (`termux-main`).
 `.deb` e renomeado para a convenção de empacotamento Android, sem modificação.
 - **Código-fonte**: https://github.com/proot-me/proot
 
-O arquivo `docs/proot-binary-provenance.txt` mantém o registro estruturado da
-origem e do hash usados nesta versão.
+O arquivo `docs/proot-binary-provenance.txt` mantém o registro estruturado da origem e do hash usados nesta versão.
+
+---
+
+## Roofts 0.6 / Agent Skills
+
+- **O que é**: camada de Skills e guias operacionais empacotada como assets do aplicativo; o
+  conteúdo não é um orquestrador e não concede autorização.
+- **Projeto original**: `addyosmani/agent-skills`.
+- **Tag/commit auditado**: `0.6.10` / `c004a74784a08295d52749b4cda634125b9a581`.
+- **Licença**: MIT.
+- **Cópia da licença**: `app/src/main/assets/roofts/0.6/LICENSE`.
+- **Local dos assets**: `app/src/main/assets/roofts/0.6`.
+- **Adaptação BrainCode**: `brain/.../RooftsSkill.kt`, `app/.../RooftsSkillLoader.kt` e
+  `brain/.../RooftsSkillSelector.kt`; ver `docs/ABSORCAO_PROVENIENCIA.md`.
+- **Limite**: recursos externos, providers, rede, shell e escrita continuam fora desta
+  absorção e sujeitos ao caminho Policy → ActionGateway → Sandbox.

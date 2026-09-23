@@ -27,6 +27,9 @@ import com.brain.skill.SkillManifest
 import com.brain.skill.SkillRecord
 import com.brain.skill.SkillRegistry
 import com.brain.skill.TrustLevel
+import com.brain.skill.RooftsSkillManifestBridge
+import com.brain.workflow.WorkflowCatalog
+import com.brain.workflow.WorkflowDocument
 import java.io.File
 import java.time.Instant
 
@@ -47,6 +50,7 @@ class BrainIntegrationFacade(private val context: Context, private val stateDir:
     private val delivery = ObservableDelivery()
     private val promptGenerator = DefaultPromptGenerator()
     private val events: EventStore = FileEventStore(File(stateDir, "events.jsonl"))
+    private val workflowCatalog = WorkflowCatalog(File(stateDir, "workflows"))
 
     init {
         stateDir.mkdirs()
@@ -68,9 +72,22 @@ class BrainIntegrationFacade(private val context: Context, private val stateDir:
                 runCatching { skills.register(entry.paraManifest()) }
             }
         }
+        // Roofts é descoberto no registry como conteúdo metodológico, mas permanece desabilitado:
+        // descoberta, habilitação e autorização são estados distintos.
+        runCatching {
+            RooftsSkillLoader.loadCatalog(context).metadata().forEach { skill ->
+                runCatching { RooftsSkillManifestBridge.registerDiscovered(skill, skills) }
+            }
+        }
     }
 
     fun enabledSkills(): List<SkillRecord> = skills.listEnabled()
+
+    fun availableWorkflows(): List<WorkflowDocument> = workflowCatalog.list()
+    fun enabledWorkflows(): List<WorkflowDocument> = workflowCatalog.enabled()
+    fun enableWorkflow(id: String): WorkflowDocument = workflowCatalog.enable(id)
+    fun disableWorkflow(id: String) = workflowCatalog.disable(id)
+    fun backupWorkflows(output: File) = workflowCatalog.backup(output)
 
     suspend fun recordExperience(runId: String, success: Boolean) {
         memory.registrar(

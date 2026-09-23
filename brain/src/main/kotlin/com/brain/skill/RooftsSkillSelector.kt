@@ -20,6 +20,7 @@ object RooftsSkillSelector {
         if (skills.isEmpty() || objetivo.isBlank()) return emptyList()
         val texto = objetivo.lowercase()
         val pontuadas = skills.mapNotNull { skill ->
+            if (TermMatcher.containsAnyStem(texto, skill.exclusions)) return@mapNotNull null
             val score = pontuar(texto, skill)
             if (score > 0) skill to score else null
         }
@@ -35,6 +36,7 @@ object RooftsSkillSelector {
         var pontos = 0
         val gatilhosPt = GATILHOS_PT[skill.id].orEmpty()
         if (gatilhosPt.isNotEmpty() && TermMatcher.containsAnyStem(textoObjetivo, gatilhosPt)) pontos += 2
+        if (skill.triggers.isNotEmpty() && TermMatcher.containsAnyStem(textoObjetivo, skill.triggers)) pontos += 2
         val palavrasDescricao = descricaoComoTermos(skill.description)
         if (palavrasDescricao.isNotEmpty() && TermMatcher.containsAnyStem(textoObjetivo, palavrasDescricao)) pontos += 1
         return pontos

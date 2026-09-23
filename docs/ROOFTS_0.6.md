@@ -9,10 +9,10 @@ RooftS é a entidade única composta pelas camadas 0.3, 0.4, 0.5 e 0.6. As camad
 
 Estado:
 ROOFTS 0.6 / AGENT SKILLS = INSTALLED
-SKILL RUNTIME INTEGRATION = NOT STARTED
+SKILL RUNTIME INTEGRATION = LAZY CATALOG + ACTIVATION PLAN + SELECTOR FILTER INTEGRATED
 
-Instalação dos arquivos não significa conectar SKILL.md ao Planner/Dispatcher/ActionGateway. O BrainCode usa conceitos compatíveis com Context Engineering, planning, testing, review e debugging sem criar um segundo runtime.
+Instalação dos arquivos não significa conectar SKILL.md ao Planner/Dispatcher/ActionGateway. O caller real de geração da Porta 3 agora usa catálogo lazy: o loader retém frontmatter, hash e origem, o selector aplica triggers e exclusões, o planner gera activation plan e o corpo só é lido para Skills aprovadas sem permissões pendentes. Recursos declarados podem ser lidos somente pelo resolver que exige caminho declarado e relativo. Isso não concede capability nem autorização.
 
-A instalação desta camada não constitui integração do RooftS com o BrainCode. Se a integração das Skills for aberta, cada Skill deve ser mapeada para Capability/SkillRegistry/Gates e atravessar o ciclo universal. Não criar SkillRuntime paralelo sem necessidade comprovada.
+A camada ainda não é um SkillRuntime paralelo. Manifestos Roofts são publicados no `SkillRegistry` como descoberta desabilitada. Qualquer capability, rede, segredo, recurso executável ou escrita continua subordinado ao caminho universal Capability/Policy/Gateway/Sandbox. O plano de ativação registra permissões pendentes e não as aprova implicitamente.
 
 scripts/verify-roofts-06.sh é o verificador de conteúdo.

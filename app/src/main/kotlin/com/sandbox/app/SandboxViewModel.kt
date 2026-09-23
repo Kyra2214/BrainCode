@@ -732,7 +732,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     gateway = brainApiGateway,
                     workspace = preparedPlatform.workspace,
                     activeProjectName = { workspaceProjectName },
-                    rooftsSkills = runCatching { RooftsSkillLoader.load(getApplication()) }.getOrDefault(emptyList())
+                    rooftsSkillCatalog = runCatching { RooftsSkillLoader.loadCatalog(getApplication()) }.getOrNull()
                 )
                 val promptGenerationExecutor = PromptGenerationExecutor(
                     promptLibrary = promptLibrary,

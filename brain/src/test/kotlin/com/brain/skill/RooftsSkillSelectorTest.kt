@@ -63,4 +63,18 @@ class RooftsSkillSelectorTest {
         val selecionadas = RooftsSkillSelector.select(objetivo, catalogo, max = 2)
         assertEquals(2, selecionadas.size)
     }
+
+    @Test
+    fun `exclusao declarada impede ativacao por coincidencia`() {
+        val skill = RooftsSkill(
+            id = "release-review",
+            description = "Review release changes.",
+            body = "body",
+            triggers = setOf("release"),
+            exclusions = setOf("marketing")
+        )
+
+        assertTrue(RooftsSkillSelector.select("review release de marketing", listOf(skill)).isEmpty())
+        assertEquals(listOf("release-review"), RooftsSkillSelector.select("review release de código", listOf(skill)).map { it.id })
+    }
 }
