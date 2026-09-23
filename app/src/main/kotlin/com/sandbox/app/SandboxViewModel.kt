@@ -772,12 +772,12 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                             accounts = chatDoorAccounts
                         )
                     ),
-                    structuredInterpreter = chatDoorAccounts.takeIf { it.isNotEmpty() }?.let {
-                        com.brain.conversation.LlmConversationInterpreter(conversationGateway, accounts = it)
-                    },
-                    outputReviewer = chatDoorAccounts.takeIf { it.isNotEmpty() }?.let {
-                        com.brain.conversation.LlmOutputReviewer(conversationGateway, accounts = it)
-                    }
+                    structuredInterpreter = if (!BuildConfig.E2E_FAKE_ROOTFS && chatDoorAccounts.isNotEmpty()) {
+                        com.brain.conversation.LlmConversationInterpreter(conversationGateway, accounts = chatDoorAccounts)
+                    } else null,
+                    outputReviewer = if (!BuildConfig.E2E_FAKE_ROOTFS && chatDoorAccounts.isNotEmpty()) {
+                        com.brain.conversation.LlmOutputReviewer(conversationGateway, accounts = chatDoorAccounts)
+                    } else null
                 )
                 brainController = BrainSandboxController(
                     prepared,
