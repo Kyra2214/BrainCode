@@ -47,7 +47,7 @@ jobs:
           profile: pixel_7_pro
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
-          script: ./gradlew :app:connectedDebugAndroidTest -Pbraincode.e2e.fakeRootfs=true --no-daemon --stacktrace
+          script: ./gradlew :app:connectedDebugAndroidTest -Pbraincode.e2e.fakeRootfs=true -Pbraincode.e2e.offlineAi=true --no-daemon --stacktrace
 
       - name: Generate human-readable E2E report
         if: always()

@@ -734,9 +734,14 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     activeProjectName = { workspaceProjectName },
                     rooftsSkillCatalog = runCatching { RooftsSkillLoader.loadCatalog(getApplication()) }.getOrNull()
                 )
+                val promptImprover: PromptImprover = if (BuildConfig.E2E_OFFLINE_AI) {
+                    PromptImprover { promptAtual, _ -> promptAtual }
+                } else {
+                    GatewayPromptImprover(brainApiGateway)
+                }
                 val promptGenerationExecutor = PromptGenerationExecutor(
                     promptLibrary = promptLibrary,
-                    improver = GatewayPromptImprover(brainApiGateway)
+                    improver = promptImprover
                 )
                 val webResearchProvider = com.brain.research.CompositeWebResearchProvider(
                     listOf(DuckDuckGoWebResearchProvider(), WikipediaWebResearchProvider())
