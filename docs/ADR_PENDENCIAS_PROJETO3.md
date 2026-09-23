@@ -2,9 +2,9 @@
 
 ## T-601 — Scripts e hooks externos
 
-**Decisão:** não executar scripts, hooks, downloads ou recursos externos das Skills nesta rodada. O loader pode registrar recursos como metadados, mas não os transforma em comandos. A execução futura exigirá sandbox OS-level, allowlist, limite de tempo/CPU/memória, política de rede, captura de saída, rollback e trilha de proveniência.
+**Decisão:** habilitar somente hooks explicitamente declarados, através de `SafeSkillResourceExecutor` e `RooftsSkillCatalog.executeDeclaredHook`. O caminho não usa shell, exige allowlist de executáveis, workspace existente, timeout máximo de 60s, saída limitada a 1 MiB, rede negada e permissões vazias. Hooks não declarados, com permissão ou com rede são rejeitados.
 
-**Consequência:** a superfície de ataque permanece fechada; esta funcionalidade não é considerada faltante do runtime seguro atual.
+**Consequência:** existe execução controlada para CI/desenvolvimento, mas não há execução automática por descoberta, download, aprovação de permissão ou habilitação de Skill.
 
 ## T-602 — Aprovação automática de permissões
 

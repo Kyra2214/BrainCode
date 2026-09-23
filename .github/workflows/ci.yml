@@ -63,6 +63,10 @@ jobs:
         continue-on-error: true
         run: ./gradlew :brain:test :android-module:test :app:testDebugUnitTest --no-daemon --stacktrace
 
+      - name: Run offline semantic Roofts grader
+        if: steps.unit-tests.outcome == 'success'
+        run: ./gradlew :brain:test --tests com.brain.skill.RooftsSkillEvaluationTest --tests com.brain.skill.SafeSkillExecutionTest --no-daemon --stacktrace
+
       - name: Assemble Android debug APK
         if: always()
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace

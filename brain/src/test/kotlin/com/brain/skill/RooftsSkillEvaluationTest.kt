@@ -27,6 +27,9 @@ class RooftsSkillEvaluationTest {
         assertEquals(25, skills.size)
         assertTrue("score=${summary.score}, falhas=${summary.results.filterNot { it.passed }}", summary.score >= root.getDouble("minimumScore"))
         assertTrue("casos falhos=${summary.results.filterNot { it.passed }}", summary.results.all { it.passed })
+
+        val semantic = RooftsSemanticGrader.grade(skills, cases, minimumScore = 0.80)
+        assertTrue("grader semântico score=${semantic.averageScore}, falhas=${semantic.grades.filterNot { it.passed }}", semantic.passed)
     }
 
     private fun loadSkills(): List<RooftsSkill> = sequenceOf(

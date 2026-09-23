@@ -27,6 +27,8 @@ O wiring da F4 registra `workflow.run` como capability estável, aplica o gating
 
 Nesta rodada, o `WorkflowEngine` passou a expor `runDocument` de forma pública, a facade passou a persistir scheduler/leases e oferecer `runWorkflow`/`runDueWorkflows`, e dois workflows originais somente leitura passaram a ser semeados no catálogo após instalação. O marketplace e o `SkillRegistry` agora reutilizam chaves públicas Ed25519 provisionadas no asset, com list/resolve/pin sem download ou habilitação automática. O APK ganhou um gate que verifica as 25 Skills e as chaves confiáveis.
 
+As duas pendências de segurança também receberam implementação controlada: `RooftsSemanticGrader` avalia objetivos, seleção, exclusões e relevância de corpo/triggers de forma offline e determinística no CI; `SafeSkillResourceExecutor` permite hooks declarados sem shell, com allowlist, workspace confinado, timeout, limite de saída e rede negada. A descoberta de uma Skill nunca dispara esse executor automaticamente.
+
 ## 2. O que foi preservado no pacote
 
 O pacote final contém duas raízes:

@@ -5,6 +5,9 @@ import com.brain.skill.RooftsSkill
 import com.brain.skill.RooftsSkillActivationPlan
 import com.brain.skill.RooftsSkillActivationPlanner
 import com.brain.skill.RooftsSkillSelector
+import com.brain.skill.SafeSkillExecutionRequest
+import com.brain.skill.SafeSkillExecutionResult
+import com.brain.skill.SafeSkillResourceExecutor
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.MessageDigest
@@ -46,6 +49,20 @@ class RooftsSkillCatalog internal constructor(
         val base = source.substringBeforeLast('/', missingDelimiterValue = "")
         val target = "$base/$normalized"
         return context.assets.open(target).bufferedReader(Charsets.UTF_8).use { it.readText() }
+    }
+
+    /** Hook explícito e opt-in: sem permissões, sem rede e apenas para ferramenta declarada. */
+    fun executeDeclaredHook(
+        skill: RooftsSkill,
+        executable: String,
+        arguments: List<String>,
+        workspace: java.io.File,
+        executor: SafeSkillResourceExecutor
+    ): SafeSkillExecutionResult {
+        require(skill.tools.contains(executable)) { "hook não declarado pela Skill" }
+        require(skill.requiredPermissions.isEmpty()) { "hook exige aprovação de permissão" }
+        require(skill.networkPolicy == "none") { "hook com rede exige política dedicada" }
+        return executor.execute(SafeSkillExecutionRequest(executable, arguments, workspace, networkAllowed = false))
     }
 }
 
