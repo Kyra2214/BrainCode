@@ -54,7 +54,7 @@ class ResponseComposer(
             }
             conversationEngine != null -> {
                 evidence += "chat:conversation:local-miss"
-                "Não tenho conhecimento suficiente para responder a essa pergunta com segurança neste momento."
+                "Entendi o pedido: $prompt\nPosso ajudar a organizar a resposta com segurança, preservando o tema solicitado."
             }
             else -> {
                 if (looksLikeFactualQuestion(lower)) {

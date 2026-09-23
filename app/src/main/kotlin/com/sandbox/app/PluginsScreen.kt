@@ -179,6 +179,7 @@ fun ComponentCard(
         status?.state == InstallationState.REMOVING
     val operationActive = busy || persistedOperation
     var showErrorDialog by remember { mutableStateOf(false) }
+    val errorForUi = remember(status?.error) { status?.error.orEmpty().take(16 * 1024) }
 
     if (showErrorDialog && !status?.error.isNullOrBlank()) {
         AlertDialog(
@@ -186,7 +187,7 @@ fun ComponentCard(
             title = { Text("Log de erro — ${component.name}") },
             text = {
                 Column(modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
-                    Text(status?.error.orEmpty(), style = MaterialTheme.typography.bodySmall)
+                    Text(errorForUi, style = MaterialTheme.typography.bodySmall)
                 }
             },
             confirmButton = {
@@ -210,7 +211,7 @@ fun ComponentCard(
             }
             if (status?.state == InstallationState.FAILED && !status.error.isNullOrBlank()) {
                 Text(
-                    "Erro: ${status.error}",
+                    "Erro: $errorForUi",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.error,
                     maxLines = 6,

@@ -24,7 +24,12 @@ class BrainSandboxControllerExecutionTraceTest {
         try {
             val controller = BrainSandboxController(
                 runtime = ManagedSandboxRuntime(TestLauncher(root), FileExecutionLogRepository(File(root, "logs")), sessionId = "session-trace"),
-                rootfsDir = root
+                rootfsDir = root,
+                capabilityResolver = CapabilityResolver(mapOf(
+                    "sandbox.health" to { _: List<String> ->
+                        CapabilityResolver.Resolution.Comando(listOf("sh", "-c", "printf sandbox-health-ok"))
+                    }
+                ))
             )
 
             val cycle = controller.healthCheck("trace-run")

@@ -97,6 +97,7 @@ class BrainSandboxController(
     private val promptOutcomeTracker: PromptOutcomeTracker? = promptLibrary?.let { PromptOutcomeTrackers.forLibrary(it) },
     capabilityProviders: List<CapabilityProvider> = emptyList(),
     capabilityExecutors: Map<String, ActionExecutor> = emptyMap(),
+    capabilityResolver: CapabilityResolver = CapabilityResolver(),
     private val apiKeyAvailable: () -> Boolean = { true },
     private val authorizedAccountIds: Set<String> = emptySet(),
     /**
@@ -124,7 +125,7 @@ class BrainSandboxController(
     private val dynamicCapabilityProviders = capabilityProviders
     private val approvals = FileApprovalStore(File(rootfsDir, "approvals.jsonl"))
     private val planningArtifacts = FilePlanningArtifactStore(File(rootfsDir, "planning-artifacts.jsonl"))
-    private val sandbox = Sandbox(runtime = runtime, rootfsDir = rootfsDir)
+    private val sandbox = Sandbox(runtime = runtime, rootfsDir = rootfsDir, capabilityResolver = capabilityResolver)
     private val capabilities = CapabilityRegistry(
         listOf(
             capability("sandbox.health", setOf("sandbox.health")),

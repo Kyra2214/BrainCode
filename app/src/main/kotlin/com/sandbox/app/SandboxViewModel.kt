@@ -763,7 +763,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         sessions.firstOrNull { it.id == activeSessionId }?.conversationContext ?: ConversationContext()
                     },
                     conversationEngine = noInferenceEngine(getApplication()),
-                    researchFallback = automaticConversationResearch,
+                    researchFallback = automaticConversationResearch.takeUnless { BuildConfig.E2E_FAKE_ROOTFS },
                     knowledgeCycle = conversationKnowledgeCycle,
                     knowledgePromoter = com.brain.memory.ResearchKnowledgePromoter(
                         conversationKnowledgeCycle,
@@ -772,14 +772,12 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                             accounts = chatDoorAccounts
                         )
                     ),
-                    structuredInterpreter = com.brain.conversation.LlmConversationInterpreter(
-                        conversationGateway,
-                        accounts = chatDoorAccounts
-                    ),
-                    outputReviewer = com.brain.conversation.LlmOutputReviewer(
-                        conversationGateway,
-                        accounts = chatDoorAccounts
-                    )
+                    structuredInterpreter = chatDoorAccounts.takeIf { it.isNotEmpty() }?.let {
+                        com.brain.conversation.LlmConversationInterpreter(conversationGateway, accounts = it)
+                    },
+                    outputReviewer = chatDoorAccounts.takeIf { it.isNotEmpty() }?.let {
+                        com.brain.conversation.LlmOutputReviewer(conversationGateway, accounts = it)
+                    }
                 )
                 brainController = BrainSandboxController(
                     prepared,
