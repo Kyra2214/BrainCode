@@ -54,7 +54,7 @@ fun detectGeneratedContentType(content: String, capability: String? = null, evid
     val lower = content.lowercase()
     // Porta 2 (checklist do prompt) e Porta 1 (RequirementGate → chat.respond) sinalizam pergunta de esclarecimento por evidência.
     if (evidence.any { it == "prompt-checklist:aguardando-esclarecimento" || it == "chat:clarification-question" }) return GeneratedContentType.CLARIFICATION
-    if (capability == "prompt.library.write" || lower.contains("prompt gerado") || lower.contains("prompt novo localmente")) return GeneratedContentType.PROMPT
+    if (capability == "prompt.library.write" || capability == "prompt.library.generate" || lower.contains("prompt gerado") || lower.contains("prompt novo localmente")) return GeneratedContentType.PROMPT
     if (Regex("(?s)```(bash|sh|shell|zsh)\\b").containsMatchIn(lower) || lower.contains("#!/bin/")) return GeneratedContentType.SCRIPT
     if (Regex("(?s)```(json)\\b").containsMatchIn(lower)) return GeneratedContentType.JSON
     if (Regex("(?s)```(yaml|yml)\\b").containsMatchIn(lower)) return GeneratedContentType.YAML
