@@ -79,6 +79,8 @@ A evolução das portas será sequencial:
 
 Não iniciar a integração de APIs externas antes de Porta 1 e Porta 2 estarem consolidadas. A Porta 3 já possui aproximadamente 81% da infraestrutura funcional necessária; portanto, não será reconstruída nem congelada. Os componentes existentes serão preservados e os ~19% restantes serão fechados depois da consolidação das Portas 1 e 2 e da camada de APIs.
 
+**Exceção documentada:** o gating de chamada de API por porta (booleano `DoorScope.externalAccountsAllowed`, calculado por `DoorPolicy.externalAccountsAllowed`) já foi adiantado conscientemente antes da consolidação formal de Porta 1/2 — Porta 3 libera incondicionalmente desde o início da fase de criação e Porta 2 libera condicionalmente via `escalationRequested`. Isso não antecipa a camada completa de integração de APIs/providers (Marco 5.3), só essa fatia de gating booleano. Ver `PLANO_CORRECAO_AUDITORIA_ESCALONAMENTO.md`, seção 2, para o histórico da decisão (Opção A aplicada em 23/09/2026).
+
 ### Marco 5.1 — Porta 1: Chat / Plano — ~92%
 
 [x] formalizar o Secretário como entrada determinística para a Porta 1.
@@ -100,7 +102,7 @@ Não iniciar a integração de APIs externas antes de Porta 1 e Porta 2 estarem 
 [x] formalizar entrada da Porta 2 pelo Secretário.
 [x] preservar Prompt Agent/Creator, pesquisa Web, biblioteca, crítica, otimização e validação já existentes.
 [x] Web permitida conforme Policy.
-[x] APIs externas continuam bloqueadas.
+[x] APIs externas: contas visíveis ao executor desde o início, no mesmo padrão da Porta 3 (`DoorPolicy.externalAccountsAllowed(Door.PROMPT)`; ver exceção documentada na regra de execução do Marco 5). **Bug corrigido em 23/09/2026** (ver `docs/auditoria/PLANO_CORRECAO_AUDITORIA_ESCALONAMENTO.md`, item 1): antes, a liberação dependia de um gatilho explícito de melhoria calculado uma única vez em `DeterministicSecretary.classify()`, o que tornava o escalonamento por qualidade insuficiente inalcançável num primeiro pedido ("crie um prompt de X"). Quem decide se a IA é de fato chamada continua sendo o executor (`PromptGenerationExecutor.escalonar`, com base em `scoreInicial.abaixoDoPadrao` ou gatilho de melhoria) — a porta só passou a deixar a conta visível.
 [ ] permitir conversa controlada com a Porta 1 quando contexto for necessário.
 [x] garantir que concluir um prompt não inicie criação/desenvolvimento/execução automaticamente.
 [x] consolidar regras e permissões próprias da Porta 2.
@@ -109,6 +111,8 @@ Não iniciar a integração de APIs externas antes de Porta 1 e Porta 2 estarem 
 [ ] declarar Porta 2 consolidada somente com evidência verde.
 
 ### Marco 5.3 — Integração de APIs externas — após Portas 1 e 2
+
+**Nota:** a fatia de gating booleano por porta (`externalAccountsAllowed`) já foi adiantada — ver exceção documentada na regra de execução do Marco 5 e `PLANO_CORRECAO_AUDITORIA_ESCALONAMENTO.md`, seção 2. Os itens abaixo, referentes à camada completa de integração (Provider/API, registro/descoberta/seleção, testes de contrato), seguem como estavam, sem evidência de avanço além do já registrado.
 
 [ ] somente iniciar quando Porta 1 e Porta 2 estiverem formalmente consolidadas.
 [ ] criar camada de Provider/API sem contaminar o Brain Core.

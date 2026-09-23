@@ -1,5 +1,6 @@
 package com.brain.secretary
 
+import com.brain.prompt.ImprovementVocabulary
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -34,7 +35,12 @@ class SecretaryTest {
             assertEquals(expected.prompt, expected.restrictions, actual.restrictions)
             assertEquals(expected.door, actual.scope.door)
             assertEquals(expected.phase, actual.scope.phase)
-            assertTrue(expected.prompt, !actual.scope.externalAccountsAllowed)
+            val esperadoExternalAccounts = when (expected.door) {
+                Door.CHAT -> false
+                Door.PROMPT -> ImprovementVocabulary.pedeIA(expected.prompt)
+                Door.CREATE -> true
+            }
+            assertEquals(expected.prompt, esperadoExternalAccounts, actual.scope.externalAccountsAllowed)
         }
     }
 

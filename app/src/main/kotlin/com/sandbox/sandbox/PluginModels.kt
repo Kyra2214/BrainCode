@@ -704,16 +704,7 @@ class PluginManager(
                 persistFailure(component, existing?.installedAt ?: now, startedAtMs, "Nenhum pacote foi definido para o componente")
             } else {
                 val result = executor.execute(
-                    command = listOf(
-                        "bash", "-c",
-                        "set -o pipefail; " +
-                            "export DEBIAN_FRONTEND=noninteractive; " +
-                            "if ! find /var/lib/apt/lists -type f -print -quit 2>/dev/null | grep -q .; then " +
-                            "apt-get update -qq || exit ${'$'}?; " +
-                            "fi; " +
-                            "apt-get -o Dpkg::Use-Pty=0 install -y --no-install-recommends --fix-missing " +
-                            component.packages.joinToString(" ") + " 2>&1 | tail -n 120"
-                    ),
+                    command = listOf("bash", "-c", AptScripts.install(component.packages)),
                     timeoutSeconds = 600
                 )
                 val validated = result.succeeded && validate(component)
@@ -766,11 +757,7 @@ class PluginManager(
                 component.removeCommand != null -> executor.execute(command = component.removeCommand, timeoutSeconds = 600)
                 component.packages.isEmpty() -> null
                 else -> executor.execute(
-                    command = listOf(
-                        "bash", "-c",
-                        "export DEBIAN_FRONTEND=noninteractive; " +
-                            "apt-get -o Dpkg::Use-Pty=0 remove -y ${component.packages.joinToString(" ")} 2>&1 | tail -n 120"
-                    ),
+                    command = listOf("bash", "-c", AptScripts.remove(component.packages)),
                     timeoutSeconds = 600
                 )
             }

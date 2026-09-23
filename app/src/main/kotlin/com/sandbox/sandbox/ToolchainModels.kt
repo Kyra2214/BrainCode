@@ -97,19 +97,8 @@ class ToolchainDetector(private val executor: SandboxCommandExecutor) {
         result.stdout.trim().toLongOrNull()?.times(1024L) ?: 0L
     }
 
-    fun planInstall(profile: ToolchainProfile): ToolchainInstallPlan {
-        val packageList = profile.packages.joinToString(" ")
-        val script = "set -o pipefail; " +
-            "export DEBIAN_FRONTEND=noninteractive; " +
-            "if ! find /var/lib/apt/lists -type f -print -quit 2>/dev/null | grep -q .; then " +
-            "apt-get update -qq || exit ${'$'}?; " +
-            "fi; " +
-            "apt-get -o Dpkg::Use-Pty=0 install -y --no-install-recommends --fix-missing " +
-            packageList + " 2>&1 | tail -n 120"
-        return ToolchainInstallPlan(profile, listOf("bash", "-c", script))
-    }
-
-    private fun shellQuote(value: String): String = "'" + value.replace("'", "'\\''") + "'"
+    fun planInstall(profile: ToolchainProfile): ToolchainInstallPlan =
+        ToolchainInstallPlan(profile, listOf("bash", "-c", AptScripts.install(profile.packages)))
 }
 
 enum class ToolchainState { NOT_INSTALLED, INSTALLING, INSTALLED, FAILED, REMOVING, ROLLED_BACK }

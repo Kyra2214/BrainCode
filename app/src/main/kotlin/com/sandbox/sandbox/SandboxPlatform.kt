@@ -42,6 +42,16 @@ class SandboxPlatform(
         actorCapabilities = mapOf("sandbox-platform" to setOf("sandbox.git", "sandbox.toolchain", "sandbox.test", "sandbox.diagnostics", "sandbox.plugin"))
     ).withCapabilityRegistry(gatewayCapabilities)
     private val gatewayExecutionLogs = GatewayBackedSandboxExecutor.logs()
+    /**
+     * Fase 12 (ver PLANO_CONEXAO_FASE_12.md, seção 1, passo 3): este ActionGateway fica
+     * deliberadamente sem `trace` (ExecutionTrace/TraceSink). SandboxPlatform não recebe nem
+     * constrói um EventStore — é uma fachada local das fases do sandbox (git, toolchain,
+     * plugins, diagnostics), sem sessão/runId de conversação para correlacionar. Criar um
+     * EventStore só para isso duplicaria o armazenamento em vez de reaproveitar o que já existe
+     * em BrainSandboxController (que é quem tem o EventStore real da sessão). Se este caminho
+     * precisar de trace no futuro, o EventStore deve ser injetado de fora (do mesmo ponto que
+     * hoje monta BrainSandboxController), nunca criado aqui.
+     */
     private val actionGateway = ActionGateway(
         registry = gatewayCapabilities,
         policy = policyBroker,
@@ -52,13 +62,34 @@ class SandboxPlatform(
         GatewayBackedSandboxExecutor(actionGateway, gatewayExecutionLogs), policy
     )
     private val remotePluginCatalog = RemotePluginCatalog(trustedRemotePluginSourceIds)
+    /**
+     * Único caminho autorizado a rodar `bash -c` — e apenas para os scripts literais do
+     * catálogo interno (plugins, toolchains, checagens do self-check), validados por hash.
+     * Usado só por [plugins], [toolchains] e pelo self-check (via [installerExecutor]);
+     * qualquer outro comando (chat, terminal, agente) continua exclusivamente em
+     * [securedExecutor], que recusa `bash`/`sh` por completo. Ver Fase 1 do plano de
+     * limpeza: antes deste executor, todo instalador do catálogo (`bash -c ...`) caía no
+     * mesmo bloqueio de shell livre do securedExecutor e falhava sempre.
+     *
+     * O provider inclui `remotePluginCatalog.components()` — plugins remotos só entram
+     * ali depois de passar pelo portão de confiança do import (fonte na allowlist +
+     * hash SHA-256 do artefato verificado em RemotePluginCatalog.importSnapshot). Uma
+     * vez aceitos, seus scripts ficam confiáveis aqui sem recriar o executor.
+     */
+    val installerExecutor: SandboxCommandExecutor = TrustedInstallerExecutor(
+        GatewayBackedSandboxExecutor(actionGateway, gatewayExecutionLogs),
+        policy,
+        trustedScriptsProvider = {
+            TrustedInstallerCatalog.allTrustedScripts() + TrustedInstallerCatalog.scriptsFor(remotePluginCatalog.components())
+        }
+    )
     private val componentJsonFile = File(componentStateFile.parentFile, "components.json")
     private val pluginSnapshotStore = PluginSnapshotStore(
         File(componentJsonFile.parentFile ?: componentJsonFile.absoluteFile.parentFile, "plugin_snapshots.json"),
         File(componentJsonFile.parentFile ?: componentJsonFile.absoluteFile.parentFile, "plugin_history.jsonl")
     )
     val plugins = SearchablePluginManager(
-        securedExecutor,
+        installerExecutor,
         JsonComponentRepository(componentJsonFile, legacyTsvFile = componentStateFile),
         catalogProvider = { (BuiltInCatalog.all + remotePluginCatalog.components()).distinctBy { it.id } },
         snapshotStore = pluginSnapshotStore
@@ -68,7 +99,7 @@ class SandboxPlatform(
     val git = GitManager(securedExecutor)
     val diagnostics = SandboxDiagnostics(securedExecutor)
     val testLab = TestLab(securedExecutor)
-    val toolchains = ToolchainManager(securedExecutor, File(workspaceRoot, "toolchains"))
+    val toolchains = ToolchainManager(installerExecutor, File(workspaceRoot, "toolchains"))
     val security = SecurityAssessmentEngine()
     val securityScanner = SecurityProjectScanner()
     val securityScenarios = SecurityScenarioCatalog.baseline

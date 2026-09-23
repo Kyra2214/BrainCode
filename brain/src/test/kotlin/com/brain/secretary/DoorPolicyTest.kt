@@ -65,9 +65,20 @@ class DoorPolicyTest {
     }
 
     @Test
-    fun `nenhuma porta permite contas externas nesta decisao`() {
+    fun `chat nunca permite conta externa, prompt e criacao permitem desde o inicio`() {
         assertFalse(DoorPolicy.externalAccountsAllowed(Door.CHAT))
-        assertFalse(DoorPolicy.externalAccountsAllowed(Door.PROMPT))
-        assertFalse(DoorPolicy.externalAccountsAllowed(Door.CREATE))
+        assertTrue(DoorPolicy.externalAccountsAllowed(Door.PROMPT))
+        assertTrue(DoorPolicy.externalAccountsAllowed(Door.CREATE))
+    }
+
+    @Test
+    fun `secretario libera contas visiveis a porta 2 mesmo sem gatilho de melhoria no pedido original`() {
+        // Regressão do bug corrigido em 23/09/2026 (ver
+        // docs/auditoria/PLANO_CORRECAO_AUDITORIA_ESCALONAMENTO.md, item 1): antes, um primeiro
+        // pedido sem "melhore"/"refaça" fazia authorizedAccountIds chegar sempre vazio ao executor.
+        val scope = DeterministicSecretary().classify("crie um prompt de uma xícara de café").scope
+        assertEquals(Door.PROMPT, scope.door)
+        assertTrue(scope.externalAccountsAllowed)
+        assertEquals(setOf("acct-1"), scope.visibleAccounts(setOf("acct-1")))
     }
 }

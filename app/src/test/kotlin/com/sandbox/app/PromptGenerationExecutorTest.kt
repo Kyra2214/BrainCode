@@ -305,4 +305,31 @@ class PromptGenerationExecutorTest {
         assertTrue(execution.success)
         assertEquals(0, chamadas)
     }
+
+    // Regressão do bug corrigido em 23/09/2026 (ver
+    // docs/auditoria/PLANO_CORRECAO_AUDITORIA_ESCALONAMENTO.md, item 1): um PRIMEIRO pedido, sem
+    // nenhuma palavra de melhoria ("crie um prompt de X", não "melhore"), com qualidade local
+    // insuficiente e uma conta autorizada disponível, deve de fato chamar a IA real — antes,
+    // authorizedAccountIds chegava sempre vazio nesse caminho e a IA nunca era acionada, mesmo
+    // com um PromptImprover que `requerContaAutorizada() = true` (o comportamento real do
+    // GatewayPromptImprover, não reproduzido pelo SAM fake usado nos demais testes desta classe).
+    @Test fun `primeira geracao sem gatilho de melhoria aciona IA que exige conta quando ha conta autorizada`() {
+        var chamadas = 0
+        val iaComContaExigida = object : PromptImprover {
+            override fun melhorar(promptAtual: String, pedidoOriginal: String): String {
+                chamadas++
+                return "Fotografia profissional detalhada de uma xícara de café: $promptAtual Composição cuidadosamente balanceada, " +
+                    "iluminação de estúdio de três pontos, lente 85mm, profundidade de campo rasa, altíssima definição e riqueza de detalhes realistas."
+            }
+            override fun requerContaAutorizada(): Boolean = true
+        }
+        val decisaoComContaAutorizada = decision.copy(authorizedAccountIds = setOf("acct-1"))
+
+        val execution = executor(FakePromptLibrary(), iaComContaExigida, criadorFraco)
+            .execute(request("crie um prompt de uma xícara de café"), capability, decisaoComContaAutorizada)
+
+        assertTrue(execution.success)
+        assertEquals("a IA deveria ter sido chamada nesse caminho", 1, chamadas)
+        assertTrue("origem deveria indicar uso de IA especialista", execution.evidence.any { it.contains("ia-especialista") })
+    }
 }

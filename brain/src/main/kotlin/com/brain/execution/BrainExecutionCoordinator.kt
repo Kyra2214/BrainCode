@@ -254,18 +254,8 @@ class BrainExecutionCoordinator(
         TipoErro.DESCONHECIDO, null -> AccountFailureClass.UNKNOWN
     }
 
-    private fun classifyError(error: String?): TipoErro {
-        val text = error.orEmpty().lowercase()
-        return when {
-            "429" in text || "rate limit" in text || "rate_limit" in text || "quota" in text || "too many requests" in text || "insufficient" in text -> TipoErro.LIMITE_ATINGIDO
-            "401" in text || "invalid api key" in text || "invalid key" in text || "unauthorized" in text -> TipoErro.CHAVE_INVALIDA
-            "403" in text || "forbidden" in text || "policy denied" in text || "policy negada" in text -> TipoErro.POLICY_NEGADA
-            "400" in text || "422" in text || "invalid request" in text || "requisição inválida" in text -> TipoErro.REQUISICAO_INVALIDA
-            "timeout" in text || "timed out" in text -> TipoErro.TIMEOUT
-            "500" in text || "502" in text || "503" in text || "server error" in text || "service unavailable" in text -> TipoErro.ERRO_SERVIDOR
-            else -> TipoErro.DESCONHECIDO
-        }
-    }
+    /** Fonte única em TipoErro.classify (ver docs/LEGADO_E_DECISOES.md, Fase 2) — antes duplicada aqui. */
+    private fun classifyError(error: String?): TipoErro = TipoErro.classify(error)
 
     private fun emit(runId: String, taskId: String, type: String, payload: Map<String, String>) {
         events.append(BrainEvent(runId = runId, sessionId = runId, taskId = taskId, type = type, sequence = 0, payload = payload, idempotencyKey = "$runId:$taskId:$type:${events.replay(runId).size}"))

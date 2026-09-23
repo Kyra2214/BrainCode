@@ -1,16 +1,28 @@
 package com.sandbox.agent
 
+import com.brain.account.AccountFailureClass
 import com.brain.account.AccountPool
+import com.brain.account.AccountRegistry
 import com.brain.account.AccountRouteDecision
 import com.brain.account.AccountRouteRequest
 import com.brain.account.AccountRouter
 import com.brain.planner.AuthorizedPlan
 import com.brain.planner.PassoPlano
 import com.brain.planner.PlanoExecucao
+import com.brain.dispatch.DispatchAttempt
 import com.brain.dispatch.DispatchTask
+import com.brain.dispatch.DispatchResult
 import com.brain.dispatch.DispatchStatus
 import com.brain.dispatch.Dispatcher
+import com.brain.memory.Experiencia
+import com.brain.memory.ExperienceMemory
+import com.brain.memory.ResultadoExperiencia
+import com.brain.runtime.NoopRuntimeDoctor
+import com.brain.runtime.RuntimeDoctor
 import com.brain.policy.*
+import kotlin.coroutines.Continuation
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.coroutines.startCoroutine
 import com.brain.secretary.DoorScope
 import com.brain.qa.EvidenciaComando
 import com.brain.qa.ExecutorValidacaoProjeto
@@ -20,6 +32,7 @@ import com.brain.router.ApiCatalog
 import com.brain.router.DynamicFreeApiCatalog
 import com.brain.router.RoutingDecision
 import com.brain.router.RoutingProfile
+import com.brain.router.TipoErro
 import com.brain.research.ResearchResult
 import com.brain.prompt.PromptReasoningTrace
 import com.brain.behavior.CritiqueResult
@@ -122,7 +135,28 @@ class CicloExecucaoPlano(
     private val dispatcher: Dispatcher? = null,
     private val accountRouter: AccountRouter? = null,
     private val accountPools: Map<String, AccountPool> = emptyMap(),
-    private val authorizedAccountIds: Set<String> = emptySet()
+    private val authorizedAccountIds: Set<String> = emptySet(),
+    /**
+     * Fallback de conta/provider (item de backlog fechado — ver LEGADO_E_DECISOES.md, Fase 2):
+     * quando presente, cada tentativa de dispatch (inclusive fallback para conta alternativa)
+     * atualiza a saúde da conta correspondente. null = não atualiza saúde (comportamento anterior).
+     */
+    private val accountRegistry: AccountRegistry? = null,
+    /**
+     * Quantos candidatos de capability o Dispatcher deve considerar por passo. 1 preserva o
+     * comportamento anterior (um único candidato). Combinado com [accountPools], permite ao
+     * Dispatcher girar entre contas alternativas do mesmo pool e, se essas se esgotarem, entre
+     * candidatos de capability diferentes — sem precisar de um segundo coordenador.
+     */
+    private val capabilityFallbackCandidates: Int = 3,
+    /** Aprendizado por passo (Fase 2 — ver LEGADO_E_DECISOES.md); null = não registra. */
+    private val memory: ExperienceMemory? = null,
+    /** Diagnóstico/auto-reparo pós-falha (Fase 2); Noop até existir implementação real. */
+    private val runtimeDoctor: RuntimeDoctor = NoopRuntimeDoctor,
+    /** Tentativas extras (além da primeira) para passos idempotentes cujo executor sinaliza falha transitória. */
+    private val maxRetries: Int = 1,
+    private val retryBackoffMs: (Int) -> Long = { retry -> (100L * (1L shl (retry - 1).coerceAtMost(4))).coerceAtMost(1600L) },
+    private val sleeper: (Long) -> Unit = Thread::sleep
 ) {
     private val approvedSteps = mutableSetOf<String>()
 
@@ -224,51 +258,80 @@ class CicloExecucaoPlano(
     }
 
     private fun processarPasso(passo: PassoPlano, authorization: ExecutionAuthorization, decision: PolicyDecision?): ResultadoPasso {
-        val decisaoRouter = decidirComRefresh(passo, decision)
+        val resolucao = decidirComRefresh(passo, decision)
+        val decisaoRouter = resolucao.routing
         dispatcher?.let { modernDispatcher ->
-            val dispatch = modernDispatcher.dispatch(
-                DispatchTask(
-                    taskId = passo.id,
-                    step = passo,
-                    actor = decision?.actor ?: "android-app",
-                    context = PolicyContext(
-                        runId = authorization.runId,
+            val startedAt = System.currentTimeMillis()
+            val retryLimit = if (passo.idempotent) maxRetries else 0
+            var dispatch: DispatchResult? = null
+            var tentativas = 0
+            val tentativasContas = mutableListOf<DispatchAttempt>()
+            for (retry in 0..retryLimit) {
+                tentativas++
+                dispatch = modernDispatcher.dispatch(
+                    DispatchTask(
                         taskId = passo.id,
+                        step = passo,
                         actor = decision?.actor ?: "android-app",
-                        riskClass = passo.riskClass,
-                        sandboxRequired = true,
-                        networkAllowed = decision?.networkAllowed ?: false,
-                        filesystemRoots = decision?.filesystemRoots ?: emptyList(),
-                        budget = decision?.budget ?: emptyMap(),
-                        authorizedAccountIds = decision?.authorizedAccountIds ?: emptySet(),
-                        doorScope = authorization.doorScope ?: decision?.doorScope
-                    ),
-                    accountId = decisaoRouter?.accountId
+                        context = PolicyContext(
+                            runId = authorization.runId,
+                            taskId = passo.id,
+                            actor = decision?.actor ?: "android-app",
+                            riskClass = passo.riskClass,
+                            sandboxRequired = true,
+                            networkAllowed = decision?.networkAllowed ?: false,
+                            filesystemRoots = decision?.filesystemRoots ?: emptyList(),
+                            budget = decision?.budget ?: emptyMap(),
+                            authorizedAccountIds = decision?.authorizedAccountIds ?: emptySet(),
+                            doorScope = authorization.doorScope ?: decision?.doorScope
+                        ),
+                        accountId = decisaoRouter?.accountId,
+                        accountAlternatives = resolucao.accountAlternatives,
+                        maxCandidates = capabilityFallbackCandidates
+                    )
                 )
+                tentativasContas += dispatch?.attempts.orEmpty()
+                val retryable = dispatch?.gateway?.execution?.retryable == true
+                if (!retryable) break
+                if (retry < retryLimit) sleeper(retryBackoffMs(retry + 1).coerceIn(0L, 1600L))
+            }
+            registrarSaudeContas(tentativasContas)
+            val dispatchFinal = dispatch!!
+            val gatewayExecution = dispatchFinal.gateway?.execution
+            val sucesso = dispatchFinal.status == DispatchStatus.DISPATCHED
+            recordExperience(
+                runId = authorization.runId,
+                stepId = passo.id,
+                objetivo = passo.criterioSucesso,
+                estrategia = decisaoRouter?.escolhido?.let { "${it.providerId}/${it.modeloId}" } ?: "local",
+                sucesso = sucesso,
+                tentativas = tentativas,
+                elapsedMs = System.currentTimeMillis() - startedAt,
+                erro = gatewayExecution?.error
             )
-            val gatewayExecution = dispatch.gateway?.execution
-            if (gatewayExecution?.retryable == true) {
-                error(gatewayExecution.error ?: "falha transitória do executor")
+            if (!sucesso) {
+                val diagnosis = runtimeDoctor.diagnose(authorization.runId, passo.id, gatewayExecution?.error)
+                if (!diagnosis.healthy) runtimeDoctor.repair(authorization.runId, passo.id, diagnosis)
             }
             return ResultadoPasso(
                 passo.id,
-                if (dispatch.status == DispatchStatus.DISPATCHED) StatusPasso.APROVADO else StatusPasso.REPROVADO,
-                decisaoPolicy = dispatch.gateway?.decision ?: decision,
+                if (sucesso) StatusPasso.APROVADO else StatusPasso.REPROVADO,
+                decisaoPolicy = dispatchFinal.gateway?.decision ?: decision,
                 resultado = if (passo.capacidade == "chat.respond") {
-                    dispatch.gateway?.execution?.userResponse?.text
+                    gatewayExecution?.userResponse?.text
                 } else {
-                    dispatch.gateway?.execution?.result ?: dispatch.gateway?.execution?.internalPayload
+                    gatewayExecution?.result ?: gatewayExecution?.internalPayload
                 },
-                payloadInterno = dispatch.gateway?.execution?.internalPayload,
-                userResponse = dispatch.gateway?.execution?.userResponse,
+                payloadInterno = gatewayExecution?.internalPayload,
+                userResponse = gatewayExecution?.userResponse,
                 decisaoRouter = decisaoRouter,
-                motivo = dispatch.reason ?: if (dispatch.status == DispatchStatus.DISPATCHED) null else "Dispatcher não executou a capability",
+                motivo = dispatchFinal.reason ?: if (sucesso) null else "Dispatcher não executou a capability",
                 actionId = "${passo.id}:${passo.id}",
-                custo = dispatch.gateway?.execution?.custo ?: 0.0,
+                custo = gatewayExecution?.custo ?: 0.0,
                 capacidade = passo.capacidade,
-                researchSources = dispatch.gateway?.execution?.researchSources ?: emptyList(),
-                executionEvidence = dispatch.gateway?.execution?.evidence ?: emptyList(),
-                promptReasoning = dispatch.gateway?.execution?.promptReasoning
+                researchSources = gatewayExecution?.researchSources ?: emptyList(),
+                executionEvidence = gatewayExecution?.evidence ?: emptyList(),
+                promptReasoning = gatewayExecution?.promptReasoning
             )
         }
         sandbox.abrirSessao(authorization).use { sessao ->
@@ -280,16 +343,23 @@ class CicloExecucaoPlano(
         }
     }
 
-    private fun decidirComRefresh(passo: PassoPlano, policyDecision: PolicyDecision? = null): RoutingDecision? {
-        val papel = passo.papel ?: return null
-        val primeira = router.decidir(papel, catalog, profiles) ?: return null
+    /**
+     * [accountAlternatives] são as demais contas elegíveis do mesmo pool, na ordem de
+     * prioridade do AccountRouter — repassadas ao Dispatcher para fallback (ver
+     * LEGADO_E_DECISOES.md, Fase 2); vazio quando não há pool ou não há alternativa.
+     */
+    private data class RouterResolution(val routing: RoutingDecision?, val accountAlternatives: List<String> = emptyList())
+
+    private fun decidirComRefresh(passo: PassoPlano, policyDecision: PolicyDecision? = null): RouterResolution {
+        val papel = passo.papel ?: return RouterResolution(null)
+        val primeira = router.decidir(papel, catalog, profiles) ?: return RouterResolution(null)
         val refreshed = if (catalog !is DynamicFreeApiCatalog) {
             primeira
         } else {
             catalog.refreshProvider(primeira.escolhido.providerId)
-            router.decidir(papel, catalog, profiles) ?: return null
+            router.decidir(papel, catalog, profiles) ?: return RouterResolution(null)
         }
-        val pool = accountPools[passo.capacidade] ?: return refreshed
+        val pool = accountPools[passo.capacidade] ?: return RouterResolution(refreshed)
         val accountDecision = accountRouter?.route(
             AccountRouteRequest(
                 executionId = passo.id,
@@ -302,8 +372,92 @@ class CicloExecucaoPlano(
             java.time.Instant.now()
         )
         return when (accountDecision) {
-            is AccountRouteDecision.Selected -> refreshed.copy(accountId = accountDecision.accountId)
-            else -> refreshed
+            is AccountRouteDecision.Selected -> RouterResolution(
+                refreshed.copy(accountId = accountDecision.accountId),
+                accountDecision.alternatives.map { it.accountId }
+            )
+            else -> RouterResolution(refreshed)
         }
+    }
+
+    /**
+     * Fallback de conta/provider (Fase 2 — ver LEGADO_E_DECISOES.md): a única cobertura disso
+     * antes era o BrainExecutionCoordinator legado. Aqui a saúde é atualizada para toda conta
+     * efetivamente tentada pelo Dispatcher nesta chamada (inclusive alternativas usadas em
+     * fallback), sucesso ou falha — sem isso, uma conta com chave inválida ou rate limit nunca
+     * fica marcada como não saudável no caminho real, mesmo com fallback funcionando.
+     */
+    private fun registrarSaudeContas(tentativas: List<DispatchAttempt>) {
+        val registry = accountRegistry ?: return
+        for (tentativa in tentativas) {
+            val accountId = tentativa.accountId ?: continue
+            val current = registry.find(accountId) ?: continue
+            val now = java.time.Instant.now()
+            val next = if (tentativa.gateway.success) {
+                current.health.afterSuccess(now)
+            } else {
+                current.health.afterFailure(TipoErro.classify(tentativa.gateway.execution?.error).toAccountFailure(), now)
+            }
+            runCatching { registry.updateHealth(accountId, next) }
+        }
+    }
+
+    private fun TipoErro.toAccountFailure(): AccountFailureClass = when (this) {
+        TipoErro.LIMITE_ATINGIDO -> AccountFailureClass.RATE_LIMIT
+        TipoErro.CHAVE_INVALIDA -> AccountFailureClass.AUTH_FAILURE
+        TipoErro.TIMEOUT -> AccountFailureClass.TIMEOUT
+        TipoErro.ERRO_SERVIDOR -> AccountFailureClass.TEMPORARY_PROVIDER_FAILURE
+        TipoErro.POLICY_NEGADA -> AccountFailureClass.POLICY_DENIED
+        TipoErro.REQUISICAO_INVALIDA -> AccountFailureClass.INVALID_REQUEST
+        TipoErro.DESCONHECIDO -> AccountFailureClass.UNKNOWN
+    }
+
+    /**
+     * Fase 2 (ver LEGADO_E_DECISOES.md): registra uma [Experiencia] por passo despachado,
+     * mesmo que [memory] seja nulo (no-op nesse caso). Falha é dado, não é ausência de dado.
+     */
+    private fun recordExperience(
+        runId: String,
+        stepId: String,
+        objetivo: String,
+        estrategia: String,
+        sucesso: Boolean,
+        tentativas: Int,
+        elapsedMs: Long,
+        erro: String?
+    ) {
+        val target = memory ?: return
+        val resultado = when {
+            !sucesso -> ResultadoExperiencia.FALHA
+            tentativas > 1 -> ResultadoExperiencia.CORRIGIDO_APOS_FALHA
+            else -> ResultadoExperiencia.SUCESSO
+        }
+        val experiencia = Experiencia(
+            id = "$runId:$stepId",
+            tarefaId = stepId,
+            problema = objetivo,
+            estrategiaUsada = estrategia,
+            promptUsado = null,
+            resultado = resultado,
+            custoEstimado = 0.0,
+            tempoTotalMs = elapsedMs,
+            erros = erro?.let { listOf(safeError(it)) } ?: emptyList(),
+            registradoEm = java.time.Instant.now()
+        )
+        runCatching { await { target.registrar(experiencia) } }
+    }
+
+    private fun safeError(error: String?): String = error.orEmpty()
+        .replace(Regex("(?i)(bearer\\s+|api[_-]?key|token|password|secret)[=: ]+[^,; ]+"), "[REDACTED]")
+        .take(512)
+        .ifBlank { "failed" }
+
+    private fun <T> await(block: suspend () -> T): T {
+        var completed: Result<T>? = null
+        block.startCoroutine(object : Continuation<T> {
+            override val context = EmptyCoroutineContext
+            override fun resumeWith(result: Result<T>) { completed = result }
+        })
+        return completed!!.getOrThrow()
     }
 }

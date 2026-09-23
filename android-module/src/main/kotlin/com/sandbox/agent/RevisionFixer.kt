@@ -29,25 +29,6 @@ data class FixApplication(
     }
 }
 
-/** Correção default segura: registra a revisão e marca a nova tentativa no contexto dos passos. */
-class ContextRevisionFixer : RevisionFixer {
-    override fun fix(plan: PlanoExecucao, critique: CritiqueResult, attempt: Int): FixApplication {
-        val marker = "brain-revision-attempt:$attempt"
-        val revised = plan.copy(
-            assumptions = plan.assumptions + marker,
-            passos = plan.passos.map { step ->
-                if (step.parametros.contains(marker)) step
-                else step.copy(parametros = step.parametros + marker)
-            }
-        )
-        return FixApplication(
-            plan = revised,
-            summary = "plano corrigido para a tentativa $attempt: ${critique.findings.size} finding(s)",
-            evidence = "${marker}:${critique.findings.joinToString(",") { it.code }}"
-        )
-    }
-}
-
 /** Converte findings em instruções que chegam ao executor do passo de geração. */
 class FindingsRevisionFixer : RevisionFixer {
     override fun fix(plan: PlanoExecucao, critique: CritiqueResult, attempt: Int): FixApplication {

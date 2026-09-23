@@ -22,6 +22,7 @@ import com.brain.policy.ApprovalRequest
 import com.brain.router.ApiCatalogRegistry
 import com.brain.router.DefaultAIRouter
 import com.brain.router.InMemoryApiCatalog
+import com.brain.account.AccountRegistry
 import com.brain.account.AccountRouter
 import com.sandbox.runtime.ManagedSandboxRuntime
 import com.brain.workflow.WorkflowEngine
@@ -50,11 +51,16 @@ import com.brain.behavior.ClarificationQuestion
 import com.brain.behavior.BehaviorDiagnostics
 import com.brain.behavior.EventStoreBehaviorTraceSink
 import com.brain.behavior.VerificationResult
+import com.brain.observability.EventStoreTraceSink
+import com.brain.observability.ExecutionTrace
+import com.brain.observability.TraceEvent
 import com.brain.reasoning.TaskState
 import com.brain.execution.OperationalState
 import com.brain.execution.Observation
 import com.brain.memory.LayeredMemory
 import com.brain.memory.Provenance
+import com.brain.memory.ExperienceMemory
+import com.brain.memory.FileExperienceMemory
 import com.brain.planner.TreeOfThoughts
 import com.brain.secretary.OrderIntent
 import com.brain.secretary.Door
@@ -93,6 +99,14 @@ class BrainSandboxController(
     capabilityExecutors: Map<String, ActionExecutor> = emptyMap(),
     private val apiKeyAvailable: () -> Boolean = { true },
     private val authorizedAccountIds: Set<String> = emptySet(),
+    /**
+     * Fallback de conta/provider (ver docs/LEGADO_E_DECISOES.md, Fase 2): quando o app
+     * configurar pools de conta reais, injetar aqui o mesmo AccountRegistry usado para
+     * povoá-los faz a saúde de conta ser atualizada a cada tentativa real de dispatch.
+     * null (padrão) preserva o comportamento anterior — sem pools configurados hoje, isso
+     * já não muda nada na prática até existir uma origem real de contas/credenciais.
+     */
+    private val accountRegistry: AccountRegistry? = null,
     private val events: EventStore = InMemoryEventStore(),
     private val revisionFixer: RevisionFixer = FindingsRevisionFixer(),
     private val secretary: com.brain.secretary.DeterministicSecretary = com.brain.secretary.DeterministicSecretary(),
@@ -103,6 +117,10 @@ class BrainSandboxController(
     private val inputInterpreter = BrainInputInterpreter(secretary)
     private val brainRouter = BrainRouter()
     private val behaviorDiagnostics = BehaviorDiagnostics(EventStoreBehaviorTraceSink(events, "android-local"))
+    /** Fase 12 (ver PLANO_CONEXAO_FASE_12.md, seção 1): mesmo EventStore do controller, nunca um
+     * segundo armazenamento — o traceId é sempre o runId/actionId já usado pelo ActionAuditLog. */
+    private val executionTraceSink = EventStoreTraceSink(events, "android-local")
+    private val executionTrace = ExecutionTrace(executionTraceSink)
     private val dynamicCapabilityProviders = capabilityProviders
     private val approvals = FileApprovalStore(File(rootfsDir, "approvals.jsonl"))
     private val planningArtifacts = FilePlanningArtifactStore(File(rootfsDir, "planning-artifacts.jsonl"))
@@ -128,7 +146,8 @@ class BrainSandboxController(
         registry = capabilities,
         policy = policy,
         executor = CompositeActionExecutor(capabilityExecutors, BrainActionExecutor(sandbox)),
-        audit = InMemoryActionAuditLog()
+        audit = InMemoryActionAuditLog(),
+        trace = executionTrace
     )
     private val dispatcher = Dispatcher(CapabilityDiscovery(capabilities), actionGateway)
 
@@ -148,6 +167,8 @@ class BrainSandboxController(
     )
     private val promptRetrieval = promptLibrary?.let { Retrieval(listOf(PromptLibraryRetrievalSource.from(it))) }
     private val apiCatalog = ApiCatalogRegistry.current() ?: InMemoryApiCatalog(emptyList())
+    /** Fase 2 (ver LEGADO_E_DECISOES.md): aprendizado por passo no caminho real, não só no coordenador legado. */
+    private val stepExperienceMemory: ExperienceMemory = FileExperienceMemory(File(rootfsDir, "brain-step-experience.jsonl"))
     private val bridge = BrainSandboxExecutionBridge(
         CicloExecucaoPlano(
             policyBroker = policy,
@@ -157,7 +178,9 @@ class BrainSandboxController(
             approvalStore = approvals,
                 dispatcher = dispatcher,
                 accountRouter = AccountRouter(),
-                authorizedAccountIds = authorizedAccountIds
+                authorizedAccountIds = authorizedAccountIds,
+                accountRegistry = accountRegistry,
+                memory = stepExperienceMemory
         )
     )
     private val planningGate = PlanningGate()
@@ -522,6 +545,9 @@ class BrainSandboxController(
 
     fun localEvents(runId: String? = null) = events.replay(runId)
     fun localEventsHealthy(): Boolean = events.verifyIntegrity()
+    /** Fase 12: visão cronológica por traceId (TASK→CAPABILITY→POLICY→AGENT→SANDBOX→EVIDENCE→CRITIC)
+     * do ActionGateway real, recuperável do mesmo EventStore usado pelo restante do controller. */
+    fun executionTrace(traceId: String? = null): List<TraceEvent> = executionTraceSink.all(traceId)
     fun currentTaskState(): TaskState? = taskState
     fun memorySnapshot() = layeredMemory.evidences()
 

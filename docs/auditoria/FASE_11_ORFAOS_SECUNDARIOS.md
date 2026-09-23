@@ -23,7 +23,7 @@ A navegação principal continua sendo `MainActivity -> SandboxMobileApp -> Thre
 | `correctKnowledge` | Declaração em `BrainApiGateway`; nenhum caller encontrado | Correção de conhecimento sem UI | Manter; requer interação explícita do usuário. |
 | `Services.restart` | Declaração e chamada interna de `stop`/`start`; nenhum caller externo encontrado | Recovery API | Manter; decidir política de recuperação antes de expor. |
 | `AuthorizedCapabilityExecutor` | Classe instanciada no teste `AuthorizedCapabilityExecutorTest`; nenhuma instanciação produtiva encontrada | Ponto de extensão testado, não órfão absoluto | Manter; uso produtivo deve seguir o desenho de PolicyBroker. |
-| `PolicyGatedExecutor` | Declaração sem instanciação encontrada na busca atual | Ponte de policy preparada | Manter; não remover sem confirmar todos os pontos de composição futuros. |
+| `PolicyGatedExecutor` | Declaração sem instanciação encontrada na busca atual | Ponte de policy preparada | **Superado pela Fase 12** (`FASE_12_AUDITORIA_E2E_PONTA_A_PONTA.md`/`PLANO_CONEXAO_FASE_12.md`): confirmado que `ActionGateway.execute()` já cobre a autorização via `PolicyBroker` no caminho real; classe removida. |
 
 ## Evidências importantes
 
@@ -45,7 +45,7 @@ A próxima decisão deve ser de produto/arquitetura, caso a caso:
 3. definir o fluxo seguro de importação de snapshots remotos;
 4. criar feedback explícito de conhecimento;
 5. definir recovery de serviços;
-6. compor `PolicyGatedExecutor`/`AuthorizedCapabilityExecutor` em pontos produtivos sem duplicar gates.
+6. compor `AuthorizedCapabilityExecutor` em pontos produtivos sem duplicar gates (`PolicyGatedExecutor` foi removido na Fase 12 — ver `PLANO_CONEXAO_FASE_12.md`).
 
 ## Ordem de validação
 

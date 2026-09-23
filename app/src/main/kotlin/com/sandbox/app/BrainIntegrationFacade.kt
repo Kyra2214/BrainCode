@@ -27,23 +27,21 @@ import com.brain.skill.SkillManifest
 import com.brain.skill.SkillRecord
 import com.brain.skill.SkillRegistry
 import com.brain.skill.TrustLevel
-import com.brain.workflow.WorkflowEngine
-import com.brain.workflow.WorkflowManifest
-import com.brain.workflow.WorkflowNode
-import com.brain.workflow.WorkflowRunResult
-import com.brain.workflow.WorkflowStepResult
 import java.io.File
 import java.time.Instant
 
 /**
  * Fachada Android para os subsistemas Brain locais e persistentes.
  *
- * Importante: o workflow exposto aqui é deliberadamente LOCAL. Execução
- * autorizada no Sandbox usa BrainSandboxController/BrainSandboxExecutionBridge.
+ * Importante: esta fachada NÃO expõe mais um workflow próprio. Qualquer execução de
+ * workflow/health-check passa exclusivamente por BrainSandboxController.healthCheck(),
+ * que roda o ciclo autorizado real (BrainSandboxController -> BrainSandboxExecutionBridge
+ * -> CicloExecucaoPlano). Isso elimina a duplicidade histórica entre um WorkflowEngine
+ * "local/demonstrativo" aqui e o caminho real do Sandbox (ver PLANO_LIMPEZA_E_REESTRUTURACAO,
+ * Fase 2).
  */
 class BrainIntegrationFacade(private val context: Context, private val stateDir: File) {
     private val skills = SkillRegistry()
-    private val workflows = WorkflowEngine(File(stateDir, "workflows.json"))
     private val memory: ExperienceMemory = FileExperienceMemory(File(stateDir, "memory.jsonl"))
     private val discovery = ExplorerIntelligencePipeline()
     private val delivery = ObservableDelivery()
@@ -73,25 +71,6 @@ class BrainIntegrationFacade(private val context: Context, private val stateDir:
     }
 
     fun enabledSkills(): List<SkillRecord> = skills.listEnabled()
-
-    /**
-     * Workflow local/demonstrativo: não executa comandos no Sandbox.
-     * O nome é preservado por compatibilidade com a UI existente.
-     */
-    fun runHealthWorkflow(runId: String): WorkflowRunResult = workflows.run(
-        manifest = WorkflowManifest(
-            id = "sandbox-health-local-workflow",
-            version = "1.1.0",
-            nodes = listOf(WorkflowNode("health", "sandbox.health", retryLimit = 1))
-        ),
-        runId = runId,
-        idempotencyKey = "sandbox-health-local:$runId",
-        authorize = { it == "sandbox.health" },
-        execute = { node, attempt ->
-            emit(runId, node.id, "WorkflowStepEvaluated", mapOf("capability" to node.capability, "attempt" to attempt.toString(), "execution" to "local"))
-            WorkflowStepResult(node.id, success = true, attempts = attempt, output = mapOf("capability" to node.capability, "execution" to "local"))
-        }
-    )
 
     suspend fun recordExperience(runId: String, success: Boolean) {
         memory.registrar(

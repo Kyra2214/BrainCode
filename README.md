@@ -36,7 +36,7 @@ docs/ — documentação canônica e histórica.
 
 ## Context Engineering 2.4
 
-O repositório possui CLAUDE.md, AGENTS.md, INITIAL.md, PRPs/templates/prp_base.md e docs/CONTEXT_ENGINEERING.md.
+O repositório possui CLAUDE.md, AGENTS.md, PRPs/templates/prp_base.md e docs/CONTEXT_ENGINEERING.md.
 
 ContextPack segue:
 ReasoningState → Planner → PlanoExecucao → Task.

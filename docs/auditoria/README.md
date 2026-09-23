@@ -14,6 +14,11 @@ A regra da auditoria foi **código como fonte da verdade**. Documentação anter
 6. `FASE_6_UI.md` — o que a UI realmente chama e quais capacidades chegam por composer/slash.
 7. `FASE_7_CATALOGO_FERRAMENTAS.md` — inventário de toolchains, plugins, binários, comandos e capabilities.
 8. `FASE_8_ARVORE_E_SIMULADO_COMPLETO.md` — árvore ponta a ponta e simulação desde instalação até entrega.
+9. `FASE_9_REMOCAO_UI_ORFA.md` — remoção do cluster de UI órfã identificado na Fase 6.
+10. `FASE_10_INSTALLEDBYTES.md` — correção da exibição de `installedBytes` nas Toolchains.
+11. `FASE_11_ORFAOS_SECUNDARIOS.md` — triagem de órfãos secundários pós-Fase 10.
+12. `FASE_12_AUDITORIA_E2E_PONTA_A_PONTA.md` — nova varredura de wiring pós Fase 4.1/correção de escalonamento: confirma o caminho canônico Android e lista peças testadas mas sem caller em produção (`ExecutionTrace`, `BehaviorGate`s não usados no `PostExecutionGate`, `PolicyGatedExecutor`, `ContextRevisionFixer`, `HttpProviderClient`, `ProviderBrainApiGateway`/`LlmIntentAdvisor`).
+13. `PLANO_CONEXAO_FASE_12.md` — plano de implementação para o que a Fase 12 encontrou: conecta `ExecutionTrace` e unifica os `BehaviorGate`s com `PostExecutionGate` (sem LLM, ainda não implementado); avisa que `HttpProviderClient`/`ProviderBrainApiGateway`/`LlmIntentAdvisor` envolvem LLM e ficam fora enquanto o plano do projeto for sem LLM; **`PolicyGatedExecutor` e `ContextRevisionFixer` já foram removidos** por serem redundantes com `ActionGateway`/`FindingsRevisionFixer`.
 
 ## Achados centrais
 

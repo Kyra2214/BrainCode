@@ -30,10 +30,10 @@ class AndroidSandboxFactory(private val context: Context) {
         File(sandboxBaseDir, "rootfs-extra.tar.gz"),
         File(sandboxBaseDir, "rootfs-android.tar.gz")
     )
-    private val modelDir = File(sandboxBaseDir, "models")
     private val extractedRootfsDir = File(sandboxBaseDir, "rootfs")
     private val extractionMarker = File(sandboxBaseDir, ".extractor-version")
     private val roofts06Marker = File(sandboxBaseDir, ".roofts-0.6-commit")
+    private val layersReportFile = File(sandboxBaseDir, ".rootfs-layers-report.json")
     private val prootTmpDir = File(context.cacheDir, "sandbox-tmp")
 
     private val rootfsVerifier by lazy {
@@ -81,40 +81,6 @@ class AndroidSandboxFactory(private val context: Context) {
         return SandboxResourceManager(downloadedArchives[layer], rootfsVerifier)
     }
 
-    fun modelResourceManager(modelId: String): SandboxResourceManager {
-        require(modelId.matches(Regex("[a-z0-9][a-z0-9._-]*"))) { "ID de modelo inválido" }
-        modelDir.mkdirs()
-        return SandboxResourceManager(File(modelDir, "$modelId.gguf"))
-    }
-
-    fun modelFile(modelId: String): File = File(modelDir, "$modelId.gguf")
-
-    fun ensureLocalModelLinkedIntoRootfs(modelId: String): String? {
-        val source = modelFile(modelId)
-        if (!source.isFile || !extractedRootfsDir.isDirectory) return null
-        val guestRelativePath = "home/sandbox/models/$modelId.gguf"
-        val destination = File(extractedRootfsDir, guestRelativePath)
-        if (!destination.exists() || destination.length() != source.length()) {
-            destination.parentFile?.mkdirs()
-            destination.delete()
-            val linked = runCatching { java.nio.file.Files.createLink(destination.toPath(), source.toPath()) }.isSuccess
-            if (!linked && runCatching { source.copyTo(destination, overwrite = true) }.isFailure) return null
-        }
-        return "/$guestRelativePath"
-    }
-
-    fun buildLocalModelChatCommand(modelPathInGuest: String, prompt: String, maxTokens: Int = 200): List<String> {
-        val script = """
-            BIN=${'$'}(command -v llama-cli 2>/dev/null || command -v llama-server 2>/dev/null || command -v llama 2>/dev/null || command -v main 2>/dev/null)
-            if [ -z "${'$'}BIN" ]; then
-              echo "LLAMA_CPP_NAO_ENCONTRADO: nenhum binario de inferencia foi encontrado no rootfs." >&2
-              exit 127
-            fi
-            exec "${'$'}BIN" -m "$modelPathInGuest" -p "${'$'}1" -n $maxTokens --temp 0.7
-        """.trimIndent()
-        return listOf("/bin/bash", "-c", script, "chat", prompt)
-    }
-
     fun isRootfsReady(): Boolean = rootfsExtractionValid()
 
     /** True when the incremental 0.6 payload has been installed over the layers. */
@@ -148,15 +114,21 @@ class AndroidSandboxFactory(private val context: Context) {
             extractionMarker.delete()
             val totalArchiveBytes = downloadedArchives.sumOf { it.length() }.coerceAtLeast(1L)
             var completedArchiveBytes = 0L
+            val layerLabels = listOf("0.3 base", "0.4 agent-extra", "0.5 agent-android")
+            val layerStats = mutableListOf<RootfsLayerStats>()
             downloadedArchives.forEachIndexed { index, archive ->
                 progressListener?.invoke(completedArchiveBytes, totalArchiveBytes, "Extraindo camada ${index + 1}/3")
+                val before = treeStats(extractedRootfsDir)
                 TarGzExtractor.extract(archive, extractedRootfsDir) { bytesRead ->
                     progressListener?.invoke((completedArchiveBytes + bytesRead).coerceAtMost(totalArchiveBytes), totalArchiveBytes, "Extraindo camada ${index + 1}/3")
                 }
                 completedArchiveBytes += archive.length()
+                val delta = treeStats(extractedRootfsDir) - before
+                layerStats += RootfsLayerStats(layerLabels.getOrElse(index) { "camada ${index + 1}" }, delta.files, delta.dirs, delta.symlinks, delta.bytes / (1024 * 1024))
             }
             validateExtractedRootfs()
             extractionMarker.writeText(EXTRACTOR_VERSION)
+            persistLayerReport(layerStats)
             deleteDownloadedArchives()
         }
         installRoofts06()
@@ -240,6 +212,66 @@ class AndroidSandboxFactory(private val context: Context) {
     }
 
     fun clearPersistentSession() = context.getSharedPreferences(SESSION_PREFS, Context.MODE_PRIVATE).edit().remove(SESSION_ID).apply()
+
+    /** Estatísticas de uma camada do RootFS (0.3/0.4/0.5 na extração, 0.6 no diretório fixo do Agent Skills). */
+    data class RootfsLayerStats(val label: String, val files: Int, val dirs: Int, val symlinks: Int, val megabytes: Long)
+
+    private data class TreeStats(val files: Int, val dirs: Int, val symlinks: Int, val bytes: Long) {
+        operator fun minus(other: TreeStats) =
+            TreeStats(files - other.files, dirs - other.dirs, symlinks - other.symlinks, bytes - other.bytes)
+    }
+
+    /** Conta arquivos/pastas/symlinks/bytes de uma subárvore. Reutilizado pelo diff por camada e pelo relatório 0.6. */
+    private fun treeStats(dir: File): TreeStats {
+        var files = 0; var dirs = 0; var symlinks = 0; var bytes = 0L
+        fun walk(d: File) {
+            for (child in runCatching { d.listFiles() }.getOrNull().orEmpty()) {
+                try {
+                    when {
+                        java.nio.file.Files.isSymbolicLink(child.toPath()) -> symlinks++
+                        child.isDirectory -> { dirs++; walk(child) }
+                        child.isFile -> { files++; bytes += child.length() }
+                    }
+                } catch (_: Exception) { /* entrada inacessível: ignorada, já contabilizada como erro em inspectExtractedRootfs */ }
+            }
+        }
+        walk(dir)
+        return TreeStats(files, dirs, symlinks, bytes)
+    }
+
+    private fun persistLayerReport(stats: List<RootfsLayerStats>) {
+        val arr = org.json.JSONArray()
+        stats.forEach { s ->
+            arr.put(
+                org.json.JSONObject().apply {
+                    put("label", s.label); put("files", s.files); put("dirs", s.dirs)
+                    put("symlinks", s.symlinks); put("mb", s.megabytes)
+                }
+            )
+        }
+        runCatching { layersReportFile.writeText(arr.toString()) }
+    }
+
+    /**
+     * Relatório do RootFS por camada (0.3/0.4/0.5 capturadas durante a extração, persistidas em
+     * [layersReportFile]; 0.6 computada ao vivo por viver num diretório fixo e isolado). Sem total
+     * agregado único — cada camada aparece separada, incluindo quando só o 0.6 foi (re)instalado
+     * por cima de um RootFS 0.3–0.5 já extraído antes desta instrumentação existir.
+     */
+    fun layerReport(): List<RootfsLayerStats> {
+        val baseLayers = runCatching {
+            val json = org.json.JSONArray(layersReportFile.readText())
+            (0 until json.length()).map { i ->
+                val o = json.getJSONObject(i)
+                RootfsLayerStats(o.getString("label"), o.getInt("files"), o.getInt("dirs"), o.getInt("symlinks"), o.getLong("mb"))
+            }
+        }.getOrDefault(emptyList())
+        val roofts06Layer = if (isRoofts06Installed()) {
+            val stats = treeStats(File(extractedRootfsDir, "opt/roofts/0.6"))
+            listOf(RootfsLayerStats("0.6 agent-skills", stats.files, stats.dirs, stats.symlinks, stats.bytes / (1024 * 1024)))
+        } else emptyList()
+        return baseLayers + roofts06Layer
+    }
 
     fun inspectExtractedRootfs(): String {
         if (!extractedRootfsDir.exists()) return "Rootfs ainda não foi extraído (pasta ${extractedRootfsDir.path} não existe)."

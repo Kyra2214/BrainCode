@@ -123,13 +123,9 @@ sealed interface ApiKeyTestUiState {
     data class Failure(val message: String) : ApiKeyTestUiState
 }
 
-data class CliToolCheck(val label: String, val script: String)
-private val CLI_TOOL_CHECKS = listOf(
-    CliToolCheck("git", "git --version"), CliToolCheck("curl", "curl --version | head -n 1"),
-    CliToolCheck("sqlite3", "sqlite3 --version"), CliToolCheck("make", "make --version | head -n 1"),
-    CliToolCheck("zip/unzip", "zip -v | head -n 1 && unzip -v | head -n 1"),
-    CliToolCheck("pip (python3 -m pip)", "python3 -m pip --version"), CliToolCheck("npm", "npm -v")
-)
+// CliToolCheck e a lista de checagens agora vivem em com.sandbox.sandbox.SelfCheckCliTools,
+// para que o mesmo script exato seja o que o TrustedInstallerExecutor confia por hash
+// (Fase 1: o self-check deixou de rodar bash -c direto no runtime bruto).
 
 val QUICK_COMMANDS = listOf(
     QuickCommand("git --version", "git --version"),
@@ -610,10 +606,15 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 }
                 selfCheckStage = "Verificando ferramentas de linha de comando..."
                 val cliItems = withContext(Dispatchers.IO) {
-                    CLI_TOOL_CHECKS.map { check ->
-                        val active = runtime
-                        if (active == null) SelfCheckItem(check.label, SelfCheckStatus.FAILED, "runtime indisponível") else {
-                            val e = runCatching { active.execute(listOf("bash", "-c", check.script), timeoutSeconds = 15, workingDir = "/home/sandbox") }.getOrNull()
+                    // Passa pelo mesmo executor de produção usado para instalar plugins/toolchains
+                    // (com.sandbox.sandbox.TrustedInstallerExecutor), em vez de chamar o runtime
+                    // bruto direto. Antes, o self-check podia reportar "OK" para coisas que na
+                    // prática falhariam pela política real — ver Fase 1 do plano de limpeza.
+                    com.sandbox.sandbox.SelfCheckCliTools.checks.map { check ->
+                        if (runtime == null) SelfCheckItem(check.label, SelfCheckStatus.FAILED, "runtime indisponível") else {
+                            val e = runCatching {
+                                plat.installerExecutor.execute(listOf("bash", "-c", check.script), timeoutSeconds = 15, workingDir = "/home/sandbox")
+                            }.getOrNull()
                             when {
                                 e == null -> SelfCheckItem(check.label, SelfCheckStatus.FAILED, "falha ao executar a checagem")
                                 e.succeeded -> SelfCheckItem(check.label, SelfCheckStatus.OK, e.stdout.lineSequence().firstOrNull { it.isNotBlank() }?.take(120) ?: "instalado")
@@ -634,15 +635,24 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 selfCheckStage = "Conferindo arquivos do rootfs extraído no disco..."
                 val rootfsText = withContext(Dispatchers.IO) { runCatching { factory.inspectExtractedRootfs() }.getOrElse { "Falha ao inspecionar rootfs: ${it.message}" } }
                 val missing = rootfsText.contains("AUSENTE")
-                val m = Regex("Total: (\\d+) arquivos, (\\d+) pastas, (\\d+) symlinks, (\\d+) MB").find(rootfsText)
-                val detail = m?.let { "${it.groupValues[1]} arquivos, ${it.groupValues[2]} pastas, ${it.groupValues[4]} MB no disco" } ?: "tamanho não determinado"
+                val layerReport = withContext(Dispatchers.IO) { runCatching { factory.layerReport() }.getOrDefault(emptyList()) }
+                val rootfsItems = buildList {
+                    add(SelfCheckItem("Caminhos essenciais", if (missing) SelfCheckStatus.FAILED else SelfCheckStatus.OK, if (missing) "faltam caminhos essenciais — ver relatório completo" else "presentes"))
+                    if (layerReport.isEmpty()) {
+                        add(SelfCheckItem("Camadas do RootFS", SelfCheckStatus.WARNING, "sem relatório por camada (RootFS extraído antes desta instrumentação — reinstale para gerar)"))
+                    } else {
+                        layerReport.forEach { layer ->
+                            add(SelfCheckItem("Camada ${layer.label}", SelfCheckStatus.OK, "${layer.files} arquivos, ${layer.dirs} pastas, ${layer.symlinks} symlinks, ${layer.megabytes} MB"))
+                        }
+                    }
+                }
                 val report = SelfCheckReport(
                     System.currentTimeMillis(),
                     listOf(
                         SelfCheckSection("Toolchains", toolchainItems),
                         SelfCheckSection("Ferramentas de linha de comando", cliItems),
                         SelfCheckSection("Plugins opcionais instalados (catálogo)", pluginItems),
-                        SelfCheckSection("Rootfs no disco", listOf(SelfCheckItem("Rootfs extraído (caminhos essenciais)", if (missing) SelfCheckStatus.FAILED else SelfCheckStatus.OK, detail)))
+                        SelfCheckSection("Rootfs no disco", rootfsItems)
                     )
                 )
                 selfCheckReport = report
@@ -716,7 +726,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 val codeGenerationExecutor = CodeGenerationExecutor(
                     gateway = brainApiGateway,
                     workspace = preparedPlatform.workspace,
-                    activeProjectName = { workspaceProjectName }
+                    activeProjectName = { workspaceProjectName },
+                    rooftsSkills = runCatching { RooftsSkillLoader.load(getApplication()) }.getOrDefault(emptyList())
                 )
                 val promptGenerationExecutor = PromptGenerationExecutor(
                     promptLibrary = promptLibrary,
@@ -733,6 +744,15 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 )
                 val conversationKnowledgeCycle = com.brain.memory.KnowledgeLearningCycle()
                 val conversationGateway = ConversationBrainGatewayAdapter(brainApiGateway)
+                // Item 3 do PLANO_ESCALONAMENTO: Porta 1 (Chat) NUNCA pode ter conta externa liberada
+                // (DoorPolicy.externalAccountsAllowed(Door.CHAT) é sempre false). Antes, estes três
+                // pontos recebiam apiProviders.map{...} diretamente, por fora do PolicyBroker/DoorScope —
+                // ou seja, o Chat conseguia de fato chamar a API paga. chatDoorAccounts força a mesma
+                // regra que o resto do app usa (DoorScope.visibleAccounts), então some com Door.CHAT.
+                val chatDoorAccounts = com.brain.secretary.DoorScope(
+                    door = com.brain.secretary.Door.CHAT,
+                    phase = com.brain.secretary.CreatePhase.CHAT
+                ).visibleAccounts(apiProviders.map { "android:${it.id}" }.toSet())
                 val chatResponseExecutor = ChatResponseExecutor(
                     contextProvider = {
                         sessions.firstOrNull { it.id == activeSessionId }?.conversationContext ?: ConversationContext()
@@ -744,16 +764,16 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         conversationKnowledgeCycle,
                         interpreter = com.brain.conversation.LlmConversationInterpreter(
                             conversationGateway,
-                            accounts = apiProviders.map { "android:${it.id}" }.toSet()
+                            accounts = chatDoorAccounts
                         )
                     ),
                     structuredInterpreter = com.brain.conversation.LlmConversationInterpreter(
                         conversationGateway,
-                        accounts = apiProviders.map { "android:${it.id}" }.toSet()
+                        accounts = chatDoorAccounts
                     ),
                     outputReviewer = com.brain.conversation.LlmOutputReviewer(
                         conversationGateway,
-                        accounts = apiProviders.map { "android:${it.id}" }.toSet()
+                        accounts = chatDoorAccounts
                     )
                 )
                 brainController = BrainSandboxController(
@@ -798,6 +818,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     fun installRoofts06OverExistingRootfs() {
         if (phase != SandboxPhase.Ready) return
         viewModelScope.launch {
+            val jaInstaladoAntes = withContext(Dispatchers.IO) { runCatching { factory.isRoofts06Installed() }.getOrDefault(false) }
             phase = SandboxPhase.Preparing("Instalando Roofts 0.6 sobre os três RootFS existentes", 0, 1)
             val result = withContext(Dispatchers.IO) {
                 runCatching {
@@ -809,8 +830,20 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             }
             result.exceptionOrNull()?.let {
                 phase = SandboxPhase.Blocked(it.message ?: "Falha ao instalar Roofts 0.6")
+                appendThreadEvent(ThreadEvent.System("Roofts 0.6 — Agent Skills: falhou (${it.message ?: "erro desconhecido"})"))
                 return@launch
             }
+            val instaladoAgora = withContext(Dispatchers.IO) { runCatching { factory.isRoofts06Installed() }.getOrDefault(false) }
+            appendThreadEvent(
+                ThreadEvent.Report(
+                    "Roofts 0.6 — Agent Skills",
+                    when {
+                        !instaladoAgora -> "não confirmado após a instalação — verifique o RootFS"
+                        jaInstaladoAntes -> "já estava instalado, nenhuma mudança necessária"
+                        else -> "instalado com sucesso sobre o RootFS existente"
+                    }
+                )
+            )
             phase = SandboxPhase.NotReady
             prepareSandbox()
         }
@@ -1213,15 +1246,23 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch(Dispatchers.IO) { val s = p.services.stop(BuiltInServices.sqlite("/home/sandbox/workspace")); withContext(Dispatchers.Main) { sqliteServiceStatus = s; appendThreadEvent(ThreadEvent.Report("SQLite stop", if (s.running) "serviço ainda ativo" else "serviço parado")) } }
     }
     fun refreshBrainCatalogs() { val i = brainIntegration ?: return; brainSkillSummary = i.enabledSkills().map { "${it.manifest.id} (${it.manifest.capabilities.joinToString()})" }; viewModelScope.launch(Dispatchers.IO) { val r = i.memoryRate(); withContext(Dispatchers.Main) { memorySuccessRate = r } } }
+    /**
+     * Workflow real: delega ao ciclo autorizado do Sandbox (BrainSandboxController ->
+     * BrainSandboxExecutionBridge -> CicloExecucaoPlano). Não existe mais um workflow
+     * local/demonstrativo separado — ver PLANO_LIMPEZA_E_REESTRUTURACAO, Fase 2.
+     */
     fun runBrainWorkflow() {
+        val controller = brainController
         val i = brainIntegration
-        if (i == null) { appendThreadEvent(ThreadEvent.System("Workflow indisponível: Brain ainda não inicializado.")); return }
+        if (controller == null || i == null) { appendThreadEvent(ThreadEvent.System("Workflow indisponível: Brain ainda não inicializado.")); return }
         if (phase != SandboxPhase.Ready) { appendThreadEvent(ThreadEvent.System("Workflow indisponível: sandbox não está pronto.")); return }
         viewModelScope.launch(Dispatchers.IO) {
-            val r = runCatching { i.runHealthWorkflow("workflow-${System.currentTimeMillis()}") }.getOrNull()
-            r?.let { i.recordExperience(it.runId, it.status.name == "COMPLETED") }
+            val runId = "workflow-${System.currentTimeMillis()}"
+            val r = runCatching { controller.healthCheck(runId) }.getOrNull()
+            val concluido = r?.concluido == true
+            i.recordExperience(r?.runId ?: runId, concluido)
             withContext(Dispatchers.Main) {
-                lastWorkflowStatus = r?.status?.name ?: "FAILED"
+                lastWorkflowStatus = if (concluido) "COMPLETED" else "FAILED"
                 appendThreadEvent(ThreadEvent.Report("Workflow", lastWorkflowStatus ?: "FAILED"))
             }
         }

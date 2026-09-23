@@ -50,7 +50,32 @@ data class ErroObservado(
     val ocorridoEm: Instant
 )
 
-enum class TipoErro { LIMITE_ATINGIDO, TIMEOUT, ERRO_SERVIDOR, CHAVE_INVALIDA, POLICY_NEGADA, REQUISICAO_INVALIDA, DESCONHECIDO }
+enum class TipoErro {
+    LIMITE_ATINGIDO, TIMEOUT, ERRO_SERVIDOR, CHAVE_INVALIDA, POLICY_NEGADA, REQUISICAO_INVALIDA, DESCONHECIDO;
+
+    companion object {
+        /**
+         * Classificação heurística por texto de erro. Fonte única para qualquer
+         * coordenador/dispatcher que só tem uma String de erro (não um código
+         * estruturado) e precisa decidir retry, fallback de conta/provider ou
+         * saúde de conta. Antes duplicada em BrainExecutionCoordinator; agora
+         * também usada por Dispatcher e CicloExecucaoPlano — ver
+         * docs/LEGADO_E_DECISOES.md, Fase 2.
+         */
+        fun classify(error: String?): TipoErro {
+            val text = error.orEmpty().lowercase()
+            return when {
+                "429" in text || "rate limit" in text || "rate_limit" in text || "quota" in text || "too many requests" in text || "insufficient" in text -> LIMITE_ATINGIDO
+                "401" in text || "invalid api key" in text || "invalid key" in text || "unauthorized" in text -> CHAVE_INVALIDA
+                "403" in text || "forbidden" in text || "policy denied" in text || "policy negada" in text -> POLICY_NEGADA
+                "400" in text || "422" in text || "invalid request" in text || "requisição inválida" in text -> REQUISICAO_INVALIDA
+                "timeout" in text || "timed out" in text -> TIMEOUT
+                "500" in text || "502" in text || "503" in text || "server error" in text || "service unavailable" in text -> ERRO_SERVIDOR
+                else -> DESCONHECIDO
+            }
+        }
+    }
+}
 
 /**
  * Catálogo em runtime. O Android instala uma implementação dinâmica através

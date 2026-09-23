@@ -12,7 +12,7 @@ RooftS é uma entidade única composta pelas camadas 0.3–0.6. As camadas 0.3�
 
 ## 2.4 Context Engineering
 
-Implementado: CLAUDE.md, AGENTS.md, INITIAL.md, PRP template, contrato CONTEXT_ENGINEERING.md e ContextPack como entrada tipada do PlanoExecucao.
+Implementado: CLAUDE.md, AGENTS.md, PRP template, contrato CONTEXT_ENGINEERING.md e ContextPack como entrada tipada do PlanoExecucao.
 
 Não implementado ainda: retrieval semântico geral, hashing/deduplicação/chunking geral, ranking lexical/semântico e executor universal de retrievalHints.
 

@@ -1,11 +1,17 @@
 package com.sandbox.agent
 
+import com.brain.behavior.BehaviorGate
 import com.brain.behavior.CritiqueInput
 import com.brain.behavior.CritiqueResult
 import com.brain.behavior.CritiqueStatus
+import com.brain.behavior.CriticGate
 import com.brain.behavior.DoubtDrivenReview
 import com.brain.behavior.ExecutionEvidence
+import com.brain.behavior.GateStatus
+import com.brain.behavior.LearningGate
+import com.brain.behavior.LearningInput
 import com.brain.behavior.ReadinessEvaluator
+import com.brain.behavior.ReadinessGate
 import com.brain.behavior.ReadinessInput
 import com.brain.behavior.ReadinessStageName
 import com.brain.behavior.RevisionAction
@@ -16,6 +22,7 @@ import com.brain.behavior.FindingSeverity
 import com.brain.behavior.ValidatedLearning
 import com.brain.behavior.LearningCandidate
 import com.brain.behavior.VerificationCheck
+import com.brain.behavior.VerificationGate
 import com.brain.behavior.VerificationResult
 import com.brain.behavior.ReadinessStage
 import com.brain.behavior.ReadinessReport
@@ -33,7 +40,16 @@ import com.brain.validation.ValidationResult
  * CicloExecucaoPlano e transforma evidência em verification, critic, revisão,
  * readiness e learning validado.
  */
-class PostExecutionGate(private val memory: LayeredMemory) {
+class PostExecutionGate(
+    private val memory: LayeredMemory,
+    /** Fase 12 (ver PLANO_CONEXAO_FASE_12.md, seção 2): mesma decisão PASSED/FAILED/BLOCKED
+     * usada por BehaviorGatesTest, para não duplicar critério em dois lugares. Injetáveis
+     * para permitir espiar/mockar nos testes de unificação. */
+    private val verificationGate: BehaviorGate<VerificationResult, VerificationResult> = VerificationGate(),
+    private val criticGate: BehaviorGate<CritiqueResult, CritiqueResult> = CriticGate(),
+    private val readinessGate: BehaviorGate<ReadinessReport, ReadinessReport> = ReadinessGate(),
+    private val learningGate: BehaviorGate<LearningInput, ExecutionEvidence> = LearningGate()
+) {
     private val critic = UniversalCritic()
     private val review = DoubtDrivenReview()
     private val readiness = ReadinessEvaluator()
@@ -101,8 +117,9 @@ class PostExecutionGate(private val memory: LayeredMemory) {
                 findings = baseCritique.findings + CritiqueFinding("research.unused", "fontes de pesquisa disponíveis não refletidas no resultado", FindingSeverity.MEDIUM)
             )
         } else baseCritique
+        val verificationGateResult = verificationGate.evaluate(verification)
         val reviewedRevision = review.review(critiqueInput, critique)
-        val revision: RevisionDecision = if (!verification.passed && reviewedRevision.action == RevisionAction.ACCEPT) {
+        val revision: RevisionDecision = if (verificationGateResult.status != GateStatus.PASSED && reviewedRevision.action == RevisionAction.ACCEPT) {
             RevisionDecision(
                 action = RevisionAction.REVISE,
                 reason = "verification falhou e exige nova execução",
@@ -232,7 +249,17 @@ class PostExecutionGate(private val memory: LayeredMemory) {
             targetCriteria = validationFindings.map { it.code },
             maxAttempts = 3
         )
-        val learningRecorded = if (verification.passed && finalCritique.status == com.brain.behavior.CritiqueStatus.PASS && readinessReport.status == com.brain.behavior.ReadinessStatus.READY) {
+        val finalCriticGateResult = criticGate.evaluate(finalCritique)
+        val readinessGateResult = readinessGate.evaluate(readinessReport)
+        val primaryEvidence = evidence.firstOrNull()
+            ?: ExecutionEvidence("${cycle.runId}:cycle", "cycle", cycle.resposta.orEmpty().ifBlank { "cycle" }, "CicloExecucaoPlano", verified = true)
+        val learningGateResult = learningGate.evaluate(LearningInput(primaryEvidence, cycle.resposta.orEmpty()))
+        val learningRecorded = if (
+            verificationGateResult.status == GateStatus.PASSED &&
+            finalCriticGateResult.status == GateStatus.PASSED &&
+            readinessGateResult.status == GateStatus.PASSED &&
+            learningGateResult.status == GateStatus.PASSED
+        ) {
             learning.record(
                 LearningCandidate(
                     runId = cycle.runId,
@@ -240,7 +267,7 @@ class PostExecutionGate(private val memory: LayeredMemory) {
                     problem = cycle.objetivo,
                     strategy = plan.passos.joinToString(",") { it.capacidade },
                     result = cycle.resposta.orEmpty(),
-                    evidence = evidence.firstOrNull() ?: ExecutionEvidence("${cycle.runId}:cycle", "cycle", cycle.resposta.orEmpty().ifBlank { "cycle" }, "CicloExecucaoPlano", verified = true),
+                    evidence = primaryEvidence,
                     verification = verification,
                     critique = finalCritique,
                     readiness = readinessReport
@@ -248,10 +275,10 @@ class PostExecutionGate(private val memory: LayeredMemory) {
             ).isSuccess
         } else false
         val issues = buildList {
-            if (!verification.passed) add("verification.failed")
-            if (finalCritique.status != com.brain.behavior.CritiqueStatus.PASS) add("critic.${finalCritique.status.name.lowercase()}")
+            if (verificationGateResult.status != GateStatus.PASSED) add("verification.failed")
+            if (finalCriticGateResult.status != GateStatus.PASSED) add("critic.${finalCritique.status.name.lowercase()}")
             if (effectiveRevision.action != RevisionAction.ACCEPT) add("revision.${effectiveRevision.action.name.lowercase()}")
-            if (readinessReport.status != com.brain.behavior.ReadinessStatus.READY) addAll(readinessReport.blockers)
+            if (readinessGateResult.status != GateStatus.PASSED) addAll(readinessReport.blockers)
             if (!learningRecorded) add("learning.not-recorded")
         }
         return ResultadoPosExecucao(
@@ -306,11 +333,13 @@ class PostExecutionGate(private val memory: LayeredMemory) {
             checks,
             evidenceIds
         )
-        val passed = verification.passed && cycle.passos.all { it.decisaoPolicy?.decision?.name == "ALLOW" }
+        val verificationGateResult = verificationGate.evaluate(verification)
+        val passed = verificationGateResult.status == GateStatus.PASSED && cycle.passos.all { it.decisaoPolicy?.decision?.name == "ALLOW" }
         val critique = if (passed) CritiqueResult(CritiqueStatus.PASS, emptyList(), checks.map { it.criterionId })
         else CritiqueResult(CritiqueStatus.BLOCKED, listOf(CritiqueFinding("chat.fast-path.failed", "resposta CHAT não passou na verificação leve", FindingSeverity.BLOCKING)))
+        val criticGateResult = criticGate.evaluate(critique)
         val revision = RevisionDecision(
-            if (passed) RevisionAction.ACCEPT else RevisionAction.REVISE,
+            if (criticGateResult.status == GateStatus.PASSED) RevisionAction.ACCEPT else RevisionAction.REVISE,
             if (passed) "fast path CHAT validado" else "fast path CHAT reprovado",
             maxAttempts = 1
         )
@@ -322,6 +351,7 @@ class PostExecutionGate(private val memory: LayeredMemory) {
             stages,
             if (passed) emptyList() else listOf("chat.fast-path.failed")
         )
+        val readinessGateResult = readinessGate.evaluate(readiness)
         val chatStep = cycle.passos.firstOrNull { it.capacidade == "chat.respond" }
         val doorE2E = chatStep?.let {
             validation.lightChat(
@@ -345,7 +375,7 @@ class PostExecutionGate(private val memory: LayeredMemory) {
             revision = revision,
             readiness = readiness,
             learningRecorded = false,
-            issues = if (passed) emptyList() else listOf("chat.fast-path.failed"),
+            issues = if (readinessGateResult.status == GateStatus.PASSED) emptyList() else listOf("chat.fast-path.failed"),
             selfE2E = emptyList(),
             doorE2E = doorE2E
         )

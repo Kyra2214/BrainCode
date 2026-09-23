@@ -29,6 +29,24 @@ PostExecutionGate fecha Verification, Critic, Revision, Readiness e Learning.
 EventStore/BehaviorTrace registram observabilidade e replay.
 Memory mantém contexto, experiência e conhecimento validado.
 
+## 2.1 ADR — Nomenclatura de "Capability" (Fase 3)
+
+Dois conceitos têm nome quase idêntico, em módulos diferentes, com responsabilidades diferentes — risco real de confusão para o próximo colaborador (humano ou IA):
+
+- `com.brain.capability.CapabilityRegistry` (`brain/`) — **catálogo declarativo de metadados**. Registra que uma capability existe (API, provider, agent, skill, tool, sandbox capability, workflow...) para descoberta (`CapabilityDiscovery`). Não autoriza, não traduz para comando, não executa.
+- `com.sandbox.agent.CapabilityResolver` (`android-module/`) — **tradutor determinístico**. Converte uma capability já autorizada num comando fixo do catálogo allowlist do Sandbox (`argv`). Não decide se a capability é permitida — isso já foi decidido antes de chegar aqui; nunca aceita comando/shell arbitrário do chamador.
+
+Os nomes colidem por causa da palavra "Capability", mas os dois atuam em estágios opostos: `CapabilityRegistry` responde "essa capability existe, o que ela é?" (descoberta, **antes** da autorização, em `brain/`); `CapabilityResolver` responde "essa capability já foi autorizada, qual comando eu rodo?" (execução, **depois** da autorização, só dentro do Sandbox Android).
+
+Duas peças vizinhas completam o quarteto citado na Fase 3:
+
+- `com.brain.policy.PolicyBroker` (`brain/`) — **autoridade única de autorização**, deny-by-default. Decide se um actor pode usar uma capability num contexto/porta/risco dados. Não traduz capability em comando, não executa.
+- `com.brain.gateway.ActionGateway` (`brain/`) — **fronteira central de execução**. Recebe um `ActionRequest` já validado, confirma a decisão do `PolicyBroker` e repassa a um `ActionExecutor` concreto — no caminho Android, `AgentSandboxSession`, o único lugar que de fato chama `CapabilityResolver.resolve(...)`. Não autoriza por conta própria, não resolve comando.
+
+Ordem real no caminho Android — `CicloExecucaoPlano → Dispatcher → ActionGateway → AgentSandboxSession → CapabilityResolver → comando do Sandbox`: descoberta (`CapabilityRegistry`) e autorização (`PolicyBroker`) acontecem em `brain/`, antes do `ActionGateway`; a tradução para comando (`CapabilityResolver`) só acontece depois, dentro de `android-module/`, e só se a autorização já passou.
+
+**Decisão sobre renomear (opcional, conforme o plano):** avaliado renomear `CapabilityResolver` → `SandboxCommandCatalog`, mas mantido o nome atual por ora — a classe já é referenciada por múltiplos pontos de instanciação (`AuthorizedCapabilityExecutor`, `Sandbox`, `AgentSandboxSession`) e por `CapabilityResolverTest`; este documento já resolve a ambiguidade de responsabilidade sem esse churn. Reavaliar renomear se a colisão de nome continuar gerando confusão na prática.
+
 ## 3. Plano e contexto
 
 PlanoExecucao contém objetivo, passos, assumptions, policies, fallback, requisitos ausentes e ContextPack opcional.
