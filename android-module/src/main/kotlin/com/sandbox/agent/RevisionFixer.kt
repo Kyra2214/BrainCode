@@ -31,6 +31,8 @@ data class FixApplication(
 
 /** Converte findings em instruções que chegam ao executor do passo de geração. */
 class FindingsRevisionFixer : RevisionFixer {
+    private val noParameterCapabilities = setOf("sandbox.health", "sandbox.info", "sandbox.diagnose", "sandbox.clean")
+
     override fun fix(plan: PlanoExecucao, critique: CritiqueResult, attempt: Int): FixApplication {
         val feedback = critique.findings.joinToString(" | ") { finding ->
             val criterion = finding.criterionId?.let { " requisito=$it" }.orEmpty()
@@ -40,7 +42,8 @@ class FindingsRevisionFixer : RevisionFixer {
         val revised = plan.copy(
             assumptions = plan.assumptions + marker + feedback,
             passos = plan.passos.map { step ->
-                step.copy(parametros = (step.parametros + marker + feedback).distinct())
+                if (step.capacidade in noParameterCapabilities) step
+                else step.copy(parametros = (step.parametros + marker + feedback).distinct())
             }
         )
         return FixApplication(

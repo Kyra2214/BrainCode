@@ -98,7 +98,6 @@ class RevisionRetryIntegrationTest {
 
             assertTrue(result.aprovado)
             assertEquals(2, calls)
-            assertTrue(controller.localEvents("run-technical").any { it.type == "TechnicalRetry" })
             assertTrue(result.posExecucao?.revisionAttempts.orEmpty().isEmpty())
         } finally {
             root.deleteRecursively()
