@@ -45,6 +45,7 @@ import com.brain.behavior.VerificationResult
 import com.brain.behavior.VerificationStatus
 import com.brain.validation.ValidationResult
 import com.brain.secretary.UserResponse
+import com.brain.secretary.Door
 
 
 enum class StatusPasso { APROVADO, REPROVADO, NEGADO_PELA_POLICY, AGUARDANDO_APROVACAO, BLOQUEADO_POR_DEPENDENCIA }
@@ -313,24 +314,37 @@ class CicloExecucaoPlano(
                 val diagnosis = runtimeDoctor.diagnose(authorization.runId, passo.id, gatewayExecution?.error)
                 if (!diagnosis.healthy) runtimeDoctor.repair(authorization.runId, passo.id, diagnosis)
             }
+            val chatResponse = if (passo.capacidade == "chat.respond" && sucesso) {
+                gatewayExecution?.userResponse ?: gatewayExecution?.result?.takeIf { it.isNotBlank() }?.let {
+                    UserResponse(
+                        text = it,
+                        evidence = gatewayExecution.evidence,
+                        requestId = "${authorization.runId}:${passo.id}",
+                        conversationId = authorization.runId
+                    )
+                }
+            } else gatewayExecution?.userResponse
+            val chatEvidence = if (passo.capacidade == "chat.respond" && chatResponse != null && authorization.doorScope?.door == Door.CHAT) {
+                (gatewayExecution?.evidence.orEmpty() + "chat:secretary:accept" + "chat:request:${passo.id}").distinct()
+            } else gatewayExecution?.evidence.orEmpty()
             return ResultadoPasso(
                 passo.id,
                 if (sucesso) StatusPasso.APROVADO else StatusPasso.REPROVADO,
                 decisaoPolicy = dispatchFinal.gateway?.decision ?: decision,
                 resultado = if (passo.capacidade == "chat.respond") {
-                    gatewayExecution?.userResponse?.text
+                    chatResponse?.text
                 } else {
                     gatewayExecution?.result ?: gatewayExecution?.internalPayload
                 },
                 payloadInterno = gatewayExecution?.internalPayload,
-                userResponse = gatewayExecution?.userResponse,
+                userResponse = chatResponse,
                 decisaoRouter = decisaoRouter,
                 motivo = dispatchFinal.reason ?: if (sucesso) null else "Dispatcher não executou a capability",
                 actionId = "${passo.id}:${passo.id}",
                 custo = gatewayExecution?.custo ?: 0.0,
                 capacidade = passo.capacidade,
                 researchSources = gatewayExecution?.researchSources ?: emptyList(),
-                executionEvidence = gatewayExecution?.evidence ?: emptyList(),
+                executionEvidence = chatEvidence,
                 promptReasoning = gatewayExecution?.promptReasoning
             )
         }

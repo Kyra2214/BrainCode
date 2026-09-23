@@ -76,6 +76,12 @@ class PostExecutionGate(
                     (step.resultado?.isNotBlank() == true || step.executionEvidence.isNotEmpty() || step.evidencias.isNotEmpty())
             )
         }
+        // A resposta de UI é deliberadamente restrita a UserResponse. Para as portas de produção,
+        // a crítica ainda precisa enxergar o resultado técnico dos passos mesmo quando nenhum passo
+        // é chat.respond; não confundir ausência de resposta humana com ausência de resultado.
+        val effectiveResult = cycle.resposta ?: cycle.passos.mapNotNull { it.resultado ?: it.payloadInterno }
+            .filter { it.isNotBlank() }
+            .joinToString("\n")
         val checks = plan.passos.flatMap { step ->
             step.acceptanceCriteria.map { criterion ->
                 val result = cycle.passos.firstOrNull { it.passoId == step.id }
@@ -101,11 +107,11 @@ class PostExecutionGate(
             objective = cycle.objetivo,
             requirements = requirements,
             evidence = evidence,
-            result = cycle.resposta.orEmpty()
+            result = effectiveResult
         )
         val baseCritique: CritiqueResult = critic.evaluate(critiqueInput)
         val researchWasUsed = cycle.researchSources.any { source ->
-            val output = cycle.resposta.orEmpty().lowercase()
+            val output = effectiveResult.lowercase()
             listOf(source.title, source.source, source.relevantContent)
                 .flatMap { it.lowercase().split(Regex("[^\\p{L}\\p{Nd}]+")) }
                 .filter { it.length >= 5 }
@@ -252,8 +258,8 @@ class PostExecutionGate(
         val finalCriticGateResult = criticGate.evaluate(finalCritique)
         val readinessGateResult = readinessGate.evaluate(readinessReport)
         val primaryEvidence = evidence.firstOrNull()
-            ?: ExecutionEvidence("${cycle.runId}:cycle", "cycle", cycle.resposta.orEmpty().ifBlank { "cycle" }, "CicloExecucaoPlano", verified = true)
-        val learningGateResult = learningGate.evaluate(LearningInput(primaryEvidence, cycle.resposta.orEmpty()))
+            ?: ExecutionEvidence("${cycle.runId}:cycle", "cycle", effectiveResult.ifBlank { "cycle" }, "CicloExecucaoPlano", verified = true)
+        val learningGateResult = learningGate.evaluate(LearningInput(primaryEvidence, effectiveResult))
         val learningRecorded = if (
             verificationGateResult.status == GateStatus.PASSED &&
             finalCriticGateResult.status == GateStatus.PASSED &&
@@ -266,7 +272,7 @@ class PostExecutionGate(
                     taskId = "plan",
                     problem = cycle.objetivo,
                     strategy = plan.passos.joinToString(",") { it.capacidade },
-                    result = cycle.resposta.orEmpty(),
+                    result = effectiveResult,
                     evidence = primaryEvidence,
                     verification = verification,
                     critique = finalCritique,

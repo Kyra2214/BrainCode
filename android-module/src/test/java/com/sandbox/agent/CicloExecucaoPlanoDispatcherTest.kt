@@ -167,7 +167,7 @@ class CicloExecucaoPlanoDispatcherTest {
             )
             val plano = PlanoExecucao(
                 "acao unica",
-                listOf(PassoPlano("passo-1", "flaky.step", "concluiu sem erro", idempotent = false))
+                listOf(PassoPlano("passo-1", "flaky.step", "concluiu sem erro", idempotent = false, idempotencyKey = "run-single-attempt:passo-1"))
             )
 
             val resultado = ciclo.autorizarEExecutar(plano, "run-single-attempt", "agent-1")
