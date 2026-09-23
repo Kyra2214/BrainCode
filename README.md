@@ -4,7 +4,7 @@ BrainCode é um runtime local-first para Android/JVM em que o Brain interpreta, 
 
 ## Estado atual
 
-HEAD auditado nesta atualização: caf0d3960e8fde5fbc7bbd193a6dc15d9217ce1f.
+HEAD auditado nesta atualização: `19fa294712f6b69f3b27a9c140d8802a27a459bf`.
 
 O caminho Android canônico é:
 
@@ -45,7 +45,9 @@ PRP, web, documentação e conteúdo externo não podem conceder permissões nem
 
 ## Validação
 
-A validação final desta alteração ainda precisa comprovar testes focados, CI, E2E e readiness. Não considerar um baseline anterior como prova das mudanças atuais.
+No CI `35847234728`, `:brain:test` passou com 360 testes, `:android-module:testDebugUnitTest` passou com 89 de 90 testes, o APK debug foi montado e o lint passou. O único teste falho foi `BrainSandboxControllerExecutionTraceTest`, porque `sandbox-health` não estava disponível no workspace temporário do agente. O workflow preservou essa falha no status final; portanto, o build do APK não deve ser confundido com aprovação integral da suíte.
+
+O detalhamento dos cinco commits das últimas 9 horas, dos testes aprovados e da falha conhecida está em [`docs/ATUALIZACAO_ULTIMAS_9_HORAS_2026-09-23.md`](docs/ATUALIZACAO_ULTIMAS_9_HORAS_2026-09-23.md).
 
 ## Documentação canônica
 

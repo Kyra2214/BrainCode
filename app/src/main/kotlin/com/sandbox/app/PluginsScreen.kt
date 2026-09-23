@@ -31,7 +31,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.text.style.TextOverflow
 import com.sandbox.sandbox.ComponentKind
 import com.sandbox.sandbox.InstallationState
 import com.sandbox.sandbox.SandboxComponent
@@ -155,8 +158,15 @@ fun PluginsScreen(viewModel: SandboxViewModel, kind: ComponentKind) {
     }
 }
 
+/**
+ * Visibilidade elevada (não `private`) de propósito: permite que testes de UI em
+ * `androidTest` (ex.: [PluginsScreenErrorRenderingTest]) componham este card isoladamente,
+ * sem precisar de um [SandboxViewModel] real nem de um sandbox preparado, para exercer o
+ * cenário de regressão de um `InstalledComponent.error` muito grande (ex.: stderr de curl
+ * sem `-fsSL`) sem travar o Compose. Ver item 8 do plano de correção (fase 3).
+ */
 @Composable
-private fun ComponentCard(
+fun ComponentCard(
     component: SandboxComponent,
     status: com.sandbox.sandbox.InstalledComponent?,
     busy: Boolean,
@@ -168,6 +178,22 @@ private fun ComponentCard(
     val persistedOperation = status?.state == InstallationState.INSTALLING ||
         status?.state == InstallationState.REMOVING
     val operationActive = busy || persistedOperation
+    var showErrorDialog by remember { mutableStateOf(false) }
+
+    if (showErrorDialog && !status?.error.isNullOrBlank()) {
+        AlertDialog(
+            onDismissRequest = { showErrorDialog = false },
+            title = { Text("Log de erro — ${component.name}") },
+            text = {
+                Column(modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
+                    Text(status?.error.orEmpty(), style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showErrorDialog = false }) { Text("Fechar") }
+            }
+        )
+    }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -183,7 +209,14 @@ private fun ComponentCard(
                 Text("Depende de: ${component.dependencies.joinToString(", ")}", style = MaterialTheme.typography.labelSmall)
             }
             if (status?.state == InstallationState.FAILED && !status.error.isNullOrBlank()) {
-                Text("Erro: ${status.error}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                Text(
+                    "Erro: ${status.error}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    maxLines = 6,
+                    overflow = TextOverflow.Ellipsis
+                )
+                TextButton(onClick = { showErrorDialog = true }) { Text("Ver log completo") }
             }
             if (operationActive) {
                 LinearProgressIndicator(

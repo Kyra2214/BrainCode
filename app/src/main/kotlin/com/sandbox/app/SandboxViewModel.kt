@@ -562,6 +562,11 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     var lastTestLabReport by mutableStateOf<com.sandbox.sandbox.TestLabReport?>(null); private set
     var lastSecurityAssessment by mutableStateOf<SecurityAssessment?>(null); private set
     var toolchainStatuses by mutableStateOf<Map<String, ToolchainStatus>>(emptyMap()); private set
+    /** Espelha o resultado da última operação de Tools/ToolCatalog (ex.: Roofts 0.6) na própria aba, não só no chat. */
+    var lastToolMessage by mutableStateOf<String?>(null); private set
+    var lastToolError by mutableStateOf<String?>(null); private set
+    /** true enquanto o runtime está sendo reciclado por causa de installRoofts06OverExistingRootfs(), para diferenciar de outros Preparing. */
+    var rooftsReinstallInProgress by mutableStateOf(false); private set
     var pendingApprovalId by mutableStateOf<String?>(null); private set
     private var pendingApprovalPlan: PlanoExecucao? = null
     private var pendingApprovalRunId: String? = null
@@ -817,6 +822,9 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
 
     fun installRoofts06OverExistingRootfs() {
         if (phase != SandboxPhase.Ready) return
+        lastToolMessage = null
+        lastToolError = null
+        rooftsReinstallInProgress = true
         viewModelScope.launch {
             val jaInstaladoAntes = withContext(Dispatchers.IO) { runCatching { factory.isRoofts06Installed() }.getOrDefault(false) }
             phase = SandboxPhase.Preparing("Instalando Roofts 0.6 sobre os três RootFS existentes", 0, 1)
@@ -829,24 +837,30 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
             result.exceptionOrNull()?.let {
-                phase = SandboxPhase.Blocked(it.message ?: "Falha ao instalar Roofts 0.6")
-                appendThreadEvent(ThreadEvent.System("Roofts 0.6 — Agent Skills: falhou (${it.message ?: "erro desconhecido"})"))
+                val message = it.message ?: "erro desconhecido"
+                phase = SandboxPhase.Blocked(message)
+                lastToolError = message
+                rooftsReinstallInProgress = false
+                appendThreadEvent(ThreadEvent.System("Roofts 0.6 — Agent Skills: falhou ($message)"))
                 return@launch
             }
             val instaladoAgora = withContext(Dispatchers.IO) { runCatching { factory.isRoofts06Installed() }.getOrDefault(false) }
-            appendThreadEvent(
-                ThreadEvent.Report(
-                    "Roofts 0.6 — Agent Skills",
-                    when {
-                        !instaladoAgora -> "não confirmado após a instalação — verifique o RootFS"
-                        jaInstaladoAntes -> "já estava instalado, nenhuma mudança necessária"
-                        else -> "instalado com sucesso sobre o RootFS existente"
-                    }
-                )
-            )
+            val summary = when {
+                !instaladoAgora -> "não confirmado após a instalação — verifique o RootFS"
+                jaInstaladoAntes -> "já estava instalado, nenhuma mudança necessária"
+                else -> "instalado com sucesso sobre o RootFS existente"
+            }
+            if (!instaladoAgora) lastToolError = summary else lastToolMessage = "Roofts 0.6 — Agent Skills: $summary"
+            appendThreadEvent(ThreadEvent.Report("Roofts 0.6 — Agent Skills", summary))
+            rooftsReinstallInProgress = false
             phase = SandboxPhase.NotReady
             prepareSandbox()
         }
+    }
+
+    fun clearToolMessages() {
+        lastToolMessage = null
+        lastToolError = null
     }
 
     /** Comando sem execução possível: no chat vira evento da thread; no Terminal fica só no scrollback. */
@@ -1199,7 +1213,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         }
     }
     fun refreshToolchains() { val p = platform ?: return; viewModelScope.launch(Dispatchers.IO) { val s = com.sandbox.sandbox.BuiltInToolchains.all.associate { it.id to runCatching { p.toolchains.refreshStatus(it.id) }.getOrElse { e -> ToolchainStatus(it.id, com.sandbox.sandbox.ToolchainState.FAILED, error = e.message ?: e.javaClass.simpleName) } }; withContext(Dispatchers.Main) { toolchainStatuses = s } } }
-    fun installToolchain(id: String) { val p = platform ?: return; if (phase != SandboxPhase.Ready) return; viewModelScope.launch { phase = SandboxPhase.Running; val s = withContext(Dispatchers.IO) { runCatching { p.toolchains.install(id) }.getOrNull() }; if (s != null) toolchainStatuses = toolchainStatuses + (id to s); phase = SandboxPhase.Ready } }
+    fun installToolchain(id: String) { val p = platform ?: return; if (phase != SandboxPhase.Ready) return; lastToolError = null; viewModelScope.launch { phase = SandboxPhase.Running; val s = withContext(Dispatchers.IO) { runCatching { p.toolchains.install(id) }.getOrNull() }; if (s != null) { toolchainStatuses = toolchainStatuses + (id to s); if (s.state == com.sandbox.sandbox.ToolchainState.FAILED) lastToolError = s.error ?: "Falha ao instalar $id" }; phase = SandboxPhase.Ready } }
     fun requestApprovalDemo() {
         val c = brainController ?: run { appendThreadEvent(ThreadEvent.System("Approval demo indisponível: Brain ainda não inicializado.")); return }
         if (phase != SandboxPhase.Ready) { appendThreadEvent(ThreadEvent.System("Approval demo indisponível: sandbox ocupado.")); return }

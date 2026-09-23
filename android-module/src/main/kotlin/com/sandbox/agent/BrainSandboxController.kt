@@ -507,6 +507,32 @@ class BrainSandboxController(
         } else {
             listOf(objective)
         }
+        // WEATHER e RESEARCH resolvem targetCapability="network.research" com route CAPABILITY
+        // (ver BrainInputInterpreter.interpret). O WebResearchExecutor devolve o texto em
+        // `internalPayload`, nunca em `userResponse` — de propósito, porque só chat.respond/
+        // ChatResponseExecutor pode liberar texto ao usuário (Secretário/QC no meio). Sem esta
+        // segunda etapa, cycle.resposta (que só lê userResponse) ficava null mesmo com a
+        // pesquisa concluída com sucesso, e a UI caía no fallback "Plano concluído: true".
+        // O Context Builder de CicloExecucaoPlano.executar já propaga o resultado da
+        // dependência como parâmetro extra (mesmo mecanismo usado por DoorAwareSplitter).
+        if (envelope.route == Route.CAPABILITY && capability == "network.research") {
+            val pesquisar = PassoPlano(
+                id = "pesquisar",
+                capacidade = capability,
+                criterioSucesso = "evidência de pesquisa disponível",
+                parametros = parameters,
+                riskClass = RiskClass.MEDIUM
+            )
+            val responder = PassoPlano(
+                id = "responder",
+                capacidade = "chat.respond",
+                criterioSucesso = "resposta da rota ${envelope.route.name} não vazia",
+                parametros = parameters,
+                dependeDe = listOf(pesquisar.id),
+                riskClass = RiskClass.LOW
+            )
+            return PlanoExecucao(objetivo = objective, passos = listOf(pesquisar, responder))
+        }
         return PlanoExecucao(
             objetivo = objective,
             passos = listOf(

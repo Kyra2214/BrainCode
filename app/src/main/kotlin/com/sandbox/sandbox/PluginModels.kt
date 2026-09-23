@@ -546,7 +546,7 @@ object BuiltInCatalog {
             description = "Toolchain nativa C/C++ para builds Android",
             kind = ComponentKind.PLUGIN,
             version = "r27c",
-            installCommand = listOf("bash", "-c", "set -e; mkdir -p /opt; curl -fL --retry 3 -o /tmp/android-ndk.zip https://dl.google.com/android/repository/android-ndk-r27c-linux.zip; rm -rf /opt/android-ndk-r27c; unzip -q /tmp/android-ndk.zip -d /opt; rm -f /tmp/android-ndk.zip; ln -sfn /opt/android-ndk-r27c /opt/android-ndk"),
+            installCommand = listOf("bash", "-c", "set -o pipefail -e; mkdir -p /opt; (curl -fsSL --retry 3 -o /tmp/android-ndk.zip https://dl.google.com/android/repository/android-ndk-r27c-linux.zip; rm -rf /opt/android-ndk-r27c; unzip -q /tmp/android-ndk.zip -d /opt; rm -f /tmp/android-ndk.zip; ln -sfn /opt/android-ndk-r27c /opt/android-ndk) 2>&1 | tail -n 120"),
             removeCommand = listOf("bash", "-c", "rm -rf /opt/android-ndk /opt/android-ndk-r27c"),
             validationCommand = listOf("bash", "-c", "test -x /opt/android-ndk/ndk-build && /opt/android-ndk/ndk-build --version")
         ),
@@ -556,7 +556,7 @@ object BuiltInCatalog {
             description = "Scanner de vulnerabilidades para código, imagens e dependências",
             kind = ComponentKind.PLUGIN,
             version = "0.58.2",
-            installCommand = listOf("bash", "-c", "set -e; curl -fL --retry 3 https://github.com/aquasecurity/trivy/releases/download/v0.58.2/trivy_0.58.2_Linux-ARM64.tar.gz | tar -xz -C /tmp; install -m 0755 /tmp/trivy /usr/local/bin/trivy; rm -f /tmp/trivy"),
+            installCommand = listOf("bash", "-c", "set -o pipefail -e; (curl -fsSL --retry 3 https://github.com/aquasecurity/trivy/releases/download/v0.58.2/trivy_0.58.2_Linux-ARM64.tar.gz | tar -xz -C /tmp; install -m 0755 /tmp/trivy /usr/local/bin/trivy; rm -f /tmp/trivy) 2>&1 | tail -n 120"),
             removeCommand = listOf("bash", "-c", "rm -f /usr/local/bin/trivy"),
             validationCommand = listOf("trivy", "--version")
         ),
@@ -771,7 +771,7 @@ class PluginManager(
                     updatedAt = Instant.now().toEpochMilli(),
                     installDurationMs = System.currentTimeMillis() - startedAtMs,
                     validationStatus = false,
-                    error = result.stderr.ifBlank { "Remoção falhou" },
+                    error = result.stderr.ifBlank { "Remoção falhou" }.take(MAX_ERROR_CHARS),
                     notes = "Os pacotes podem continuar presentes; tente remover novamente."
                 ).also {
                     repository.save(it)
@@ -784,7 +784,7 @@ class PluginManager(
                 updatedAt = Instant.now().toEpochMilli(),
                 installDurationMs = System.currentTimeMillis() - startedAtMs,
                 validationStatus = false,
-                error = error.message ?: error.javaClass.simpleName,
+                error = (error.message ?: error.javaClass.simpleName).take(MAX_ERROR_CHARS),
                 notes = "Os pacotes podem continuar presentes; tente remover novamente."
             ).also {
                 repository.save(it)
@@ -820,12 +820,17 @@ class PluginManager(
         installedAt = installedAt,
         dependencies = component.dependencies,
         state = InstallationState.FAILED,
-        error = error,
+        error = error.take(MAX_ERROR_CHARS),
         updatedAt = Instant.now().toEpochMilli(),
         installDurationMs = System.currentTimeMillis() - startedAtMs,
         installedByUser = "user",
         validationStatus = false
     ).also(repository::save)
+
+    private companion object {
+        /** Limite de caracteres persistidos em InstalledComponent.error, mesmo padrão do ToolchainManager. */
+        const val MAX_ERROR_CHARS = 4096
+    }
 }
 
 /** Camada de busca e filtros sobre o gerenciador de plugins. */

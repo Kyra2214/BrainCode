@@ -98,8 +98,58 @@ class PluginManagerLifecycleTest {
         assertEquals(InstallationState.FAILED, repository.get("b")?.state)
     }
 
+    @Test
+    fun installedComponentErrorNeverExceedsPersistenceLimitAfterHugeStderr() {
+        // Regressão: um `curl` sem -s/-fsSL pode jogar até 256 KB de barra de progresso no
+        // stderr (limite de ManagedSandboxRuntime.maxOutputChars). Isso não pode ir parar
+        // sem corte em InstalledComponent.error, ou o Compose trava tentando medir um Text
+        // gigantesco em PluginsScreen (ANR). Ver PluginManager.persistFailure().
+        val repository = JsonComponentRepository(tempComponentsFile())
+        val hugeStderr = "#".repeat(256 * 1024) // simula 256 KB de progresso do curl
+        val manager = PluginManager(
+            ScriptedExecutor(failWhen = { true }, stderrOnFailure = hugeStderr),
+            repository,
+            listOf(SandboxComponent("android-ndk", "Android NDK", "NDK", ComponentKind.TOOL, packages = listOf("ndk"), validationCommand = listOf("ndk", "--version")))
+        )
+
+        val result = manager.install("android-ndk")
+
+        assertEquals(InstallationState.FAILED, result.state)
+        assertNotNull(result.error)
+        assertTrue("error deve ser truncado a um tamanho seguro para renderizar em uma única tela", (result.error?.length ?: 0) <= 4096)
+        assertTrue((repository.get("android-ndk")?.error?.length ?: 0) <= 4096)
+    }
+
+    @Test
+    fun failedRemovalErrorNeverExceedsPersistenceLimitAfterHugeStderr() {
+        val repository = JsonComponentRepository(tempComponentsFile())
+        val hugeStderr = "#".repeat(256 * 1024)
+        val manager = PluginManager(
+            ScriptedExecutor(stderrOnFailure = hugeStderr),
+            repository,
+            listOf(SandboxComponent("trivy", "Trivy", "Scanner", ComponentKind.TOOL, packages = listOf("trivy"), validationCommand = listOf("trivy", "--version")))
+        )
+        manager.install("trivy")
+
+        val failingManager = PluginManager(
+            ScriptedExecutor(failWhen = { command ->
+                val script = command.getOrNull(2).orEmpty()
+                command.firstOrNull() == "bash" && command.getOrNull(1) == "-c" &&
+                    "apt-get" in script && " remove " in script
+            }, stderrOnFailure = hugeStderr),
+            repository,
+            listOf(SandboxComponent("trivy", "Trivy", "Scanner", ComponentKind.TOOL, packages = listOf("trivy"), validationCommand = listOf("trivy", "--version")))
+        )
+
+        val result = failingManager.remove("trivy")
+
+        assertNotNull(result)
+        assertTrue((result?.error?.length ?: 0) <= 4096)
+    }
+
     private class ScriptedExecutor(
-        private val failWhen: (List<String>) -> Boolean = { false }
+        private val failWhen: (List<String>) -> Boolean = { false },
+        private val stderrOnFailure: String = "erro simulado"
     ) : SandboxCommandExecutor {
         private val counter = AtomicInteger()
 
@@ -119,7 +169,7 @@ class PluginManagerLifecycleTest {
                 timedOut = false,
                 forcedKill = false,
                 stdout = "",
-                stderr = if (failed) "erro simulado" else "",
+                stderr = if (failed) stderrOnFailure else "",
                 sandboxState = SandboxState.READY
             )
         }

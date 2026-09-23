@@ -10,19 +10,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sandbox.sandbox.BuiltInToolchains
 import com.sandbox.sandbox.ComponentKind
@@ -99,6 +105,20 @@ private fun ExtensionsSettings(viewModel: SandboxViewModel) {
 
 @Composable
 private fun ToolCatalog(viewModel: SandboxViewModel) {
+    var errorDialogFor by rememberSaveable { mutableStateOf<String?>(null) }
+    val dialogText = errorDialogFor
+    if (dialogText != null) {
+        AlertDialog(
+            onDismissRequest = { errorDialogFor = null },
+            title = { Text("Log de erro") },
+            text = {
+                androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                    item { Text(dialogText, style = MaterialTheme.typography.bodySmall) }
+                }
+            },
+            confirmButton = { TextButton(onClick = { errorDialogFor = null }) { Text("Fechar") } }
+        )
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -109,46 +129,99 @@ private fun ToolCatalog(viewModel: SandboxViewModel) {
                 style = MaterialTheme.typography.bodySmall
             )
         }
+        val toolMessage = viewModel.lastToolMessage
+        val toolError = viewModel.lastToolError
+        if (toolMessage != null || toolError != null) {
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        Text(
+                            toolError ?: toolMessage.orEmpty(),
+                            color = if (toolError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 4,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f).padding(end = 8.dp)
+                        )
+                        if (toolError != null && toolError.length > 200) {
+                            TextButton(onClick = { errorDialogFor = toolError }) { Text("Ver log") }
+                        }
+                        TextButton(onClick = { viewModel.clearToolMessages() }) { Text("Ok") }
+                    }
+                }
+            }
+        }
         item {
-            Button(
-                onClick = { viewModel.installRoofts06OverExistingRootfs() },
-                enabled = viewModel.phase == SandboxPhase.Ready,
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Adicionar camada RooftS 0.6 — Agent Skills") }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = { viewModel.installRoofts06OverExistingRootfs() },
+                    enabled = viewModel.phase == SandboxPhase.Ready && !viewModel.rooftsReinstallInProgress,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Adicionar camada RooftS 0.6 — Agent Skills") }
+                if (viewModel.rooftsReinstallInProgress) {
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Reinstalando camada Roofts 0.6…", style = MaterialTheme.typography.bodySmall)
+                    }
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            }
         }
         items(BuiltInToolchains.all, key = { it.id }) { profile ->
             val status = viewModel.toolchainStatuses[profile.id]
             val installed = status?.state == ToolchainState.INSTALLED
             val installing = status?.state == ToolchainState.INSTALLING
+            val failed = status?.state == ToolchainState.FAILED
             Card(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(profile.displayName, style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            when {
-                                installed -> "Instalado"
-                                installing -> "Instalando…"
-                                else -> "Não instalado"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = when {
-                                installed -> MaterialTheme.colorScheme.primary
-                                status?.state == ToolchainState.FAILED -> MaterialTheme.colorScheme.error
-                                else -> MaterialTheme.colorScheme.onSurfaceVariant
-                            }
-                        )
-                    }
-                    if (!installed) {
-                        OutlinedButton(
-                            onClick = { viewModel.installToolchain(profile.id) },
-                            enabled = viewModel.phase == SandboxPhase.Ready && !installing
-                        ) {
-                            Text(if (installing) "Instalando…" else "Instalar")
+                Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(profile.displayName, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                when {
+                                    installed -> "Instalado"
+                                    installing -> "Instalando…"
+                                    failed -> "❌ Falhou"
+                                    else -> "Não instalado"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = when {
+                                    installed -> MaterialTheme.colorScheme.primary
+                                    failed -> MaterialTheme.colorScheme.error
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
                         }
+                        if (installing) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        } else if (failed) {
+                            OutlinedButton(
+                                onClick = { viewModel.installToolchain(profile.id) },
+                                enabled = viewModel.phase == SandboxPhase.Ready
+                            ) { Text("Tentar novamente") }
+                        } else if (!installed) {
+                            OutlinedButton(
+                                onClick = { viewModel.installToolchain(profile.id) },
+                                enabled = viewModel.phase == SandboxPhase.Ready
+                            ) { Text("Instalar") }
+                        }
+                    }
+                    if (failed && !status?.error.isNullOrBlank()) {
+                        Text(
+                            "Erro: ${status?.error}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        TextButton(onClick = { errorDialogFor = status?.error }) { Text("Ver log completo") }
                     }
                 }
             }
