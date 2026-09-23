@@ -35,7 +35,7 @@ data class ToolchainDetection(
 data class ToolchainInstallPlan(
     val profile: ToolchainProfile,
     val command: List<String>,
-    val timeoutSeconds: Long = 900
+    val timeoutSeconds: Long = 600
 ) {
     init {
         require(command.size == 3 && command[0] == "bash" && command[1] == "-c")
@@ -168,7 +168,8 @@ class ToolchainManager(
         transactionStore.saveBeforeInstall(profile, previous, installedBefore)
         persist(ToolchainStatus(id, ToolchainState.INSTALLING))
         return@synchronized try {
-            val execution = executor.execute(detector.planInstall(profile).command, 900)
+            val installPlan = detector.planInstall(profile)
+            val execution = executor.execute(installPlan.command, installPlan.timeoutSeconds)
             if (!execution.succeeded) error(execution.stderr.ifBlank { "instalação falhou" })
             val after = detector.detect(profile)
             check(after.installed) { "validação pós-instalação falhou" }

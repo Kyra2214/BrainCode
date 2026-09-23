@@ -141,7 +141,7 @@ val QUICK_COMMANDS = listOf(
 
 /** Comandos com execução real (não vêm do catálogo /comandos). Sempre prioritários no dispatcher. */
 val OPERATIONAL_SLASH_COMMANDS = listOf(
-    "/run ", "/testlab", "/security", "/git status", "/git diff", "/git commit ", "/git push", "/workflow", "/approval demo",
+    "/run ", "/testlab", "/security", "/git status", "/git diff", "/git commit ", "/git push", "/workflow", "/workflow list", "/workflow enable ", "/workflow disable ", "/workflow backup", "/workflow restore", "/approval demo",
     "/workspace new ", "/sqlite start", "/sqlite stop", "/discovery", "/deliver"
 )
 
@@ -1020,6 +1020,11 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             lower.startsWith("/git commit ") -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; commitGit(command.substringAfter(" ").substringAfter(" ").trim()) }
             lower == "/git push" -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; pushGit() }
             lower == "/workflow" -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; runBrainWorkflow() }
+            lower == "/workflow list" -> { recordOperationalCommand(command); listWorkflows() }
+            lower.startsWith("/workflow enable ") -> { recordOperationalCommand(command); changeWorkflowEnabled(command, enabled = true) }
+            lower.startsWith("/workflow disable ") -> { recordOperationalCommand(command); changeWorkflowEnabled(command, enabled = false) }
+            lower == "/workflow backup" -> { recordOperationalCommand(command); backupWorkflows() }
+            lower == "/workflow restore" -> { recordOperationalCommand(command); restoreWorkflows() }
             lower == "/approval demo" -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; requestApprovalDemo() }
             lower.startsWith("/workspace new ") -> { val name = command.substringAfter(" ").substringAfter(" ").trim(); if (name.isNotBlank()) { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; workspaceProjectName = name; createWorkspaceProject() } }
             lower == "/sqlite start" -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; startSqliteService() }
@@ -1080,6 +1085,62 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     }
     private fun com.brain.research.ResearchResult.toUiSource() = ResearchSourceUi(title, source, url, relevantContent.take(240))
     private fun com.brain.prompt.PromptReasoningTrace.toUiReasoning() = PromptReasoningUi(intent, mandatoryElements, evidence, assumptions, revisions)
+
+    private fun recordOperationalCommand(command: String) {
+        chatMessages.add(ChatMessage(ChatRole.USER, command))
+        appendThreadEvent(ThreadEvent.User(command))
+        chatInput = ""
+    }
+
+    private fun listWorkflows() {
+        val integration = brainIntegration ?: run {
+            appendThreadEvent(ThreadEvent.System("Workflow indisponível: Brain ainda não inicializado.")); return
+        }
+        val enabled = integration.enabledWorkflows().map { it.id }.toSet()
+        val workflows = integration.availableWorkflows()
+        val report = if (workflows.isEmpty()) "nenhum workflow disponível" else workflows.joinToString("\n") { workflow ->
+            "${workflow.id}@${workflow.version} [${if (workflow.id in enabled) "enabled" else "disabled"}] — ${workflow.description}"
+        }
+        appendThreadEvent(ThreadEvent.Report("Workflow list", report))
+    }
+
+    private fun changeWorkflowEnabled(command: String, enabled: Boolean) {
+        val integration = brainIntegration ?: run {
+            appendThreadEvent(ThreadEvent.System("Workflow indisponível: Brain ainda não inicializado.")); return
+        }
+        val id = command.substringAfter(" ").substringAfter(" ").trim()
+        if (id.isBlank()) {
+            appendThreadEvent(ThreadEvent.System("Informe o id: /workflow ${if (enabled) "enable" else "disable"} <id>")); return
+        }
+        runCatching { if (enabled) integration.enableWorkflow(id) else integration.disableWorkflow(id) }
+            .onSuccess { appendThreadEvent(ThreadEvent.Report("Workflow ${if (enabled) "enable" else "disable"}", "$id: ${if (enabled) "enabled" else "disabled"}")) }
+            .onFailure { appendThreadEvent(ThreadEvent.System("Falha ao ${if (enabled) "habilitar" else "desabilitar"} workflow $id: ${it.message ?: it.javaClass.simpleName}")) }
+    }
+
+    private fun workflowBackupFile(): File = File(getApplication<Application>().filesDir, "brain/workflows-backup.zip")
+
+    private fun backupWorkflows() {
+        val integration = brainIntegration ?: run {
+            appendThreadEvent(ThreadEvent.System("Workflow indisponível: Brain ainda não inicializado.")); return
+        }
+        val output = workflowBackupFile()
+        runCatching { integration.backupWorkflows(output) }
+            .onSuccess { appendThreadEvent(ThreadEvent.Report("Workflow backup", "backup salvo em ${output.name} (${output.length()} bytes)")) }
+            .onFailure { appendThreadEvent(ThreadEvent.System("Falha no backup de workflows: ${it.message ?: it.javaClass.simpleName}")) }
+    }
+
+    private fun restoreWorkflows() {
+        val integration = brainIntegration ?: run {
+            appendThreadEvent(ThreadEvent.System("Workflow indisponível: Brain ainda não inicializado.")); return
+        }
+        val input = workflowBackupFile()
+        if (!input.isFile) {
+            appendThreadEvent(ThreadEvent.System("Nenhum backup encontrado em ${input.name}. Execute /workflow backup primeiro.")); return
+        }
+        runCatching { integration.restoreWorkflows(input) }
+            .onSuccess { appendThreadEvent(ThreadEvent.Report("Workflow restore", "backup restaurado com validação de hash e troca atômica")) }
+            .onFailure { appendThreadEvent(ThreadEvent.System("Falha no restore de workflows: ${it.message ?: it.javaClass.simpleName}")) }
+    }
 
     private fun publishStep(passo: ResultadoPasso) {
         brainUiStage = when (passo.status) {

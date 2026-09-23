@@ -13,6 +13,7 @@ package com.brain.skill
  * @param exclusions sinais de não ativação; evitam carregar uma Skill por coincidência.
  * @param resources caminhos relativos que podem ser carregados sob demanda.
  * @param contentHash SHA-256 do arquivo completo, para provenance e invalidação de cache.
+ * @param overlayHash SHA-256 do overlay local de metadados, separado do conteúdo upstream.
  * @param sourcePath caminho do asset/recurso que originou o conteúdo.
  */
 data class RooftsSkill(
@@ -23,6 +24,7 @@ data class RooftsSkill(
     val exclusions: Set<String> = emptySet(),
     val resources: Set<String> = emptySet(),
     val contentHash: String? = null,
+    val overlayHash: String? = null,
     val sourcePath: String? = null,
     val origin: String = "roofts-0.6",
     val license: String? = "MIT",

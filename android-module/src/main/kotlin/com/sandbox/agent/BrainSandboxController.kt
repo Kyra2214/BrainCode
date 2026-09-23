@@ -136,7 +136,8 @@ class BrainSandboxController(
             capability("sandbox.test", setOf("sandbox.code")),
             capability("sandbox.diagnose", setOf("brain.analyze")),
             capability("chat.respond", emptySet()),
-            capability("sandbox.clean", emptySet())
+            capability("sandbox.clean", emptySet()),
+            capability("workflow.run", setOf("workflow.run"), com.brain.capability.CapabilityCategory.WORKFLOW)
         ) + capabilityProviders.flatMap { it.capabilities().toList() }
     )
     private val policy = PolicyBroker(
@@ -781,11 +782,15 @@ class BrainSandboxController(
         )
     }
 
-    private fun capability(id: String, provided: Set<String>) = CapabilityDefinition(
+    private fun capability(
+        id: String,
+        provided: Set<String>,
+        category: com.brain.capability.CapabilityCategory = com.brain.capability.CapabilityCategory.SANDBOX
+    ) = CapabilityDefinition(
         id = id,
         name = id,
         description = "capability Android executada pelo ActionGateway",
-        category = CapabilityCategory.SANDBOX,
+        category = category,
         ownerId = "android-sandbox",
         origin = "android-sandbox",
         providedCapabilities = provided,

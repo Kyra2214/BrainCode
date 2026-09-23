@@ -39,7 +39,7 @@ data class WorkflowDocument(
         require(body.isNotBlank()) { "corpo de workflow obrigatório" }
     }
 
-    fun executionManifest(capability: String = "workflow.$id"): WorkflowManifest = WorkflowManifest(
+    fun executionManifest(capability: String = "workflow.run"): WorkflowManifest = WorkflowManifest(
         id = id,
         version = version,
         nodes = listOf(WorkflowNode("document", capability)),
@@ -201,25 +201,100 @@ class WorkflowCatalog(private val root: File) {
 
     fun restore(backup: File) {
         require(backup.isFile) { "backup de workflow não encontrado" }
-        ZipFile(backup).use { zip ->
-            val state = zip.getEntry("catalog-state.json") ?: throw IllegalArgumentException("backup sem estado")
-            val stateJson = JSONObject(zip.getInputStream(state).bufferedReader().use { it.readText() })
-            val enabled = (0 until stateJson.optJSONArray("enabled").length()).map { stateJson.getJSONArray("enabled").getString(it) }.toSet()
-            val extracted = mutableSetOf<String>()
-            val entries = zip.entries()
-            while (entries.hasMoreElements()) {
-                val entry = entries.nextElement()
-                if (!entry.name.startsWith("custom/") || entry.isDirectory) continue
-                val relative = entry.name.removePrefix("custom/")
-                require(relative.isNotBlank() && relative.split('/').none { it.isBlank() || it == ".." }) { "entrada de backup insegura" }
-                val target = File(custom, relative).canonicalFile
-                require(target.path.startsWith(custom.canonicalFile.path + File.separator)) { "backup fora do catálogo" }
-                target.parentFile?.mkdirs()
-                zip.getInputStream(entry).use { input -> target.outputStream().use { output -> input.copyTo(output) } }
-                extracted += relative.substringBefore('/')
+        root.parentFile?.mkdirs()
+        val stagingRoot = Files.createTempDirectory(root.parentFile?.toPath(), "${root.name}-restore-").toFile()
+        val stagedCustom = File(stagingRoot, "custom").apply { mkdirs() }
+        var installed = false
+        try {
+            val enabled: Set<String>
+            val expected: Map<String, Pair<String, String>>
+            ZipFile(backup).use { zip ->
+                val state = zip.getEntry("catalog-state.json") ?: throw IllegalArgumentException("backup sem estado")
+                val stateJson = JSONObject(zip.getInputStream(state).bufferedReader().use { it.readText() })
+                val enabledJson = stateJson.optJSONArray("enabled") ?: JSONArray()
+                enabled = (0 until enabledJson.length()).map { enabledJson.getString(it) }.toSet()
+                expected = buildMap {
+                    val workflows = stateJson.optJSONArray("workflows") ?: throw IllegalArgumentException("backup sem catálogo")
+                    for (index in 0 until workflows.length()) {
+                        val item = workflows.getJSONObject(index)
+                        put(item.getString("id"), item.getString("version") to item.getString("contentHash"))
+                    }
+                }
+
+                var count = 0
+                var extractedBytes = 0L
+                var stateCount = 0
+                val entries = zip.entries()
+                while (entries.hasMoreElements()) {
+                    val entry = entries.nextElement()
+                    require(++count <= MAX_BACKUP_ENTRIES) { "backup excede o limite de entradas" }
+                    if (entry.isDirectory) continue
+                    when {
+                        entry.name == "catalog-state.json" -> stateCount++
+                        entry.name.startsWith("custom/") -> {
+                            val relative = entry.name.removePrefix("custom/")
+                            require(relative.isNotBlank() && !relative.startsWith('/') &&
+                                relative.split('/').none { it.isBlank() || it == ".." }) { "entrada de backup insegura" }
+                            require(entry.size < 0 || entry.size <= MAX_BACKUP_ENTRY_BYTES) { "arquivo de backup excede o limite" }
+                            val target = File(stagedCustom, relative).canonicalFile
+                            require(target.path.startsWith(stagedCustom.canonicalPath + File.separator)) { "backup fora do catálogo" }
+                            target.parentFile?.mkdirs()
+                            zip.getInputStream(entry).use { input ->
+                                target.outputStream().use { output ->
+                                    extractedBytes += copyBounded(input, output, MAX_BACKUP_ENTRY_BYTES)
+                                }
+                            }
+                        }
+                        else -> throw IllegalArgumentException("entrada de backup fora do catálogo: ${entry.name}")
+                    }
+                    require(extractedBytes <= MAX_BACKUP_TOTAL_BYTES) { "backup descompactado excede o limite" }
+                }
+                require(stateCount == 1) { "backup deve conter exatamente um estado" }
             }
-            writeEnabled(enabled.filter { resolve(it) != null || it in extracted }.toSet())
+
+            val restored = stagedCustom.walkTopDown().filter { it.isFile && it.name == "WORKFLOW.md" }.map {
+                WorkflowDocumentParser.parse(it.readText(), WorkflowSource.CUSTOM, it.canonicalPath)
+            }.toList()
+            restored.forEach { document ->
+                val manifest = expected[document.id] ?: throw IllegalArgumentException("workflow restaurado não consta no estado: ${document.id}")
+                require(document.version == manifest.first && document.contentHash == manifest.second) {
+                    "hash ou versão adulterado no workflow restaurado: ${document.id}"
+                }
+            }
+            enabled.forEach { require(isSafeId(it)) { "id habilitado inválido no backup" } }
+
+            val parent = custom.parentFile ?: throw IllegalStateException("catálogo custom sem diretório pai")
+            parent.mkdirs()
+            val previous = File(parent, ".${custom.name}.before-restore-${System.nanoTime()}")
+            val hadPrevious = custom.exists()
+            if (hadPrevious) require(custom.renameTo(previous)) { "não foi possível preparar troca atômica do catálogo" }
+            try {
+                require(stagedCustom.renameTo(custom)) { "não foi possível instalar catálogo restaurado" }
+                writeEnabled(enabled.filter { resolve(it) != null }.toSet())
+                previous.deleteRecursively()
+                installed = true
+            } catch (error: Throwable) {
+                custom.deleteRecursively()
+                if (hadPrevious) previous.renameTo(custom)
+                throw error
+            }
+        } finally {
+            if (!installed) stagingRoot.deleteRecursively()
+            else stagingRoot.deleteRecursively()
         }
+    }
+
+    private fun copyBounded(input: java.io.InputStream, output: java.io.OutputStream, limit: Long): Long {
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        var total = 0L
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            total += read
+            require(total <= limit) { "arquivo de backup excede o limite" }
+            output.write(buffer, 0, read)
+        }
+        return total
     }
 
     private fun scan(source: WorkflowSource, dir: File): List<WorkflowDocument> =
@@ -239,6 +314,12 @@ class WorkflowCatalog(private val root: File) {
 
     private fun requireSafeId(id: String) { require(isSafeId(id)) { "id de workflow inválido" } }
     private fun isSafeId(id: String): Boolean = Regex("^[a-z0-9][a-z0-9_-]{0,63}$").matches(id)
+
+    private companion object {
+        const val MAX_BACKUP_ENTRIES = 512
+        const val MAX_BACKUP_ENTRY_BYTES = 2L * 1024 * 1024
+        const val MAX_BACKUP_TOTAL_BYTES = 8L * 1024 * 1024
+    }
 }
 
 /** Adapta um documento ao executor existente sem interpretar seu Markdown como código. */

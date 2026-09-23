@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "minimumScore": 0.92,
+  "cases": [
+    {"id":"api-design","objective":"desenhar uma API REST com contrato público","expectedSkillIds":["api-and-interface-design"],"excludedSkillIds":[]},
+    {"id":"browser-debug","objective":"testar no navegador usando DevTools","expectedSkillIds":["browser-testing-with-devtools"],"excludedSkillIds":[]},
+    {"id":"ci-pipeline","objective":"montar uma pipeline de integração contínua","expectedSkillIds":["ci-cd-and-automation"],"excludedSkillIds":[]},
+    {"id":"code-review","objective":"fazer revisão de código antes do merge","expectedSkillIds":["code-review-and-quality"],"excludedSkillIds":[]},
+    {"id":"simplify","objective":"simplificar um código complexo para melhorar legibilidade","expectedSkillIds":["code-simplification"],"excludedSkillIds":[]},
+    {"id":"constraints","objective":"definir um contrato de qualidade e cobertura de teste","expectedSkillIds":["constraint-driven-development"],"excludedSkillIds":[]},
+    {"id":"context","objective":"organizar o contexto do agente e as regras do projeto","expectedSkillIds":["context-engineering"],"excludedSkillIds":[]},
+    {"id":"debug","objective":"depurar um bug usando o stacktrace da falha no teste","expectedSkillIds":["debugging-and-error-recovery"],"excludedSkillIds":[]},
+    {"id":"migration","objective":"planejar a migração e remover o sistema antigo","expectedSkillIds":["deprecation-and-migration"],"excludedSkillIds":[]},
+    {"id":"adr","objective":"documentar uma decisão de arquitetura em um ADR","expectedSkillIds":["documentation-and-adrs"],"excludedSkillIds":[]},
+    {"id":"doubt","objective":"fazer uma revisão crítica e questionar a premissa de alto risco","expectedSkillIds":["doubt-driven-development"],"excludedSkillIds":[]},
+    {"id":"frontend","objective":"construir uma tela de frontend responsivo e acessível","expectedSkillIds":["frontend-ui-engineering"],"excludedSkillIds":[]},
+    {"id":"git","objective":"organizar branch, commit e versionamento de uma release","expectedSkillIds":["git-workflow-and-versioning"],"excludedSkillIds":[]},
+    {"id":"idea","objective":"refinar uma ideia vaga com brainstorm","expectedSkillIds":["idea-refine"],"excludedSkillIds":[]},
+    {"id":"incremental","objective":"implementar aos poucos em uma entrega incremental passo a passo","expectedSkillIds":["incremental-implementation"],"excludedSkillIds":[]},
+    {"id":"interview","objective":"me entreviste porque tenho um pedido vago","expectedSkillIds":["interview-me"],"excludedSkillIds":[]},
+    {"id":"observability","objective":"adicionar logging, métrica e monitoramento","expectedSkillIds":["observability-and-instrumentation"],"excludedSkillIds":[]},
+    {"id":"performance","objective":"otimizar a performance e corrigir uma query lenta","expectedSkillIds":["performance-optimization"],"excludedSkillIds":[]},
+    {"id":"planning","objective":"planejar o escopo e dividir em tarefas","expectedSkillIds":["planning-and-task-breakdown"],"excludedSkillIds":[]},
+    {"id":"security","objective":"auditar segurança, vulnerabilidade e autenticação","expectedSkillIds":["security-and-hardening"],"excludedSkillIds":[]},
+    {"id":"launch","objective":"preparar o checklist de lançamento e rollback em produção","expectedSkillIds":["shipping-and-launch"],"excludedSkillIds":[]},
+    {"id":"source","objective":"verificar na documentação oficial da biblioteca","expectedSkillIds":["source-driven-development"],"excludedSkillIds":[]},
+    {"id":"spec","objective":"escrever a especificação, requisitos e PRD do projeto novo","expectedSkillIds":["spec-driven-development"],"excludedSkillIds":[]},
+    {"id":"tdd","objective":"corrigir o bug com teste e testes unitários em TDD","expectedSkillIds":["test-driven-development"],"excludedSkillIds":[]},
+    {"id":"skills","objective":"decidir qual skill do agente usar","expectedSkillIds":["using-agent-skills"],"excludedSkillIds":[]}
+  ]
+}

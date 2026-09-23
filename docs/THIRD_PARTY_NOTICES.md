@@ -31,7 +31,7 @@ O arquivo `docs/proot-binary-provenance.txt` mantém o registro estruturado da o
 - **O que é**: camada de Skills e guias operacionais empacotada como assets do aplicativo; o
   conteúdo não é um orquestrador e não concede autorização.
 - **Projeto original**: `addyosmani/agent-skills`.
-- **Tag/commit auditado**: `0.6.10` / `c004a74784a08295d52749b4cda634125b9a581`.
+- **Tag/commit auditado**: `0.6.10` / `c004a74784a08295d52749b04cda634125b9a581`.
 - **Licença**: MIT.
 - **Cópia da licença**: `app/src/main/assets/roofts/0.6/LICENSE`.
 - **Local dos assets**: `app/src/main/assets/roofts/0.6`.

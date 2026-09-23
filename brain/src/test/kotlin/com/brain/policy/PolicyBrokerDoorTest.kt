@@ -58,4 +58,28 @@ class PolicyBrokerDoorTest {
 
         assertEquals(Decision.DENY, decision.decision)
     }
+
+    @Test
+    fun `workflow run exige Porta 3 aprovada`() {
+        val workflowBroker = PolicyBroker(
+            allowedCapabilities = listOf("workflow.run"),
+            actorCapabilities = mapOf("agent" to listOf("workflow.run"))
+        )
+        val chat = workflowBroker.authorize(
+            "agent", "workflow.run", "workflow:review",
+            PolicyContext("run", "task", "agent", doorScope = DoorScope(Door.CHAT, CreatePhase.CHAT), sandboxRequired = true)
+        )
+        val discussion = workflowBroker.authorize(
+            "agent", "workflow.run", "workflow:review",
+            PolicyContext("run", "task", "agent", doorScope = DoorScope(Door.CREATE, CreatePhase.DISCUSSION), sandboxRequired = true)
+        )
+        val approved = workflowBroker.authorize(
+            "agent", "workflow.run", "workflow:review",
+            PolicyContext("run", "task", "agent", doorScope = DoorScope(Door.CREATE, CreatePhase.APPROVED), sandboxRequired = true)
+        )
+
+        assertEquals(Decision.DENY, chat.decision)
+        assertEquals(Decision.DENY, discussion.decision)
+        assertEquals(Decision.ALLOW, approved.decision)
+    }
 }

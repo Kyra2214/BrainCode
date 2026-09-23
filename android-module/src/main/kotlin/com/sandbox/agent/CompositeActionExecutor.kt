@@ -19,7 +19,10 @@ class CompositeActionExecutor(
         capability: CapabilityDefinition,
         decision: PolicyDecision
     ): ActionExecution {
-        if (capability.category == com.brain.capability.CapabilityCategory.AGENT && capability.id !in overrides) {
+        if (capability.category in setOf(
+                com.brain.capability.CapabilityCategory.AGENT,
+                com.brain.capability.CapabilityCategory.WORKFLOW
+            ) && capability.id !in overrides) {
             return ActionExecution(
                 false,
                 error = "agent indisponível: executor dedicado não registrado para " + capability.id,

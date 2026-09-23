@@ -42,8 +42,8 @@ Esta consolidação **não** significa:
 - copiar conteúdo de uma camada para outra;
 - substituir os manifests existentes;
 - fundir fisicamente todas as árvores em um único artefato;
-- ativar automaticamente o runtime das Skills 0.6;
-- integrar 0.6 ao Planner/Dispatcher/ActionGateway nesta fase.
+    - ativar automaticamente o runtime de efeitos das Skills 0.6;
+    - conceder às Skills autoridade para bypassar Planner/Dispatcher/ActionGateway.
 
 Os artefatos físicos permanecem independentes onde isso for necessário.
 
@@ -77,11 +77,11 @@ A camada 0.6 atualmente corresponde ao upstream:
 
 - repositório: `addyosmani/agent-skills`
 - tag: `0.6.10`
-- commit importado: `c004a74784a08295d52749b4cda634125b9a581`
+- commit importado: `c004a74784a08295d52749b04cda634125b9a581`
 
 Ela contém skills, agents, commands, hooks, references, docs, scripts e evals.
 
-**Importante:** presença física da camada 0.6 não significa integração das Skills com o runtime do BrainCode.
+**Importante:** presença física da camada 0.6, por si só, não significa autorização de execução. Nesta rodada há integração limitada de descoberta: catálogo lazy, seleção contextual, plano de ativação e publicação desabilitada no `SkillRegistry`; corpo, recursos, scripts e efeitos continuam atrás da cadeia de Policy/Gateway.
 
 A integração futura deverá reutilizar:
 
@@ -158,9 +158,10 @@ Esta alteração estabelece somente:
 3. preservação física e semântica das camadas;
 4. 0.6 explicitamente como camada Agent Skills;
 5. terminologia e documentação canônicas;
-6. fronteira conceitual RooftS ↔ BrainCode.
+6. fronteira conceitual RooftS ↔ BrainCode;
+7. integração limitada de metadados e descoberta da camada 0.6, sem autoridade de execução.
 
-**Não faz parte desta alteração:** integração das Skills 0.6 ao Planner, SkillRegistry, Dispatcher ou ActionGateway.
+**Não faz parte desta alteração:** execução automática de corpo, scripts, hooks, recursos ou efeitos das Skills 0.6, nem autorização implícita no `PolicyBroker`.
 
 Essa integração será uma etapa posterior e deverá ser implementada sobre a entidade RooftS consolidada.
 

@@ -43,10 +43,14 @@ class ResponseComposer(
                 evidence += "chat:research-context-included"
                 synthesizeResearch(prompt, research)
             }
-            engineResponse != null -> {
+            engineResponse != null && engineResponse.intent != "knowledge.unknown" -> {
                 evidence += engineResponse.evidence
                 if (engineResponse.topic != null) evidence += "chat:topic:${engineResponse.topic}"
                 engineResponse.text
+            }
+            engineResponse?.intent == "knowledge.unknown" -> {
+                evidence += "chat:conversation:local-miss"
+                "Não tenho conhecimento suficiente para responder a essa pergunta com segurança neste momento."
             }
             contextHasContent(context) -> {
                 evidence += "chat:context:read-only"
@@ -54,7 +58,7 @@ class ResponseComposer(
             }
             conversationEngine != null -> {
                 evidence += "chat:conversation:local-miss"
-                "Entendi o pedido: $prompt\nPosso ajudar a organizar a resposta com segurança, preservando o tema solicitado."
+                "Não tenho conhecimento suficiente para responder a essa solicitação com segurança neste momento."
             }
             else -> {
                 if (looksLikeFactualQuestion(lower)) {
@@ -87,10 +91,12 @@ class ResponseComposer(
         val sentences = cleaned.split(Regex("(?<=[.!?])\\s+|\\n+"))
             .map { it.trim() }
             .filter { it.isNotBlank() }
+        val related = sentences
             .filter { topicTerms.isEmpty() || topicTerms.any { term -> it.lowercase(Locale.ROOT).contains(term) } }
             .take(4)
-        return if (sentences.isEmpty()) "Encontrei fontes, mas não há conteúdo suficientemente relacionado ao tema para responder com segurança."
-        else sentences.joinToString(" ").take(1600)
+        val selected = related.ifEmpty { sentences.take(4) }
+        return if (selected.isEmpty()) "Encontrei fontes, mas não há conteúdo suficientemente relacionado ao tema para responder com segurança."
+        else selected.joinToString(" ").take(1600)
     }
     private fun contextHasContent(context: ConversationContext): Boolean =
         context.idea != null || context.requirements.isNotEmpty() || context.decisions.isNotEmpty() || context.pending.isNotEmpty()

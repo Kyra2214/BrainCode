@@ -5,7 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class P0ConversationRegressionTest {
-    private fun engine() = NoInferenceConversationEngine { path -> java.io.File("src/main/assets/$path").readText() }
+    private fun engine() = NoInferenceConversationEngine(assets = { path -> java.io.File("src/main/assets/$path").readText() })
 
     @Test
     fun `olá usa resposta em português`() {

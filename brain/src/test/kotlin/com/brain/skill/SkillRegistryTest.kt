@@ -44,6 +44,41 @@ class SkillRegistryTest {
         assertTrue(registry.get("code.analysis")!!.revoked)
     }
 
+    @Test
+    fun `bridge registra Roofts descoberto desabilitado com hash e origem`() {
+        val skill = RooftsSkill(
+            id = "security-review",
+            description = "Revisão de segurança",
+            body = "conteúdo metodológico",
+            contentHash = "a".repeat(64),
+            sourcePath = "roofts/0.6/skills/security-review/SKILL.md",
+            origin = "roofts-0.6",
+            triggers = setOf("segurança")
+        )
+        val registry = SkillRegistry()
+        val record = RooftsSkillManifestBridge.registerDiscovered(skill, registry)
+
+        assertFalse(record.manifest.enabled)
+        assertEquals(skill.contentHash, record.manifest.contentHash)
+        assertEquals(skill.origin, record.manifest.sourceId)
+        assertTrue(registry.listEnabled().isEmpty())
+        assertTrue(registry.get("roofts.security-review") != null)
+    }
+
+    @Test(expected = SecurityException::class)
+    fun `bridge não permite habilitar Roofts sem assinatura`() {
+        val skill = RooftsSkill(
+            id = "unsigned-skill",
+            description = "Skill sem assinatura",
+            body = "conteúdo",
+            contentHash = "b".repeat(64),
+            origin = "roofts-0.6"
+        )
+        val registry = SkillRegistry()
+        RooftsSkillManifestBridge.registerDiscovered(skill, registry)
+        registry.register(RooftsSkillManifestBridge.manifest(skill, enabled = true))
+    }
+
     @Test(expected = SecurityException::class)
     fun `revogação persiste após reinicialização do registry`() {
         val file = File.createTempFile("skill-revocations-", ".tsv")

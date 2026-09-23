@@ -46,7 +46,12 @@ class DeterministicSecretaryGate {
             return SecretaryEvaluation(SecretaryDecision.BLOCK, BlockReason.LOCAL_KNOWLEDGE_MISS)
         if (result.status != ConversationStatus.ANSWER_READY && result.status != ConversationStatus.ANSWERED_LOCAL)
             return SecretaryEvaluation(SecretaryDecision.BLOCK, BlockReason.NON_USER_FACING_RESPONSE)
-        if (result.prompt.isNotBlank() && !isSemanticallyRelated(result.prompt, text))
+        val evidenceBackedException = result.evidence.any {
+            it == "chat:conversation:local-miss" ||
+                it == "chat:context:read-only" ||
+                it == "chat:research-context-included"
+        }
+        if (result.prompt.isNotBlank() && !evidenceBackedException && !isSemanticallyRelated(result.prompt, text))
             return SecretaryEvaluation(SecretaryDecision.BLOCK, BlockReason.INCOMPLETE_RESPONSE)
         return SecretaryEvaluation(SecretaryDecision.ACCEPT)
     }

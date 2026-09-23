@@ -5,6 +5,8 @@ import com.brain.skill.RooftsSkill
 import com.brain.skill.RooftsSkillActivationPlan
 import com.brain.skill.RooftsSkillActivationPlanner
 import com.brain.skill.RooftsSkillSelector
+import org.json.JSONArray
+import org.json.JSONObject
 import java.security.MessageDigest
 
 /** Resultado de descoberta: só metadados ficam retidos até uma Skill ser selecionada. */
@@ -62,10 +64,12 @@ object RooftsSkillLoader {
     /** Descoberta leve: retém frontmatter, hash e origem, mas não retém o corpo Markdown. */
     fun loadCatalog(context: Context): RooftsSkillCatalog {
         val appContext = context.applicationContext ?: context
+        val overlay = loadOverlay(appContext)
         val pastas = appContext.assets.list(BASE_PATH)?.toList().orEmpty()
         val metadata = pastas.mapNotNull { pasta ->
             runCatching { lerSkill(appContext, pasta, includeBody = false) }.getOrNull()
-        }.sortedBy { it.id }
+        }.map { skill -> mergeOverlay(skill, overlay[skill.id]) }
+            .sortedBy { it.id }
         return RooftsSkillCatalog(appContext, metadata)
     }
 
@@ -74,7 +78,72 @@ object RooftsSkillLoader {
         return runCatching {
             val conteudo = context.assets.open(sourcePath).bufferedReader(Charsets.UTF_8).use { it.readText() }
             parse(conteudo, idFallback = skill.id, sourcePath = sourcePath, includeBody = true)
+                ?.let { parsed -> mergeOverlay(parsed, OverlayMetadata.fromSkill(skill)) }
         }.getOrNull()
+    }
+
+    private data class OverlayMetadata(
+        val triggers: Set<String> = emptySet(),
+        val exclusions: Set<String> = emptySet(),
+        val resources: Set<String> = emptySet(),
+        val requiredPermissions: Set<String> = emptySet(),
+        val requiredCapabilities: Set<String> = emptySet(),
+        val tools: Set<String> = emptySet(),
+        val networkPolicy: String? = null,
+        val overlayHash: String
+    ) {
+        companion object {
+            fun fromSkill(skill: RooftsSkill): OverlayMetadata = OverlayMetadata(
+                triggers = skill.triggers,
+                exclusions = skill.exclusions,
+                resources = skill.resources,
+                requiredPermissions = skill.requiredPermissions,
+                requiredCapabilities = skill.requiredCapabilities,
+                tools = skill.tools,
+                networkPolicy = skill.networkPolicy.takeUnless { it == "none" },
+                overlayHash = skill.overlayHash.orEmpty()
+            )
+        }
+    }
+
+    private fun loadOverlay(context: Context): Map<String, OverlayMetadata> = runCatching {
+        val content = context.assets.open(OVERLAY_PATH).bufferedReader(Charsets.UTF_8).use { it.readText() }
+        val hash = sha256(content)
+        val items = JSONObject(content).optJSONArray("skills") ?: JSONArray()
+        (0 until items.length()).mapNotNull { index ->
+            val item = items.optJSONObject(index) ?: return@mapNotNull null
+            val id = item.optString("id").trim().takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            id to OverlayMetadata(
+                triggers = jsonSet(item, "triggers"),
+                exclusions = jsonSet(item, "exclusions"),
+                resources = jsonSet(item, "resources"),
+                requiredPermissions = jsonSet(item, "requiredPermissions"),
+                requiredCapabilities = jsonSet(item, "requiredCapabilities"),
+                tools = jsonSet(item, "tools"),
+                networkPolicy = item.optString("networkPolicy").takeIf { it.isNotBlank() },
+                overlayHash = hash
+            )
+        }.toMap()
+    }.getOrDefault(emptyMap())
+
+    private fun jsonSet(item: JSONObject, key: String): Set<String> =
+        (item.optJSONArray(key) ?: JSONArray()).let { array ->
+            (0 until array.length()).mapNotNull { array.optString(it).trim().takeIf(String::isNotBlank) }.toSet()
+        }
+
+    /** Frontmatter do upstream vence o overlay; o overlay apenas preenche lacunas locais. */
+    private fun mergeOverlay(skill: RooftsSkill, overlay: OverlayMetadata?): RooftsSkill {
+        if (overlay == null) return skill
+        return skill.copy(
+            triggers = skill.triggers.ifEmpty { overlay.triggers },
+            exclusions = skill.exclusions.ifEmpty { overlay.exclusions },
+            resources = skill.resources.ifEmpty { overlay.resources },
+            overlayHash = overlay.overlayHash,
+            requiredPermissions = skill.requiredPermissions.ifEmpty { overlay.requiredPermissions },
+            requiredCapabilities = skill.requiredCapabilities.ifEmpty { overlay.requiredCapabilities },
+            tools = skill.tools.ifEmpty { overlay.tools },
+            networkPolicy = if (skill.networkPolicy != "none") skill.networkPolicy else overlay.networkPolicy ?: skill.networkPolicy
+        )
     }
 
     private fun lerSkill(context: Context, pasta: String, includeBody: Boolean): RooftsSkill? {
@@ -165,4 +234,5 @@ object RooftsSkillLoader {
         .joinToString("") { "%02x".format(it) }
 
     private const val FRONTMATTER_DELIMITER = "---"
+    private const val OVERLAY_PATH = "roofts/0.6/braincode-skill-overlay.json"
 }

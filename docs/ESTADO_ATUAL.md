@@ -30,7 +30,7 @@ Correção aplicada neste HEAD: os requisitos descobertos pelo Reasoning agora s
 
 O chat não usa fallback direto para provider quando o Sandbox não está pronto: a UI retorna estado de indisponibilidade e pede a preparação do Sandbox. Portanto não existe uma segunda semântica de “resposta validada” fora do caminho universal.
 
-Roofts 0.6 permanece instalado como payload independente e deliberadamente **não integrado ao runtime**. Retrieval universal/semântico, hardening OS-level e leases/fencing continuam backlog de marcos posteriores.
+Roofts 0.6 está integrado ao runtime de descoberta: `RooftsSkillLoader` mantém catálogo lazy, `RooftsSkillSelector` participa da seleção da Porta 3, `RooftsSkillActivationPlanner` filtra permissões pendentes e `RooftsSkillManifestBridge` publica manifestos no `SkillRegistry` como registros desabilitados. Corpo, recursos, scripts e efeitos continuam deliberadamente fora da execução autorizada. Retrieval universal/semântico, hardening OS-level e leases/fencing continuam backlog de marcos posteriores.
 
 CI/E2E devem ser considerados somente após execução comprovada no HEAD deste documento.
 

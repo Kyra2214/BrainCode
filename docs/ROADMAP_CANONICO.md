@@ -15,7 +15,7 @@ Este é o roadmap operacional. Documentos de fases anteriores são históricos.
 [x] PostExecutionGate: Verification → Critic → Revision → Readiness → Learning.
 [x] EventStore/BehaviorTrace.
 [x] RooftS consolidado como uma entidade com camadas 0.3–0.6, preservando os artefatos existentes.
-[x] RooftS 0.6 / Agent Skills instalado como camada do mesmo RooftS, ainda sem integração comportamental.
+[x] RooftS 0.6 / Agent Skills instalado como camada do mesmo RooftS, com integração limitada de descoberta/seleção e sem autorização de efeitos.
 
 ## Marco 2.4 — Context Engineering
 
@@ -47,6 +47,24 @@ Este é o roadmap operacional. Documentos de fases anteriores são históricos.
 AUDITAR → LICENÇA → CÓDIGO REAL → TESTES → SEGURANÇA → COMPATIBILIDADE → DECISÃO → INCORPORAR → VALIDAR → DOCUMENTAR PROVENIÊNCIA.
 
 Preferir implementação upstream madura quando puder ser incorporada corretamente. Não substituir por reimplementação simplificada sem motivo.
+
+### Checklist de evidência da absorção
+
+Cada item marcado como concluído aponta para código de produção e um teste que falha quando o contrato quebra.
+
+| Item | Status | Caller real | Teste/evidência |
+|---|---|---|---|
+| Skills Roofts 0.6: catálogo lazy, seleção, plano de ativação e corpo limitado | [x] | `SandboxViewModel` injeta `RooftsSkillCatalog` em `CodeGenerationExecutor` | `RooftsSkillSelectorTest`, `RooftsSkillActivationTest`, `RooftsSkillLoaderTest` |
+| Skills Roofts 0.6: descoberta no registry sem habilitação | [x] | `BrainIntegrationFacade` chama `RooftsSkillManifestBridge.registerDiscovered` | `SkillRegistryTest` |
+| Skills Roofts 0.6: metadados reais e overlay local | [x] | `RooftsSkillLoader.loadCatalog` mescla `braincode-skill-overlay.json` | `RooftsSkillEvaluationTest` lê os 25 `SKILL.md` reais e exige score mínimo |
+| Workflows: parser, catálogo custom/community, enable/disable e schedule | [x] | `WorkflowCatalog` e `WorkflowScheduler` no núcleo | `WorkflowDocumentTest`, `WorkflowInfrastructureTest` |
+| Workflows: backup/restore seguro | [x] | `BrainIntegrationFacade.backupWorkflows`/`restoreWorkflows` e `WorkflowCatalog.restore` | `WorkflowDocumentTest` cobre zip-slip, caminho absoluto, hash adulterado e atomicidade |
+| Workflows: capability estável e comandos operacionais | [x] | `BrainSandboxController` registra `workflow.run`; `SandboxViewModel` expõe list/enable/disable/backup/restore | `PolicyBrokerDoorTest`, `CompositeActionExecutorTest` e `WorkflowDocumentTest` cobrem Porta 3, fail-closed e `runDocument` |
+| Marketplace: manifesto HTTPS pinado e assinatura Ed25519 | [x] | `WorkflowMarketplaceRegistry.pin` | `WorkflowInfrastructureTest` cobre assinatura válida e cinco rejeições |
+| Conteúdo executável externo, scripts/hooks e download automático | [ ] | Nenhum por decisão de segurança | ADR T-601 e decisão E/F; não implementar sem novo gate |
+| Prompts do PDF do projeto3 | [ ] | Nenhum; licença ainda não comprovada | T-701 bloqueia T-702/T-703 |
+
+As decisões por fonte estão em `docs/DECISOES_MARCO_2_6_ABSORCAO.md`. A proveniência do upstream e do adapter local está em `docs/ABSORCAO_PROVENIENCIA.md` e `docs/THIRD_PARTY_NOTICES.md`.
 
 ## Marco 3 — Segurança
 

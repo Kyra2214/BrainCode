@@ -33,6 +33,7 @@ class WebResearchExecutor(
         if (query.isBlank()) {
             return ActionExecution(
                 success = true,
+                result = "WebResearch indisponível: nenhuma consulta foi informada. Prosseguindo com conhecimento local.",
                 internalPayload = "WebResearch indisponível: nenhuma consulta foi informada. Prosseguindo com conhecimento local.",
                 evidence = listOf("web-research:sem-consulta"),
                 provenance = provenance(capability)
@@ -46,6 +47,7 @@ class WebResearchExecutor(
         if (resultados.isEmpty()) {
             return ActionExecution(
                 success = true,
+                result = "WebResearch indisponível. ${output.userMessage ?: "Prosseguindo com conhecimento local."}",
                 internalPayload = "WebResearch indisponível. ${output.userMessage ?: "Prosseguindo com conhecimento local."}",
                 evidence = listOf("web-research:indisponivel", "web-research:diagnostic:${output.diagnostic?.take(160).orEmpty()}"),
                 provenance = provenance(capability)
@@ -54,6 +56,7 @@ class WebResearchExecutor(
 
         return ActionExecution(
             success = true,
+            result = montarResumo(resultados),
             internalPayload = output.answer,
             evidence = resultados.map { evidenciaDe(it) } + output.citations.map { "web-research:citation=${it.index}:${it.url}" } + "web-research:quality=${output.sourceQuality}",
             provenance = provenance(capability),

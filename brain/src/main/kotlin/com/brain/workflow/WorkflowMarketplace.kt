@@ -24,7 +24,7 @@ class WorkflowMarketplaceRegistry(private val trustedSigningKeys: Map<String, By
 
     fun pin(manifest: WorkflowPackageManifest): WorkflowPackageManifest {
         validate(manifest)
-        check(verify(manifest)) { "manifesto de workflow não possui assinatura confiável" }
+        if (!verify(manifest)) throw SecurityException("manifesto de workflow não possui assinatura confiável")
         val key = "${manifest.id}@${manifest.version}"
         manifests[key] = manifest
         return manifest

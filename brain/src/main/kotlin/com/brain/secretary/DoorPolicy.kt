@@ -53,7 +53,7 @@ object DoorPolicy {
      */
     private fun isExternal(capability: String): Boolean = capability.startsWith("provider.") || capability.startsWith("account.") || capability.startsWith("external.")
     private fun isProduction(capability: String): Boolean = capability == "workspace.write" || capability.startsWith("workspace.") || capability == "prompt.library.write"
-    private fun isExecution(capability: String): Boolean = capability == "sandbox.code" || capability.startsWith("sandbox.build") || capability.startsWith("sandbox.test")
+    private fun isExecution(capability: String): Boolean = capability == "sandbox.code" || capability.startsWith("sandbox.build") || capability.startsWith("sandbox.test") || capability == "workflow.run"
     private fun isWriteOrExecute(capability: String): Boolean = isProduction(capability) || isExecution(capability)
 
     private val CHAT_CAPABILITIES = setOf("brain.analyze", "chat.respond", "sandbox.diagnose", "network.research", "sandbox.info", "sandbox.health")

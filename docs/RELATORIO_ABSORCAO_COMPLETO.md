@@ -3,13 +3,13 @@
 **Projeto:** BrainCode  
 **Rodada:** absorção orientada pelo Marco 2.6  
 **Data:** 23 de setembro de 2026  
-**Estado:** implementação das absorções solicitadas concluída; testes pesados aguardando ordem
+**Estado:** absorções implementadas; gates locais completos verdes; CI, E2E e validação em dispositivo ainda pendentes
 
 ## 1. Conclusão executiva
 
-Não ficou material externo omitido do pacote final. O ZIP preserva o diretório completo `BrainCode-main` e os nove arquivos do diretório externo `absorcao-projeto3`.
+Não ficou material externo omitido do pacote final. O ZIP preserva o diretório completo `BrainCode-main` e os oito arquivos do diretório externo `absorcao-projeto3`.
 
-Ficaram de fora somente integrações que o próprio plano classifica como etapas posteriores ou que exigiriam um gate de segurança e validação mais amplo. Entre elas estão a execução de recursos de Skills, a aprovação automática de permissões no `PolicyBroker`, a execução de hooks e scripts externos, o grader semântico e todos os gates pesados de Android, CI e E2E. O marketplace pinado, o parser de workflows, o scheduler de metadata e o backup/restore foram implementados nativamente.
+Ficaram de fora somente integrações que o próprio plano classifica como etapas posteriores ou que exigiriam um gate de segurança e validação mais amplo. Entre elas estão a execução de recursos de Skills, a aprovação automática de permissões no `PolicyBroker`, a execução de hooks e scripts externos, o grader semântico, CI/E2E e testes em dispositivo. O marketplace pinado, o parser de workflows, o scheduler de metadata e o backup/restore foram implementados nativamente.
 
 A implementação agora cobre o catálogo lazy de Skills, o plano explícito de ativação, a ponte segura para o `SkillRegistry`, o avaliador determinístico e o ciclo nativo de documentos `WORKFLOW.md`. O fluxo existente continua sendo o responsável por submeter ações aos limites do BrainCode.
 
@@ -23,6 +23,8 @@ Também foi criada uma ponte que publica manifestos Roofts no `SkillRegistry` co
 
 Para workflows, o projeto agora possui parser de frontmatter, precedência customizada sobre community, habilitação reversível, schedule como metadado, backup/restore com hashes e validação de caminhos, além de um adapter que entrega o documento ao `WorkflowEngine` existente. O corpo do Markdown permanece instrução; não é interpretado como código.
 
+O wiring da F4 registra `workflow.run` como capability estável, aplica o gating de Porta 3 aprovada e falha fechado quando não há executor dedicado. A facade expõe restore e os comandos `/workflow list`, `/workflow enable <id>`, `/workflow disable <id>`, `/workflow backup` e `/workflow restore`; o adapter `runDocument` entrega o corpo ao engine somente depois da autorização.
+
 ## 2. O que foi preservado no pacote
 
 O pacote final contém duas raízes:
@@ -30,7 +32,7 @@ O pacote final contém duas raízes:
 | Raiz | Conteúdo | Estado |
 |---|---|---|
 | `BrainCode-main` | código, assets, documentação, testes e referências do projeto | preservado com as alterações desta rodada |
-| `absorcao-projeto3` | PDFs, DOCX e materiais externos usados como plano e referências | preservado sem remoção |
+| `absorcao-projeto3` | PDFs, DOCX e materiais externos usados como plano e referências; oito arquivos no total | preservado sem remoção |
 
 A camada `app/src/main/assets/roofts/0.6` continua contendo as Skills, agentes, hooks, scripts, avaliações, documentação e arquivos de marketplace que já estavam no projeto. Esses arquivos não foram apagados nem substituídos. A preservação do conteúdo não significa que todos esses componentes estejam ativos no runtime Android.
 
@@ -42,7 +44,7 @@ A fonte de comportamento da primeira fatia foi `addyosmani/agent-skills`, já in
 |---|---|
 | Projeto | `addyosmani/agent-skills` |
 | Tag | `0.6.10` |
-| Commit | `c004a74784a08295d52749b4cda634125b9a581` |
+| Commit | `c004a74784a08295d52749b04cda634125b9a581` |
 | Licença | MIT |
 | Cópia da licença | `app/src/main/assets/roofts/0.6/LICENSE` |
 | Manifesto local | `docs/ROOFTS_0.6.md` |
@@ -112,9 +114,9 @@ Foram adicionados testes focados para:
 
 Os scripts, hooks e recursos que permanecem nos assets não foram conectados a um executor. Isso foi intencional. Para ativá-los seria necessário definir sandboxing, permissões, limites de tempo, política de rede, tratamento de saída, provenance e rollback.
 
-### 5.2 Integração completa com autorização
+### 5.2 Autorização operacional completa
 
-Ainda não existe um objeto de ativação equivalente a `SkillActivation` com `runId`, confiança, justificativa, recursos carregados, permissões solicitadas e estado de aprovação. A seleção de Skills não cria uma entrada no `SkillRegistry` nem altera `PolicyBroker`, `CapabilityRegistry` ou `ActionGateway`.
+O objeto `RooftsSkillActivation`/`RooftsSkillActivationPlan` já registra `runId`, confiança, justificativa, recursos solicitados, permissões e estado de aprovação. `RooftsSkillManifestBridge.registerDiscovered` publica cada manifesto no `SkillRegistry` como descoberta desabilitada, preservando hash e origem. O que permanece fora desta absorção é a autorização operacional completa: o plano não aprova efeitos implicitamente nem altera `PolicyBroker`, `CapabilityRegistry` ou `ActionGateway` para executar corpo, recursos ou ferramentas.
 
 ### 5.3 Carregamento progressivo real
 
@@ -162,58 +164,51 @@ A escrita de arquivos gerados continua protegida por caminhos relativos, rejeiç
 
 ## 7. Validação executada
 
-A validação do núcleo passou com o comando abaixo:
+O baseline local do fechamento foi executado no commit de referência `9a3c52020440d2d4c48b363854ad49975e1c52f3`, primeiro sem ambiente Android e depois com JDK 17 e Android SDK 34. A tabela histórica e a separação entre falha ambiental, regressão de compatibilidade e resultado final estão em `docs/BASELINE_ABSORCAO_PROJETO3_2026-09-23.md`.
 
-```text
-JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ./gradlew :brain:test --tests com.brain.skill.RooftsSkillSelectorTest --no-daemon --console=plain
-```
+| Gate | Resultado | Comando/evidência |
+|---|---:|---|
+| suíte JVM completa | **PASS** | `./gradlew :brain:test --no-daemon --console=plain` |
+| suíte Android-module completa | **PASS** | `./gradlew :android-module:test --no-daemon --console=plain` |
+| suíte Android app completa | **PASS** | `./gradlew :app:testDebugUnitTest --no-daemon --console=plain` |
+| `workflow.run`/restore/segurança | **PASS** | testes focados de workflow, policy, marketplace, bridge e T-203 instrumentado compilado |
+| architecture gate | **PASS** | `bash scripts/architecture-gate.sh` |
+| `assembleDebug` | **PASS** | `./gradlew :app:assembleDebug --no-daemon --console=plain` |
+| lint | **PASS** | `./gradlew :app:lint --no-daemon --console=plain` |
 
-Resultado: **BUILD SUCCESSFUL**.
+As 13 falhas registradas no baseline foram eliminadas pelas correções de compatibilidade do resultado legado, fallback honesto do composer, proveniência de pesquisa, gate semântico apoiado em evidência e timeout de instalação compatível com o limite do Sandbox.
 
-A validação Android focada não chegou à compilação. O comando foi bloqueado porque o ambiente não possuía Android SDK configurado:
-
-```text
-:app:testDebugUnitTest --tests com.sandbox.app.RooftsSkillLoaderTest
-```
-
-Resultado: **BLOCKED — ANDROID_HOME/local.properties ausentes**.
-
-Os seguintes gates não foram iniciados:
+Os gates ainda pendentes são:
 
 | Gate | Estado | Motivo |
 |---|---|---|
-| suíte JVM completa | não executado | reservado para a etapa final |
-| suíte Android completa | não executado | reservado para a etapa final |
-| `assembleDebug` | não executado | reservado para a etapa final |
-| lint | não executado | reservado para a etapa final |
+| suíte JVM completa | PASS | `:brain:test` |
+| suíte Android-module completa | PASS | `:android-module:test` |
+| suíte Android app | PASS | `:app:testDebugUnitTest` |
+| `assembleDebug` | PASS | APK debug gerado |
+| lint | PASS | relatório HTML sem falha bloqueante |
 | CI | não executado | reservado para a etapa final |
 | E2E | não executado | reservado para a etapa final |
-| emulador/dispositivo | não executado | reservado para a etapa final |
+| instrumentação em emulador/dispositivo | compilado, não executado | nenhum dispositivo/emulador anexado nesta sessão |
 | readiness de release | não executado | reservado para a etapa final |
 
 ## 8. Critério de integração e estado atual
 
-O código incorporado já possui contrato, caller real, limite de segurança, testes focados e documentação de proveniência. O ciclo de workflow também possui parser, catálogo, habilitação, backup e adapter para o engine. O critério completo de release ainda não está fechado porque a validação Android está bloqueada e os gates completos foram deliberadamente adiados.
+O código incorporado já possui contrato, caller real, limite de segurança, testes focados e documentação de proveniência. O ciclo de workflow também possui parser, catálogo, habilitação, backup/restore, comandos de facade e adapter para o engine. O critério completo de release ainda não está fechado porque CI, E2E, teste em dispositivo e readiness de release não foram executados.
 
 Assim, o estado correto é:
 
-> **Absorção e implementação das pendências sem testes pesados: concluídas. Validação Android, gates completos e readiness: pendentes.**
+> **Absorção e gates locais: verdes. CI/E2E, dispositivo e readiness de release: pendentes.**
 
 ## 9. Próximas etapas, somente após ordem
 
 A sequência recomendada para a próxima rodada é:
 
-1. disponibilizar/configurar o Android SDK;
-2. executar o teste focado do loader;
-3. executar a suíte JVM completa;
-4. executar a suíte Android completa;
-5. executar `assembleDebug` e lint;
-6. validar a instalação dos assets Roofts 0.6;
-7. executar CI e E2E;
-8. revisar logs, provenance e regressões;
-9. somente então avaliar etapas que continuam fora do escopo: grader semântico, execução de recursos externos e aprovação automática de efeitos.
-
-Nenhuma dessas etapas foi executada nesta rodada, com exceção do teste focado do selector.
+1. executar CI e E2E no mesmo HEAD;
+2. executar a suíte instrumentada em emuladores API 26 e API 33, incluindo T-203;
+3. validar a instalação física dos assets Roofts 0.6 no APK;
+4. revisar logs, proveniência e regressões e declarar readiness de release;
+5. somente então avaliar etapas que continuam fora do escopo: grader semântico, execução de recursos externos e aprovação automática de efeitos.
 
 ## 10. Documentos relacionados no projeto
 

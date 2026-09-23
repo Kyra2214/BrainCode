@@ -88,6 +88,7 @@ class BrainIntegrationFacade(private val context: Context, private val stateDir:
     fun enableWorkflow(id: String): WorkflowDocument = workflowCatalog.enable(id)
     fun disableWorkflow(id: String) = workflowCatalog.disable(id)
     fun backupWorkflows(output: File) = workflowCatalog.backup(output)
+    fun restoreWorkflows(input: File) = workflowCatalog.restore(input)
 
     suspend fun recordExperience(runId: String, success: Boolean) {
         memory.registrar(

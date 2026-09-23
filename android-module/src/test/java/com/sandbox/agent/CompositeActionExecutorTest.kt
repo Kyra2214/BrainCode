@@ -70,4 +70,26 @@ class CompositeActionExecutorTest {
         assertTrue(result.error.orEmpty().contains("executor dedicado"))
     }
 
+    @Test
+    fun `workflow sem executor dedicado falha fechado e nao usa sandbox fallback`() {
+        val executor = CompositeActionExecutor(emptyMap(), ActionExecutor { _, _, _ ->
+            ActionExecution(true, result = "fallback perigoso")
+        })
+        val capability = definition("workflow.run").copy(category = CapabilityCategory.WORKFLOW)
+        val context = PolicyContext("run", "task", "agent", RiskClass.LOW, sandboxRequired = true)
+        val decision = PolicyBroker(
+            allowedCapabilities = listOf("workflow.run"),
+            actorCapabilities = mapOf("agent" to listOf("workflow.run"))
+        ).authorize("agent", "workflow.run", "", context)
+
+        val result = executor.execute(
+            ActionRequest("test-workflow", "agent", "workflow.run", context = context),
+            capability,
+            decision
+        )
+
+        assertEquals(false, result.success)
+        assertTrue(result.error.orEmpty().contains("executor dedicado"))
+    }
+
 }
