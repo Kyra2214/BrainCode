@@ -25,31 +25,31 @@ Objetivo: validar, a partir da instalação do APK, que o BrainCode está realme
 - [ ] Testar operação offline quando aplicável.
 
 ## 2. Integridade do Sandbox
-- [ ] `BrainSandboxController` inicializado.
-- [ ] `PolicyBroker` inicializado.
-- [ ] `CapabilityRegistry` inicializado.
-- [ ] `CapabilityResolver` inicializado.
-- [ ] `ActionGateway` inicializado.
+- [x] `BrainSandboxController` inicializado.
+- [x] `PolicyBroker` inicializado.
+- [x] `CapabilityRegistry` inicializado.
+- [x] `CapabilityResolver` inicializado.
+- [x] `ActionGateway` inicializado.
 - [ ] `AgentRegistry` carregado quando aplicável.
-- [ ] `SkillRegistry` carregado.
+- [x] `SkillRegistry` carregado.
 - [ ] Memory disponível.
-- [ ] EventStore disponível.
-- [ ] ExecutionTrace disponível.
-- [ ] SandboxPlatform disponível.
-- [ ] Workspace disponível.
+- [x] EventStore disponível.
+- [x] ExecutionTrace disponível.
+- [x] SandboxPlatform disponível.
+- [x] Workspace disponível.
 - [ ] Scheduler/workflows disponíveis quando aplicável.
-- [ ] Nenhum componente crítico falhou silenciosamente.
+- [x] Nenhum componente crítico falhou silenciosamente.
 - [ ] Nenhum componente obrigatório ficou `null`, `UNAVAILABLE` ou equivalente sem justificativa.
 
 ## 3. Inventário de Skills
 Para cada skill: instalada -> descoberta -> registrada -> disponível -> autorizada -> executor -> execução -> resultado.
 - [ ] Contar skills instaladas.
 - [ ] Comparar com inventário esperado.
-- [ ] Confirmar Roofts 0.3.
-- [ ] Confirmar Roofts 0.4.
-- [ ] Confirmar Roofts 0.5.
-- [ ] Confirmar Roofts 0.6.
-- [ ] Confirmar as 25 skills do Roofts 0.6.
+- [x] Confirmar Roofts 0.3.
+- [x] Confirmar Roofts 0.4.
+- [x] Confirmar Roofts 0.5.
+- [x] Confirmar Roofts 0.6.
+- [x] Confirmar as 25 skills do Roofts 0.6.
 - [ ] Confirmar manifestos.
 - [ ] Confirmar IDs e metadados.
 - [ ] Confirmar discovery.
