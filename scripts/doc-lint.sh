@@ -15,6 +15,6 @@ if [[ -f "$ROOT_DIR/docs/LEGADO_E_DECISOES.md" ]]; then
   while IFS= read -r p; do
     [[ -z "$p" ]] && continue
     [[ -e "$ROOT_DIR/$p" ]] && { echo "ARQUIVO DECLARADO COMO APAGADO AINDA EXISTE: $p" >&2; status=1; }
-  done < <(grep -iE 'removid|apagado|delet' "$ROOT_DIR/docs/LEGADO_E_DECISOES.md" | grep -oE '`[^`]+`' | sed -E 's/^`|`$//g' | grep -E '^[A-Za-z0-9_./-]+\.(kt|java|py|md|sh)$' | sort -u || true)
+  done < <(grep -oE '<!-- removed-file: [^ ]+ -->' "$ROOT_DIR/docs/LEGADO_E_DECISOES.md" | sed -E 's/^<!-- removed-file: | -->$//' | sort -u || true)
 fi
 exit "$status"
