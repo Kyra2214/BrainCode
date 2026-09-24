@@ -35,7 +35,7 @@ O mecanismo (`DoorPolicy.externalAccountsAllowed(door)`) nasce na Fase 1; o valo
 - PR 1 — pacote `com.brain.secretary` em `:brain`: `Door`, `CreatePhase`, `Restriction`, `DoorScope`, `OrderIntent`, `SecretaryState`, `DeterministicSecretary`, `DoorPolicy`, `DoorAwareSplitter`.
 - PR 2 — `PolicyContext`, `PolicyDecision` e `AuthorizationToken` ganham `doorScope`; `PolicyBroker` nega capability fora da porta; `CicloExecucaoPlano` propaga a porta ao contexto usado pelo `ActionGateway`; `BrainSandboxController.executeObjective` recebe `intent` opcional e emite `DoorDesignated`.
 - PR 3 — `ThreadSession` persiste `SecretaryState`; `sendChatMessage` designa a porta sobre `resolved.currentPrompt`; comandos do catálogo `/…` entram fixos na Porta 2.
-- Correção de CI: incluir `:android-module:test` no `ci.yml` (hoje só roda `:brain:test :app:testDebugUnitTest`).
+- Correção de CI aplicada na Fase 6: o `ci.yml` inclui `:android-module:testDebugUnitTest` junto dos testes do `brain` e `app`.
 
 **Não muda:** comportamento sem `OrderIntent`; `KeywordPlannerTest` e `FunctionSplitterTest` (sem edição).
 

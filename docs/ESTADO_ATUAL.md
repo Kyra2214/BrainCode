@@ -6,6 +6,14 @@ Sem HEAD fixo: este documento é atualizado incrementalmente a cada fase, não a
 
 Capability Registry/Discovery, PolicyBroker, ActionGateway, Dispatcher, Agents bounded, SkillRegistry, ReasoningEngine, RequirementDiscovery, AssumptionManager, ContextPack, Planner, AcceptanceCriteria, PlanningGate, AuthorizedPlan, BrainSandboxController, CicloExecucaoPlano, DurableJobRunner/WorkflowEngine, PostExecutionGate, Verification, UniversalCritic, Revision/Fix, Readiness, ValidatedLearning, LayeredMemory e EventStore/BehaviorTrace.
 
+## Atualização da Fase 6/7 — branch `phase6-apk` (2026-09-24)
+
+No HEAD `97f9fbf`, foram aplicadas as correções do segundo cenário de `BrainSandboxControllerExecutionTraceTest`, removido o teste de desenho TOCTOU redundante em favor da cobertura de `SandboxResourceManagerDnsPinningTest`, adicionados os gates Python/architecture/doc/orphan ao CI, removido o grader Roofts duplicado e disponibilizado o job manual de release readiness. Também foi corrigido o fixture de proveniência do `SpecialistCapabilitiesTest`, o fixture de readiness de `SpecialistExecutionWiringTest` e o limite de processos do teste Python para não conflitar com threads do runner.
+
+Evidências locais no mesmo HEAD: `python3 -m unittest discover -s tests` (**159 testes OK**), `:brain:test`, `:android-module:testDebugUnitTest`, `:app:testDebugUnitTest`, `:app:assembleDebug`, `:app:lintDebug`, `scripts/verify-apk-assets.sh` (**25 Roofts Skills + trusted signing keys**), `scripts/architecture-gate.sh` e `scripts/doc-lint.sh` verdes. O APK debug entregue está em `braincode-release-artifacts/BrainCode-debug.apk`, SHA-256 `2ba9b49ca7c520c04c11ad4a75b16664b83e020cf4acf3b064b236df05ed15da`.
+
+O branch foi sincronizado com `origin/phase6-apk`. Permanecem pendentes, e não devem ser marcados como concluídos: execução real do workflow GitHub CI, UI E2E em emulador, validação manual da jornada completa do APK, execução do job manual de release readiness e validação automática de identificadores canônicos no `doc-lint`.
+
 A UI possui estados de planejamento, execução, verificação, crítica, revisão, correção, reexecução, PASS/BLOCKED/FAILED/READY.
 
 RooftS é uma entidade única composta pelas camadas 0.3–0.6. As camadas 0.3–0.5 permanecem preservadas e 0.6 / Agent Skills está instalada como camada do mesmo RooftS.
@@ -143,4 +151,4 @@ O novo contrato está implementado no núcleo e no executor Android. `Conversati
 
 O `ChatResponseExecutor` registra evidências explícitas (`chat:conversation`, `chat:secretary:block`, `chat:websearch:executed`, `chat:websearch:evidence`, `chat:conversation:synthesis` e `chat:secretary:accept`), limita a recuperação a uma tentativa e só promove conhecimento depois do `ACCEPT`. WebSearch nunca devolve texto diretamente à UI; fontes, citations, evidence e diagnósticos continuam internos. Fallbacks neutros e perguntas do tipo “quer que eu pesquise?” foram removidos da saída final.
 
-O teste de contrato `TextConversationContractsTest` impede que fallback, resultado bruto ou resposta sem evidência atravessem o gate. O teste Android do executor comprova o fast path local e a recuperação automática com as seis evidências mínimas do ciclo. CI, UI E2E e APK devem ser executados no novo commit antes da declaração de conclusão.
+O teste de contrato `TextConversationContractsTest` impede que fallback, resultado bruto ou resposta sem evidência atravessem o gate. O teste Android do executor comprova o fast path local e a recuperação automática com as seis evidências mínimas do ciclo. Na execução `phase6-apk`, os testes Android, o APK debug, lint e gate de assets passaram localmente; CI remoto, UI E2E no emulador e a jornada manual do APK continuam sem evidência e não são declarados concluídos.

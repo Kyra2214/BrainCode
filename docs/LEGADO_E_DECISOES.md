@@ -14,6 +14,12 @@ ContextPack é dado tipado; contexto externo não possui autoridade.
 RooftS é uma entidade única com camadas 0.3–0.6; as camadas 0.3–0.5 são preservadas e RooftS 0.6 / Agent Skills está instalado, mas ainda não é runtime ativo de Skills.
 Projetos externos não viram dependências automaticamente.
 
+## Execução de CI/testes e APK — 2026-09-24
+
+Na branch `phase6-apk`, a Fase 6 foi implementada e registrada em `docs/PLANO_3_PORTAS_FASES.md`. O mesmo HEAD passou nos testes JVM Android (`:brain:test`, `:android-module:testDebugUnitTest`, `:app:testDebugUnitTest`), nos 159 testes Python (`python3 -m unittest discover -s tests`), no `architecture-gate`, no `doc-lint`, no `assembleDebug`, no `lintDebug` e no `verify-apk-assets` (25 Roofts Skills e chaves de assinatura confiáveis). O artefato debug e seu checksum foram exportados fora da história de código.
+
+Foram removidos o teste de desenho TOCTOU redundante, o step duplicado do grader semântico Roofts e corrigidos os fixtures de proveniência/readiness dos testes afetados. A implementação foi sincronizada com `origin/phase6-apk`. CI remoto, UI E2E em emulador, jornada manual do APK e release readiness manual continuam pendentes; portanto, não são declarados como concluídos.
+
 ## Legado
 
 BrainExecutionCoordinator foi removido (pós-auditoria, item 3.2); o único caminho é `CicloExecucaoPlano`.
