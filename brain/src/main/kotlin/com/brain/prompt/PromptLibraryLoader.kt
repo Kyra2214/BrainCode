@@ -2,6 +2,7 @@ package com.brain.prompt
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.InputStream
 
 /**
  * Carrega o seed real reaproveitado do IaBrain (assets/prompts_biblioteca.json,
@@ -68,10 +69,9 @@ object PromptLibraryLoader {
         val activityThread = Class.forName("android.app.ActivityThread")
         val application = activityThread.getMethod("currentApplication").invoke(null) ?: return@runCatching emptyList()
         val assets = application.javaClass.getMethod("getAssets").invoke(application)
-        val stream = assets.javaClass.getMethod("open", String::class.java).invoke(assets, EXPANSION_ANDROID_ASSET)
-        val text = stream.javaClass.getMethod("readBytes").invoke(stream) as ByteArray
-        stream.javaClass.getMethod("close").invoke(stream)
-        parse(String(text, Charsets.UTF_8))
+        val stream = assets.javaClass.getMethod("open", String::class.java)
+            .invoke(assets, EXPANSION_ANDROID_ASSET) as InputStream
+        stream.use { parse(String(it.readBytes(), Charsets.UTF_8)) }
     }.getOrDefault(emptyList())
 
     private fun contextoDeUso(item: JSONObject): String {
