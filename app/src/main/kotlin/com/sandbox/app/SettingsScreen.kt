@@ -15,7 +15,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -152,21 +151,6 @@ private fun ToolCatalog(viewModel: SandboxViewModel) {
                         }
                         TextButton(onClick = { viewModel.clearToolMessages() }) { Text("Ok") }
                     }
-                }
-            }
-        }
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                Button(
-                    onClick = { viewModel.installRoofts06OverExistingRootfs() },
-                    enabled = viewModel.phase == SandboxPhase.Ready && !viewModel.rooftsReinstallInProgress,
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Adicionar camada RooftS 0.6 — Agent Skills") }
-                if (viewModel.rooftsReinstallInProgress) {
-                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Reinstalando camada Roofts 0.6…", style = MaterialTheme.typography.bodySmall)
-                    }
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
             }
         }
