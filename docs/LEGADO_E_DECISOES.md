@@ -18,7 +18,7 @@ Projetos externos não viram dependências automaticamente.
 
 Na branch `phase6-apk`, a Fase 6 foi implementada e registrada em `docs/PLANO_3_PORTAS_FASES.md`. O mesmo HEAD passou nos testes JVM Android (`:brain:test`, `:android-module:testDebugUnitTest`, `:app:testDebugUnitTest`), nos 159 testes Python (`python3 -m unittest discover -s tests`), no `architecture-gate`, no `doc-lint`, no `assembleDebug`, no `lintDebug` e no `verify-apk-assets` (25 Roofts Skills e chaves de assinatura confiáveis). O artefato debug e seu checksum foram exportados fora da história de código.
 
-Foram removidos o teste de desenho TOCTOU redundante, o step duplicado do grader semântico Roofts e corrigidos os fixtures de proveniência/readiness dos testes afetados. A implementação foi sincronizada com `origin/phase6-apk`. CI remoto, UI E2E em emulador, jornada manual do APK e release readiness manual continuam pendentes; portanto, não são declarados como concluídos.
+Foram removidos o teste de desenho TOCTOU redundante, o step duplicado do grader semântico Roofts e corrigidos os fixtures de proveniência/readiness dos testes afetados. A implementação foi sincronizada com `origin/phase6-apk`. O CI remoto `35980885173` passou, incluindo o job manual de release readiness. Permanecem pendentes somente UI E2E em emulador, jornada manual do APK e validação automática de identificadores canônicos no `doc-lint`.
 
 ## Legado
 

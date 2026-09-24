@@ -60,7 +60,7 @@ A segunda rodada adicionou `WorkflowEngine.runDocument`, scheduler persistente c
 
 Também foram incorporados `RooftsSemanticGrader`, opcional e offline para CI, e `SafeSkillResourceExecutor`, opt-in para hooks explicitamente declarados. Este último não usa shell, exige allowlist, workspace, timeout e limite de saída, nega rede e bloqueia permissões; descoberta ou seleção de Skill não o invoca automaticamente.
 
-**Atualização da execução `phase6-apk` (2026-09-24):** os gates locais foram repetidos no HEAD entregue: 159 testes Python, testes `brain`/`android-module`/`app`, `assembleDebug`, `lintDebug`, `architecture-gate`, `doc-lint` e `verify-apk-assets` passaram. O APK debug foi exportado com checksum registrado. Esta atualização não altera a pendência histórica de CI remoto, UI E2E em emulador/dispositivo e release readiness manual.
+**Atualização da execução `phase6-apk` (2026-09-24):** os gates locais foram repetidos no HEAD entregue: 159 testes Python, testes `brain`/`android-module`/`app`, `assembleDebug`, `lintDebug`, `architecture-gate`, `doc-lint` e `verify-apk-assets` passaram. O CI remoto `35980885173` também passou, incluindo release readiness manual, e o APK debug foi exportado com checksum registrado. Permanecem pendentes UI E2E em emulador/dispositivo e jornada manual do APK.
 
 ## Referências estudadas, não incorporadas
 
