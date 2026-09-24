@@ -5,7 +5,8 @@ import org.json.JSONObject
 
 /**
  * Carrega o seed real reaproveitado do IaBrain (assets/prompts_biblioteca.json,
- * 75 prompts já catalogados por categoria/subcaso/tags).
+ * 75 prompts já catalogados por categoria/subcaso/tags) e uma expansão local
+ * adicional. O catálogo continua offline e determinístico.
  *
  * O JSON tem campos (categoria, subcaso, tags, melhor_para) que não existem
  * como propriedades separadas em PromptTemplate — são dobrados dentro de
@@ -16,9 +17,18 @@ import org.json.JSONObject
  */
 object PromptLibraryLoader {
 
-    private const val TAXA_SUCESSO_INICIAL = 0.6 // seed já curado, ainda sem uso real: neutro-otimista até haver dado real
+    private const val TAXA_SUCESSO_INICIAL = 0.6
+    private const val EXPANSION_RESOURCE = "catalog/prompts_biblioteca_expansao.json"
+    private const val EXPANSION_ANDROID_ASSET = "prompts_biblioteca_expansao.json"
 
     fun fromJson(json: String): List<PromptTemplate> {
+        val resultado = mutableListOf<PromptTemplate>()
+        resultado += parse(json)
+        resultado += loadBundledExpansion()
+        return resultado.distinctBy { it.id }
+    }
+
+    private fun parse(json: String): List<PromptTemplate> {
         val root = JSONObject(json)
         val prompts = root.getJSONArray("prompts")
         val resultado = mutableListOf<PromptTemplate>()
@@ -34,13 +44,35 @@ object PromptLibraryLoader {
                 agenteRelacionado = agentesRelacionados(item.optJSONArray("melhor_para")),
                 textoTemplate = item.getString("template"),
                 taxaSucesso = TAXA_SUCESSO_INICIAL,
-                custoMedio = 0.0,  // provedores gratuitos, como o resto do catálogo
-                tempoMedioMs = 0L, // sem dado real ainda; primeira leva de registrarResultado() ajusta
+                custoMedio = 0.0,
+                tempoMedioMs = 0L,
                 historicoMelhorias = emptyList()
             )
         }
         return resultado
     }
+
+    /**
+     * Primeiro tenta classpath, que cobre testes/JVM. Em Android, tenta o
+     * AssetManager da aplicação sem introduzir dependência Android no build
+     * do módulo brain. Falha silenciosamente para manter compatibilidade com
+     * ambientes que só possuem o seed original.
+     */
+    private fun loadBundledExpansion(): List<PromptTemplate> = runCatching {
+        val classpathJson = Thread.currentThread().contextClassLoader
+            ?.getResourceAsStream(EXPANSION_RESOURCE)
+            ?.bufferedReader()
+            ?.use { it.readText() }
+        if (!classpathJson.isNullOrBlank()) return@runCatching parse(classpathJson)
+
+        val activityThread = Class.forName("android.app.ActivityThread")
+        val application = activityThread.getMethod("currentApplication").invoke(null) ?: return@runCatching emptyList()
+        val assets = application.javaClass.getMethod("getAssets").invoke(application)
+        val stream = assets.javaClass.getMethod("open", String::class.java).invoke(assets, EXPANSION_ANDROID_ASSET)
+        val text = stream.javaClass.getMethod("readBytes").invoke(stream) as ByteArray
+        stream.javaClass.getMethod("close").invoke(stream)
+        parse(String(text, Charsets.UTF_8))
+    }.getOrDefault(emptyList())
 
     private fun contextoDeUso(item: JSONObject): String {
         val categoria = item.optString("categoria", "")
