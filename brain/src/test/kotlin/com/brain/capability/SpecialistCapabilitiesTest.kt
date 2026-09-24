@@ -70,13 +70,13 @@ class SpecialistCapabilitiesTest {
         val gateway = ActionGateway(registry, policy, ActionExecutor { _, _, _ -> executed++; ActionExecution(true) }, InMemoryActionAuditLog())
 
         val denied = gateway.execute(
-            ActionRequest("a1", "actor", "agent.code", context = PolicyContext("run", "task", "actor"))
+            ActionRequest("a1", "actor", "agent.code", context = PolicyContext("run", "task", "actor"), provenance = listOf("unit-test"))
         )
         assertFalse(denied.success)
         assertEquals(0, executed)
 
         val allowed = gateway.execute(
-            ActionRequest("a2", "actor", "sandbox.health", context = PolicyContext("run", "task", "actor"))
+            ActionRequest("a2", "actor", "sandbox.health", context = PolicyContext("run", "task", "actor"), provenance = listOf("unit-test"))
         )
         assertTrue(allowed.success)
         assertEquals(1, executed)
