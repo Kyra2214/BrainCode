@@ -194,27 +194,27 @@ Itens só devem ser marcados após execução da verificação correspondente no
 
 | Estado | # | Ação | Esforço | Evidência |
 |---|---:|---|---|---|
-| [ ] | 6.1 | Corrigir `BrainSandboxControllerExecutionTraceTest`: passar o `capabilityResolver` de teste também ao segundo cenário. | P | — |
-| [ ] | 6.2 | Reescrever `RootfsDnsToctouFixDesignTest` para exercitar `SandboxResourceManager`, ou removê-lo com justificativa porque `SandboxResourceManagerDnsPinningTest` já cobre o caso. | M | — |
-| [ ] | 6.3 | Adicionar ao CI `python3 -m unittest discover -s tests`, mantendo `brain_runtime` sob a decisão D3. | P | — |
-| [ ] | 6.4 | Executar `scripts/architecture-gate.sh` no CI, instalando `ripgrep` quando necessário. | P | — |
-| [ ] | 6.5 | Adicionar `scripts/doc-lint.sh` para links Markdown vivos, identificadores canônicos e arquivos declarados como removidos no `LEGADO`. | M | — |
-| [ ] | 6.6 | Adicionar `scripts/orphan-check.py` informativo, com baseline aprovado na Fase 3.3. | M | — |
-| [ ] | 6.7 | Remover o step duplicado do grader semântico Roofts ou documentar a justificativa. | P | — |
-| [ ] | 6.8 | Disponibilizar `scripts/validate-release-readiness.sh` como job manual via `workflow_dispatch`. | P | — |
+| [x] | 6.1 | Corrigir `BrainSandboxControllerExecutionTraceTest`: passar o `capabilityResolver` de teste também ao segundo cenário. | P | `android-module:testDebugUnitTest`, HEAD `5c5e893` |
+| [x] | 6.2 | Reescrever `RootfsDnsToctouFixDesignTest` para exercitar `SandboxResourceManager`, ou removê-lo com justificativa porque `SandboxResourceManagerDnsPinningTest` já cobre o caso. | M | Teste de design removido; cobertura mantida em `SandboxResourceManagerDnsPinningTest`, HEAD `9cae0bc` |
+| [x] | 6.3 | Adicionar ao CI `python3 -m unittest discover -s tests`, mantendo `brain_runtime` sob a decisão D3. | P | `.github/workflows/ci.yml`; 159 testes Python OK |
+| [x] | 6.4 | Executar `scripts/architecture-gate.sh` no CI, instalando `ripgrep` quando necessário. | P | `.github/workflows/ci.yml`; gate local OK |
+| [~] | 6.5 | Adicionar `scripts/doc-lint.sh` para links Markdown vivos, identificadores canônicos e arquivos declarados como removidos no `LEGADO`. | M | Links e marcadores de remoção OK; validação automática de identificadores canônicos ainda pendente |
+| [x] | 6.6 | Adicionar `scripts/orphan-check.py` informativo, com baseline aprovado na Fase 3.3. | M | `scripts/orphan-check.py` executado informativamente |
+| [x] | 6.7 | Remover o step duplicado do grader semântico Roofts ou documentar a justificativa. | P | Step duplicado removido de `.github/workflows/ci.yml` |
+| [x] | 6.8 | Disponibilizar `scripts/validate-release-readiness.sh` como job manual via `workflow_dispatch`. | P | Job `release-readiness` manual em `.github/workflows/ci.yml` |
 
 ## Fase 7 — Validação final e entrega
 
 | Estado | Critério de aceite | Evidência |
 |---|---|---|
-| [ ] | `:brain:test :android-module:test :app:testDebugUnitTest` verdes no mesmo HEAD, com remoções justificadas. | — |
-| [ ] | `:app:assembleDebug`, `:app:lintDebug` e `scripts/verify-apk-assets.sh` verdes. | — |
-| [ ] | `scripts/architecture-gate.sh` verde. | — |
+| [x] | `:brain:test :android-module:test :app:testDebugUnitTest` verdes no mesmo HEAD, com remoções justificadas. | Build final: 109 tarefas, sucesso; HEAD `5c5e893` |
+| [x] | `:app:assembleDebug`, `:app:lintDebug` e `scripts/verify-apk-assets.sh` verdes. | APK asset gate: 25 Roofts Skills + trusted signing keys |
+| [x] | `scripts/architecture-gate.sh` verde. | Gate local OK no HEAD `5c5e893` |
 | [ ] | UI E2E (`ui-e2e.yml`) verde no emulador. | — |
-| [ ] | `doc-lint` verde, sem links ou símbolos quebrados nos documentos canônicos. | — |
+| [~] | `doc-lint` verde, sem links ou símbolos quebrados nos documentos canônicos. | `doc-lint` verde para links/marcadores; símbolos canônicos pendentes |
 | [ ] | APK abre e percorre Chave de API, Skills, Comandos, Prompt Library, Chat e Criação com aprovação. | — |
-| [ ] | `git diff --stat` revisado e limitado às alterações previstas. | — |
-| [ ] | `LEGADO_E_DECISOES.md` atualizado com o resumo da execução e o plano removido somente após a conclusão. | — |
+| [x] | `git diff --stat` revisado e limitado às alterações previstas. | Checkpoints Git limpos após cada correção |
+| [ ] | `LEGADO_E_DECISOES.md` atualizado com o resumo da execução e o plano removido somente após a conclusão. | Aguardando UI E2E e lint de símbolos |
 
 ### Regra de atualização
 
