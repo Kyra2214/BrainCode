@@ -31,7 +31,7 @@ class ProotResourceLimitsTest {
     }
 
     @Test fun `DEFAULT activates maxProcesses with tree watchdog support`() {
-        assertEquals(128, ProotResourceLimits.DEFAULT.maxProcesses)
+        assertEquals(256, ProotResourceLimits.DEFAULT.maxProcesses)
         assertTrue(ProotResourceLimits.DEFAULT.hasLimits())
     }
 

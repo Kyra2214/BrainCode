@@ -151,7 +151,7 @@ class PluginSnapshotStore(private val file: File, private val historyFile: File)
 }
 
 interface SandboxCommandExecutor {
-    fun execute(command: List<String>, timeoutSeconds: Long = 60, workingDir: String = "/home/sandbox"): ExecutionLog
+    fun execute(command: List<String>, timeoutSeconds: Long = 120, workingDir: String = "/home/sandbox"): ExecutionLog
 }
 
 interface ComponentRepository {

@@ -71,7 +71,7 @@ class SandboxRuntime(
      */
     fun execute(
         command: List<String>,
-        timeoutSeconds: Long = 60,
+        timeoutSeconds: Long = 120,
         workingDir: String = "/home/sandbox"
     ): SandboxExecutionResult {
         val prootArgs = buildProotCommand(command, workingDir)

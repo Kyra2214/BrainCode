@@ -109,7 +109,7 @@ data class ProotResourceLimits(
          * watchdog Android em ManagedSandboxRuntime é a autoridade por árvore;
          * isso evita confiar apenas no UID compartilhado do Android.
          *
-         * `maxMemoryBytes` foi elevado de 512MB para 4GB porque `ulimit -v`
+         * `maxMemoryBytes` foi elevado de 512MB para 10GB porque `ulimit -v`
          * mapeia para `RLIMIT_AS`, que limita **espaço de endereçamento
          * virtual reservado**, não RSS/memória física de fato usada. JVM e
          * Go reservam de forma legítima centenas de MB de endereço virtual
@@ -121,11 +121,17 @@ data class ProotResourceLimits(
          * esses runtimes sem deixar de aplicar teto nenhum (`ulimit -v
          * unlimited` seguiria ausente); RSS real de processos individuais
          * ainda fica naturalmente contido pela memória física do aparelho.
+         *
+         * O limite de processos foi elevado de 128 para 256: esse valor dá
+         * margem para threads do Android/Compose, Binder, coroutines, GC/JVM,
+         * proot e processos auxiliares das toolchains, mantendo o watchdog
+         * de árvore em `ManagedSandboxRuntime` como autoridade adicional e
+         * evitando um teto indiscriminadamente alto no UID compartilhado.
          */
         val DEFAULT = ProotResourceLimits(
-            maxMemoryBytes = 4L * 1024 * 1024 * 1024,
-            maxCpuSeconds = 60,
-            maxProcesses = 128,
+            maxMemoryBytes = 10L * 1024 * 1024 * 1024,
+            maxCpuSeconds = 120,
+            maxProcesses = 256,
             maxOpenFiles = 64,
             maxFileSizeBytes = 100L * 1024 * 1024
         )
