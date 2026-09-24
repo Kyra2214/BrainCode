@@ -1,0 +1,48 @@
+# Terceiro RootFS opcional: Android/API/Security sobre o Agent Extra 0.4.1.
+# Não instala Ollama; ele permanece exclusivamente como plugin do app.
+FROM sandbox-rootfs-agent-extra:0.4.1
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    ANDROID_HOME=/opt/android-sdk \
+    ANDROID_SDK_ROOT=/opt/android-sdk
+
+USER root
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    android-sdk \
+    android-sdk-build-tools \
+    android-sdk-platform-tools \
+    adb \
+    google-android-platform-tools-installer \
+    google-android-cmdline-tools-10.0-installer \
+    android-sdk-platform-23 \
+    android-sdk-libsparse-utils \
+    gitleaks \
+    unrar-free \
+    qpdf \
+    rsync \
+    socat \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb
+
+# Expor os binários Android com nomes previsíveis para agentes e APIs.
+RUN mkdir -p /opt/android-sdk /home/sandbox/android-projects \
+    && for path in /usr/lib/android-sdk /usr/share/android-sdk; do \
+         if [ -d "$path" ]; then cp -a "$path"/. /opt/android-sdk/; fi; \
+       done \
+    && for bin in adb aapt2 apksigner zipalign sdkmanager avdmanager; do \
+         found=$(find /opt/android-sdk -type f -name "$bin" -perm -u+x -print -quit 2>/dev/null || true); \
+         if [ -n "$found" ]; then ln -sf "$found" "/usr/local/bin/$bin"; fi; \
+       done \
+    && chown -R sandbox:sandbox /opt/android-sdk /home/sandbox/android-projects
+
+# APIs de agentes: health, artifact e execução delimitada.
+COPY integration-scripts/ /usr/local/bin/
+RUN chmod +x /usr/local/bin/sandbox-* \
+    && chown -R root:root /usr/local/bin/sandbox-*
+
+USER sandbox
+WORKDIR /home/sandbox
+CMD ["/bin/bash"]

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "source": "BrainCode adapter metadata; does not modify upstream SKILL.md",
+  "skills": [
+    {"id":"api-and-interface-design","triggers":["api","endpoint","rest","graphql","contrato","interface publica","integracao"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"browser-testing-with-devtools","triggers":["navegador","browser","devtools","console do navegador","requisicao de rede"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"ci-cd-and-automation","triggers":["ci","cd","pipeline","esteira","deploy automatico","integracao continua"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"code-review-and-quality","triggers":["revisao de codigo","code review","qualidade do codigo","merge","pull request"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"code-simplification","triggers":["simplificar","refatorar","codigo complexo","legibilidade"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"constraint-driven-development","triggers":["padrao de qualidade","cobertura de teste","contrato de qualidade","constraints"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"context-engineering","triggers":["contexto do agente","nova sessao","regras do projeto"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"debugging-and-error-recovery","triggers":["bug","erro","quebrou","nao funciona","depurar","debugar","falha no teste","stacktrace"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"deprecation-and-migration","triggers":["migrar","migração","migracao","descontinuar","depreciar","remover sistema antigo"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"documentation-and-adrs","triggers":["documentar","documentacao","adr","decisao de arquitetura","registrar decisao"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"doubt-driven-development","triggers":["revisao critica","questionar premissa","alto risco","producao critica"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"frontend-ui-engineering","triggers":["tela","interface do usuario","ui","layout","componente visual","frontend","acessibilidade","responsivo"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"git-workflow-and-versioning","triggers":["git","commit","branch","pull request","versionamento","release","changelog"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"idea-refine","triggers":["refinar ideia","ideia vaga","brainstorm"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"incremental-implementation","triggers":["implementar aos poucos","entrega incremental","feature flag","passo a passo"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"interview-me","triggers":["pedido vago","nao sei bem o que quero","me entreviste"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"observability-and-instrumentation","triggers":["log","logging","metrica","monitoramento","tracing","alerta","observabilidade"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"performance-optimization","triggers":["performance","desempenho","lentidao","query lenta","otimizar","gargalo"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"planning-and-task-breakdown","triggers":["planejar","plano","dividir em tarefas","quebrar em passos","escopo"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"security-and-hardening","triggers":["seguranca","vulnerabilidade","autenticacao","dados sensiveis","owasp","login seguro"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"shipping-and-launch","triggers":["lancamento","lancar em producao","rollout","checklist de lancamento","rollback"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"source-driven-development","triggers":["documentacao oficial","verificar na doc","biblioteca","framework"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"spec-driven-development","triggers":["especificacao","requisitos","prd","escopo do projeto novo"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"test-driven-development","triggers":["teste","tdd","testes unitarios","cobrir com teste","corrigir bug com teste"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"},
+    {"id":"using-agent-skills","triggers":["skill","skills do agente","qual skill usar"],"exclusions":[],"resources":[],"requiredPermissions":[],"requiredCapabilities":[],"tools":[],"networkPolicy":"none"}
+  ]
+}

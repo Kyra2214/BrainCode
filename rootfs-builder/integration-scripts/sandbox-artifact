@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+src=${1:?uso: sandbox-artifact caminho [nome]}
+name=${2:-$(basename "$src")}
+mkdir -p /home/sandbox/artifacts
+cp -a "$src" "/home/sandbox/artifacts/$name"
+printf '%s\n' "/home/sandbox/artifacts/$name"

@@ -1,0 +1,26 @@
+# IDE
+.idea/
+*.iml
+# Build outputs
+.gradle/
+build/
+app/build/
+# Local configuration
+local.properties
+.env
+*.key
+*.pem
+__pycache__/
+*.pyc
+.pytest_cache/
+*.db
+*.sqlite3
+
+# Artefatos locais de build
+BrainCode-debug.apk
+
+# Segredos de assinatura e artefatos de CI/E2E locais
+*.jks
+*.keystore
+.ci/
+e2e-report/

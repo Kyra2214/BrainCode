@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+id=${SANDBOX_JOB_ID:-job-$(date +%s)}
+log="/home/sandbox/logs/$id.log"
+mkdir -p /home/sandbox/logs /home/sandbox/jobs
+printf '%s\n' "running" > "/home/sandbox/jobs/$id.status"
+set +e
+"$@" >"$log" 2>&1
+code=$?
+set -e
+printf '%s\n' "exit=$code" > "/home/sandbox/jobs/$id.status"
+cat "$log"
+exit "$code"

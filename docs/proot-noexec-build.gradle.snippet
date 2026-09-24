@@ -1,0 +1,26 @@
+// ---------------------------------------------------------------------
+// Adicione/mescle estes blocos no seu android/app/build.gradle existente.
+// ---------------------------------------------------------------------
+
+android {
+    defaultConfig {
+        // ABIs para as quais você tem um binário proot compilado e
+        // renomeado (libapp_proot.so / libapp_proot_loader.so).
+        ndk {
+            abiFilters 'arm64-v8a' // adicione 'armeabi-v7a', 'x86_64' se precisar
+        }
+    }
+
+    // CRÍTICO: garante que os .so sejam extraídos como arquivos reais em
+    // nativeLibraryDir em vez de ficarem comprimidos dentro do APK e
+    // carregados via mmap direto do zip (o que não te dá um caminho de
+    // arquivo executável real para usar com ProcessBuilder).
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+            // Mantém símbolos de debug do proot fora de qualquer strip
+            // automático do AGP, se você usa build de debug com símbolos.
+            keepDebugSymbols += ['**/libapp_proot.so', '**/libapp_proot_loader.so']
+        }
+    }
+}

@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+for command in python3 node git curl jq adb aapt2 apksigner zipalign sdkmanager avdmanager gitleaks; do
+  command -v "$command" >/dev/null || { echo "missing:$command" >&2; exit 1; }
+done
+printf 'ok\n'

@@ -1,0 +1,10 @@
+{
+  "version": "0.4.1",
+  "arch": "arm64-v8a",
+  "baseRootfs": "0.3.3",
+  "distro": "ubuntu-24.04",
+  "url": "https://github.com/Kyra2214/BrainCode/releases/download/rootfs-agent-v0.4.1/rootfs-agent-extra-0.4.1.tar.gz",
+  "sizeBytes": 1727218090,
+  "sha256": "ffe23b4bb326bfd9ef7548f6378d9ca5e6c75fce342ee7c7923203492cd4850b",
+  "minAppVersion": "1.0.0"
+}

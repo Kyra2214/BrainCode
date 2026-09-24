@@ -1,0 +1,12 @@
+{
+  "version": "0.5.0",
+  "arch": "arm64-v8a",
+  "baseRootfs": "0.4.1",
+  "distro": "ubuntu-24.04",
+  "url": "https://github.com/Kyra2214/BrainCode/releases/download/rootfs-agent-android-v0.5.0/rootfs-agent-android-0.5.0.tar.gz",
+  "sizeBytes": 1764603872,
+  "sha256": "374e795ce3caa8eaf4cbb58f39d591230918f5226ec525d0140b5f94ff472c09",
+  "minAppVersion": "1.0.0",
+  "ollamaIncluded": false,
+  "signatureRequired": false
+}

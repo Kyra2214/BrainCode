@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Necessário para download sob demanda do rootfs e tarefas de rede do Sandbox. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Permite que o Sandbox continue executando enquanto a Activity está minimizada. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Mantém CPU ativa durante downloads, extração e builds longos com a tela apagada. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <application
+        android:allowBackup="false"
+        android:label="Sandbox Mobile"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+
+        <activity
+            android:name=".BrainCodeActivity"
+            android:exported="true"
+            android:label="Sandbox Mobile"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:label="Sandbox Mobile"
+            android:windowSoftInputMode="adjustResize" />
+
+        <service
+            android:name=".BrainCodeExecutionService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+    </application>
+
+</manifest>

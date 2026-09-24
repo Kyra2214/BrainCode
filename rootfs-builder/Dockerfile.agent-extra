@@ -1,0 +1,82 @@
+# Camada opcional para agentes: construa depois do RootFS base.
+# A imagem base deve estar disponível como sandbox-rootfs-builder:0.3.3.
+FROM sandbox-rootfs-builder:0.3.3
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
+
+USER root
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bats \
+    shellcheck \
+    valgrind \
+    strace \
+    ltrace \
+    gdb \
+    lldb \
+    iputils-ping \
+    tcpdump \
+    traceroute \
+    mtr-tiny \
+    nmap \
+    whois \
+    openssl \
+    age \
+    binutils \
+    strace \
+    lldb \
+    xmlstarlet \
+    libxml2-utils \
+    ffmpeg \
+    exiftool \
+    poppler-utils \
+    ghostscript \
+    qpdf \
+    rclone \
+    parallel \
+    btop \
+    ncdu \
+    watch \
+    libarchive-tools \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb
+
+# Ferramentas Python para testes, dados, documentos e validação de APIs.
+# Em camadas separadas para permitir retomada/caching durante builds ARM64 via QEMU.
+RUN python3 -m pip install --break-system-packages --ignore-installed --no-cache-dir \
+    uv pip-tools poetry coverage tox pre-commit isort flake8 pyright \
+    maturin cython hypothesis jsonschema yamllint \
+    && rm -rf /root/.cache/pip
+
+RUN python3 -m pip install --break-system-packages --ignore-installed --no-cache-dir \
+    build duckdb pandas polars numpy openpyxl pyarrow python-docx pypdf reportlab \
+    && rm -rf /root/.cache/pip
+
+RUN python3 -m pip install --break-system-packages --ignore-installed --no-cache-dir \
+    semgrep grpcio-tools websockets \
+    && rm -rf /root/.cache/pip
+
+# CLIs modernas de frontend/testes; projetos continuam livres para fixar suas
+# versões localmente no package.json.
+RUN npm install --global --no-audit --no-fund \
+    typescript tsx vite vitest playwright \
+    && npm cache clean --force \
+    && rm -rf /root/.npm
+
+# Utilitários pequenos para APIs que não têm pacote Ubuntu consistente.
+RUN printf '%s\n' '#!/bin/sh' 'echo "grpcurl/websocat devem ser instalados pelo projeto ou plugin de rede"' > /usr/local/bin/api-tool-placeholder \
+    && chmod +x /usr/local/bin/api-tool-placeholder
+
+# Estrutura padrão para jobs, artefatos e logs de agentes.
+RUN mkdir -p /home/sandbox/{workspace,projects,jobs,artifacts,logs,cache,tools,scripts,tmp} \
+    && chown -R sandbox:sandbox /home/sandbox
+
+COPY agent-scripts/ /usr/local/bin/
+RUN chmod +x /usr/local/bin/sandbox-* \
+    && chown -R root:root /usr/local/bin/sandbox-*
+
+USER sandbox
+WORKDIR /home/sandbox
+CMD ["/bin/bash"]

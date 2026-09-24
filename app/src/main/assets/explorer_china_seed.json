@@ -1,0 +1,127 @@
+{
+  "versao": 1,
+  "foco": "china-ai-radar",
+  "descricao": "Seed curado para o Explorer Intelligence. URLs oficiais são pontos de entrada; dados de capacidade e licença devem ser revalidados antes de promoção automática.",
+  "itens": [
+    {
+      "id": "qwen",
+      "nome": "Qwen",
+      "tipo": "MODEL",
+      "regiao": "CHINA",
+      "siteOficial": "https://qwen.ai",
+      "capacidades": ["coding", "reasoning", "multimodal", "agent"],
+      "openSource": "OPEN_WEIGHT",
+      "confianca": 0.95
+    },
+    {
+      "id": "kimi",
+      "nome": "Kimi",
+      "tipo": "AI",
+      "regiao": "CHINA",
+      "siteOficial": "https://www.kimi.com",
+      "capacidades": ["reasoning", "research", "agent", "browser", "office"],
+      "openSource": "CLOSED",
+      "confianca": 0.95
+    },
+    {
+      "id": "zai-glm",
+      "nome": "Z.ai / GLM",
+      "tipo": "AI",
+      "regiao": "CHINA",
+      "siteOficial": "https://z.ai",
+      "capacidades": ["coding", "agent", "reasoning", "vision", "video"],
+      "openSource": "OPEN_WEIGHT",
+      "confianca": 0.95
+    },
+    {
+      "id": "minimax",
+      "nome": "MiniMax",
+      "tipo": "AI",
+      "regiao": "CHINA",
+      "siteOficial": "https://www.minimax.io",
+      "capacidades": ["coding", "agent", "multimodal", "video", "audio", "music", "computer-use"],
+      "openSource": "OPEN_WEIGHT",
+      "confianca": 0.95
+    },
+    {
+      "id": "doubao",
+      "nome": "Doubao",
+      "tipo": "AI",
+      "regiao": "CHINA",
+      "siteOficial": "https://www.doubao.com",
+      "capacidades": ["conversation", "multimodal", "agent", "image", "video"],
+      "openSource": "CLOSED",
+      "confianca": 0.85
+    },
+    {
+      "id": "hunyuan",
+      "nome": "Tencent Hunyuan",
+      "tipo": "MODEL",
+      "regiao": "CHINA",
+      "siteOficial": "https://hunyuan.tencent.com",
+      "capacidades": ["multimodal", "reasoning", "image", "video", "3d"],
+      "openSource": "OPEN_WEIGHT",
+      "confianca": 0.85
+    },
+    {
+      "id": "stepfun",
+      "nome": "StepFun",
+      "tipo": "AI",
+      "regiao": "CHINA",
+      "siteOficial": "https://www.stepfun.com",
+      "capacidades": ["reasoning", "coding", "agent", "audio", "image"],
+      "openSource": "OPEN_WEIGHT",
+      "confianca": 0.9
+    },
+    {
+      "id": "internlm",
+      "nome": "InternLM",
+      "tipo": "MODEL",
+      "regiao": "CHINA",
+      "siteOficial": "https://internlm.org",
+      "capacidades": ["reasoning", "multimodal", "coding", "research"],
+      "openSource": "OPEN_WEIGHT",
+      "confianca": 0.9
+    },
+    {
+      "id": "01ai",
+      "nome": "01.AI / Yi",
+      "tipo": "MODEL",
+      "regiao": "CHINA",
+      "siteOficial": "https://www.01.ai",
+      "capacidades": ["reasoning", "coding", "agent", "enterprise"],
+      "openSource": "OPEN_WEIGHT",
+      "confianca": 0.9
+    },
+    {
+      "id": "xiaomi-mimo",
+      "nome": "Xiaomi MiMo",
+      "tipo": "MODEL",
+      "regiao": "CHINA",
+      "siteOficial": "https://mimo.xiaomi.com",
+      "capacidades": ["reasoning", "coding", "agent"],
+      "openSource": "OPEN_WEIGHT",
+      "confianca": 0.8
+    },
+    {
+      "id": "coze",
+      "nome": "Coze",
+      "tipo": "AGENT",
+      "regiao": "CHINA",
+      "siteOficial": "https://www.coze.com",
+      "capacidades": ["agent", "workflow", "tools", "mcp"],
+      "openSource": "CLOSED",
+      "confianca": 0.85
+    },
+    {
+      "id": "jimeng",
+      "nome": "Jimeng AI",
+      "tipo": "TOOL",
+      "regiao": "CHINA",
+      "siteOficial": "https://jimeng.jianying.com",
+      "capacidades": ["image", "video", "creative"],
+      "openSource": "CLOSED",
+      "confianca": 0.8
+    }
+  ]
+}

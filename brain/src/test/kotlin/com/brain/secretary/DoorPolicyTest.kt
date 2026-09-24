@@ -1,0 +1,96 @@
+package com.brain.secretary
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class DoorPolicyTest {
+    @Test
+    fun `chat nao permite producao nem execucao`() {
+        val scope = DoorScope(Door.CHAT, CreatePhase.CHAT)
+
+        assertTrue(DoorPolicy.allows(scope, "brain.analyze"))
+        assertTrue(DoorPolicy.allows(scope, "network.research"))
+        assertFalse(DoorPolicy.allows(scope, "workspace.write"))
+        assertFalse(DoorPolicy.allows(scope, "sandbox.code"))
+    }
+
+    @Test
+    fun `prompt permite biblioteca e pesquisa mas nao projeto`() {
+        val scope = DoorScope(Door.PROMPT, CreatePhase.PROMPT)
+
+        assertTrue(DoorPolicy.allows(scope, "prompt.library.write"))
+        assertTrue(DoorPolicy.allows(scope, "network.research"))
+        assertFalse(DoorPolicy.allows(scope, "workspace.write"))
+        assertFalse(DoorPolicy.allows(scope, "sandbox.code"))
+    }
+
+    @Test
+    fun `criacao so libera escrita e execucao depois da aprovacao`() {
+        val discussion = DoorScope(Door.CREATE, CreatePhase.DISCUSSION)
+        val approved = DoorScope(Door.CREATE, CreatePhase.APPROVED)
+
+        assertFalse(DoorPolicy.allows(discussion, "workspace.write"))
+        assertFalse(DoorPolicy.allows(discussion, "sandbox.code"))
+        assertTrue(DoorPolicy.allows(approved, "workspace.write"))
+        assertTrue(DoorPolicy.allows(approved, "sandbox.code"))
+    }
+
+    @Test
+    fun `restricoes explicitas vencem a matriz da porta`() {
+        val scope = DoorScope(
+            Door.CREATE,
+            CreatePhase.APPROVED,
+            restrictions = setOf(Restriction.NO_WEB, Restriction.NO_EXECUTE, Restriction.NO_PRODUCE)
+        )
+
+        assertFalse(DoorPolicy.allows(scope, "network.research"))
+        assertFalse(DoorPolicy.allows(scope, "workspace.write"))
+        assertFalse(DoorPolicy.allows(scope, "sandbox.code"))
+    }
+
+    @Test
+    fun `porta so enxerga as contas externas que ela libera`() {
+        val globais = setOf("android:provider-a", "android:provider-b")
+
+        listOf(
+            DoorScope(Door.CHAT, CreatePhase.CHAT),
+            DoorScope(Door.PROMPT, CreatePhase.PROMPT),
+            DoorScope(Door.CREATE, CreatePhase.APPROVED)
+        ).forEach { scope ->
+            assertEquals("porta ${scope.door} não pode herdar a lista global de contas", emptySet<String>(), scope.visibleAccounts(globais))
+        }
+        assertEquals(globais, DoorScope(Door.CHAT, CreatePhase.CHAT, externalAccountsAllowed = true).visibleAccounts(globais))
+    }
+
+    @Test
+    fun `chat nunca permite conta externa, prompt e criacao permitem desde o inicio`() {
+        assertFalse(DoorPolicy.externalAccountsAllowed(Door.CHAT))
+        assertTrue(DoorPolicy.externalAccountsAllowed(Door.PROMPT))
+        assertTrue(DoorPolicy.externalAccountsAllowed(Door.CREATE))
+    }
+
+    @Test
+    fun `secretario libera contas visiveis a porta 2 mesmo sem gatilho de melhoria no pedido original`() {
+        // Regressão do bug corrigido em 23/09/2026 (ver
+        // docs/LEGADO_E_DECISOES.md, "Escalonamento da Porta 2 e DoorPolicy", item 1): antes, um primeiro
+        // pedido sem "melhore"/"refaça" fazia authorizedAccountIds chegar sempre vazio ao executor.
+        val scope = DeterministicSecretary().classify("crie um prompt de uma xícara de café").scope
+        assertEquals(Door.PROMPT, scope.door)
+        assertTrue(scope.externalAccountsAllowed)
+        assertEquals(setOf("acct-1"), scope.visibleAccounts(setOf("acct-1")))
+    }
+
+    @Test
+    fun `specialist execute so na porta de criacao aprovada com contas externas e sem NO_EXTERNAL_APIS`() {
+        val id = com.brain.capability.SpecialistCapabilities.EXECUTE_CAPABILITY
+        val approved = DoorScope(Door.CREATE, CreatePhase.APPROVED, externalAccountsAllowed = true)
+        assertTrue(DoorPolicy.allows(approved, id))
+        assertFalse(DoorPolicy.allows(DoorScope(Door.CREATE, CreatePhase.PLAN, externalAccountsAllowed = true), id))
+        assertFalse(DoorPolicy.allows(DoorScope(Door.CREATE, CreatePhase.APPROVED), id))
+        assertFalse(DoorPolicy.allows(DoorScope(Door.CREATE, CreatePhase.APPROVED, setOf(Restriction.NO_EXTERNAL_APIS)), id))
+        assertFalse(DoorPolicy.allows(DoorScope(Door.CHAT, CreatePhase.CHAT), id))
+        assertFalse(DoorPolicy.allows(DoorScope(Door.PROMPT, CreatePhase.PROMPT, externalAccountsAllowed = true), id))
+    }
+}

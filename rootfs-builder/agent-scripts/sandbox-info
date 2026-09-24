@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+printf 'root=%s\n' /home/sandbox
+printf 'arch=%s\n' "$(uname -m)"
+printf 'python=%s\n' "$(python3 --version 2>&1)"
+printf 'node=%s\n' "$(node --version 2>/dev/null || true)"
+printf 'git=%s\n' "$(git --version 2>&1)"

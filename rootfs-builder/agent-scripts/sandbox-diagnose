@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+sandbox-info
+printf '\n== disk ==\n'
+df -h /home/sandbox
+printf '\n== memory ==\n'
+free -h 2>/dev/null || true
+printf '\n== processes ==\n'
+ps aux 2>/dev/null | head -n 20 || true

@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+if [ -f pytest.ini ] || [ -f pyproject.toml ] || [ -d tests ]; then exec pytest "$@"; fi
+if [ -f package.json ]; then exec npm test -- "$@"; fi
+if [ -f Cargo.toml ]; then exec cargo test "$@"; fi
+if [ -f go.mod ]; then exec go test ./... "$@"; fi
+echo 'Nenhum projeto suportado detectado.' >&2
+exit 2

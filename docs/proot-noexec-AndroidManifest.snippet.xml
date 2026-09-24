@@ -1,0 +1,12 @@
+<!--
+    Adicione este atributo na tag <application> do seu AndroidManifest.xml.
+
+    Sem isto, em builds que usam App Bundle / compressão de .so, o Android
+    pode optar por NÃO extrair as bibliotecas nativas para nativeLibraryDir,
+    o que quebra a estratégia (não haveria arquivo real para executar).
+-->
+<application
+    android:extractNativeLibs="true"
+    ... >
+    <!-- resto da sua configuração de application -->
+</application>

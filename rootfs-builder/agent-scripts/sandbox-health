@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+for command in bash python3 node git jq curl rg; do command -v "$command" >/dev/null || { echo "missing:$command" >&2; exit 1; }; done
+printf 'ok\n'

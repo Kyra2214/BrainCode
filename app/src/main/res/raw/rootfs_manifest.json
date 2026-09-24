@@ -1,0 +1,10 @@
+{
+  "version": "0.3.3",
+  "arch": "arm64-v8a",
+  "distro": "ubuntu-24.04",
+  "url": "https://github.com/Kyra2214/BrainCode/releases/download/rootfs-v0.3.3/rootfs-ubuntu-0.3.3.tar.gz",
+  "sizeBytes": 1075455791,
+  "sha256": "a43f0915d5cd6e2e0c8640b8b30855d54f7b8873ca3be95acca769100b1487f4",
+  "minAppVersion": "1.0.0",
+  "signatureRequired": false
+}

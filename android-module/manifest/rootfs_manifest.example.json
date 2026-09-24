@@ -1,0 +1,12 @@
+{
+  "version": "0.2.0",
+  "arch": "arm64-v8a",
+  "distro": "ubuntu-24.04",
+  "url": "https://SEU-HOST-OU-CDN/releases/rootfs-ubuntu-0.2.0.tar.gz",
+  "sizeBytes": 0,
+  "sha256": "COLOQUE_AQUI_O_HASH_GERADO_PELO_build.sh",
+  "minAppVersion": "1.0.0",
+  "signatureUrl": "https://SEU-HOST-OU-CDN/releases/rootfs-ubuntu-0.2.0.tar.gz.sig",
+  "signatureAlgorithm": "minisign",
+  "signatureRequired": true
+}

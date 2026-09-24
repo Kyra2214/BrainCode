@@ -1,0 +1,3 @@
+#!/bin/sh
+set -eu
+find /home/sandbox/tmp /home/sandbox/cache -mindepth 1 -maxdepth 1 -exec rm -rf {} +
