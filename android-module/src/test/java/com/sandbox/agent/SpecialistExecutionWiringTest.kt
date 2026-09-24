@@ -26,7 +26,7 @@ import org.junit.Test
 
 /** Item 8 (limitações): execução dos especialistas pelo ActionGateway e geração de prompts que realmente suspende. */
 class SpecialistExecutionWiringTest {
-    private val workspace = ActionExecutor { _, _, _ -> ActionExecution(true, result = "criado", evidence = listOf("workspace:test")) }
+    private val workspace = ActionExecutor { _, _, _ -> ActionExecution(true, result = "interface do aplicativo de notas criado", evidence = listOf("workspace:test")) }
 
     private fun controller(
         root: File,
