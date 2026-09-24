@@ -738,9 +738,13 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 }
                 // Duas passagens sobre o asset: categorias/tags primeiro, templates depois.
                 // O SQL não é materializado nem as Linhas intermediárias são retidas.
+                // No E2E offline o Prompt Creator local funciona sem referências; evitar o
+                // catálogo de 14 mil registros mantém o teste dentro do heap restrito do
+                // emulador. O APK normal continua carregando o catálogo completo.
                 val promptLibrary = withContext(Dispatchers.IO) {
                     InMemoryPromptLibrary(
-                        PromptLibraryLoader.fromSql {
+                        if (BuildConfig.E2E_FAKE_ROOTFS) emptyList()
+                        else PromptLibraryLoader.fromSql {
                             getApplication<Application>().assets.open(PromptLibraryLoader.ASSET_NAME).bufferedReader()
                         }
                     )
