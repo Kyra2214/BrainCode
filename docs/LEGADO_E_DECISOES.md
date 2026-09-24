@@ -20,6 +20,8 @@ Na branch `phase6-apk`, a Fase 6 foi implementada e registrada em `docs/PLANO_3_
 
 Foram removidos o teste de desenho TOCTOU redundante, o step duplicado do grader semântico Roofts e corrigidos os fixtures de proveniência/readiness dos testes afetados. A implementação foi sincronizada com `origin/phase6-apk`. O CI remoto `35980885173` passou, incluindo o job manual de release readiness. Permanecem pendentes somente UI E2E em emulador, jornada manual do APK e validação automática de identificadores canônicos no `doc-lint`.
 
+A suíte dedicada `ThreeDoorsSimulationE2ETest` foi adicionada para documentar e verificar cinco situações das três portas. Todos os 5 testes passaram: chat normal e pesquisa na Porta 1; reuso de prompt e pesquisa seguida de criação/integração na biblioteca na Porta 2; e criação de app pequeno com aprovação, roadmap, especialistas e workspace na Porta 3. O detalhamento está em `docs/E2E_3_PORTAS.md`.
+
 ## Legado
 
 BrainExecutionCoordinator foi removido (pós-auditoria, item 3.2); o único caminho é `CicloExecucaoPlano`.

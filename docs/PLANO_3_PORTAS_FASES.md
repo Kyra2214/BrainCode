@@ -210,6 +210,7 @@ Itens só devem ser marcados após execução da verificação correspondente no
 | [x] | `:brain:test :android-module:test :app:testDebugUnitTest` verdes no mesmo HEAD, com remoções justificadas. | CI remoto `35980885173` verde |
 | [x] | `:app:assembleDebug`, `:app:lintDebug` e `scripts/verify-apk-assets.sh` verdes. | CI remoto `35980885173`; 25 Roofts Skills + trusted signing keys |
 | [x] | `scripts/architecture-gate.sh` verde. | CI remoto `35980885173` verde |
+| [x] | E2E lógico específico das três portas: cinco situações documentadas e verdes. | `ThreeDoorsSimulationE2ETest`: 5 testes, 0 falhas, 0 erros; `docs/E2E_3_PORTAS.md` |
 | [ ] | UI E2E (`ui-e2e.yml`) verde no emulador. | — |
 | [~] | `doc-lint` verde, sem links ou símbolos quebrados nos documentos canônicos. | `doc-lint` verde para links/marcadores; símbolos canônicos pendentes |
 | [ ] | APK abre e percorre Chave de API, Skills, Comandos, Prompt Library, Chat e Criação com aprovação. | — |

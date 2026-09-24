@@ -14,6 +14,8 @@ Evidências locais no mesmo HEAD: `python3 -m unittest discover -s tests` (**159
 
 O branch foi sincronizado com `origin/phase6-apk`. O workflow GitHub CI `35980885173` passou, incluindo o job manual `release-readiness`. Permanecem pendentes, e não devem ser marcados como concluídos: UI E2E em emulador, validação manual da jornada completa do APK e validação automática de identificadores canônicos no `doc-lint`.
 
+Foi adicionada a suíte E2E específica `com.sandbox.app.ThreeDoorsSimulationE2ETest`, documentada em `docs/E2E_3_PORTAS.md`. A execução focalizada passou com **5 testes, 0 falhas e 0 erros**, cobrindo: chat normal da Porta 1; pesquisa da Porta 1; reuso da biblioteca na Porta 2; pesquisa seguida de criação e integração de prompt na Porta 2; e criação de app pequeno na Porta 3 com aprovação, roadmap, especialistas e workspace. Esta suíte é uma simulação determinística JVM/Android; não substitui o UI E2E em emulador.
+
 A UI possui estados de planejamento, execução, verificação, crítica, revisão, correção, reexecução, PASS/BLOCKED/FAILED/READY.
 
 RooftS é uma entidade única composta pelas camadas 0.3–0.6. As camadas 0.3–0.5 permanecem preservadas e 0.6 / Agent Skills está instalada como camada do mesmo RooftS.
