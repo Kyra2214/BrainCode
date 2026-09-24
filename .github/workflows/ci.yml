@@ -63,9 +63,17 @@ jobs:
         continue-on-error: true
         run: ./gradlew :brain:test :android-module:test :app:testDebugUnitTest --no-daemon --stacktrace
 
-      - name: Run offline semantic Roofts grader
-        if: steps.unit-tests.outcome == 'success'
-        run: ./gradlew :brain:test --tests com.brain.skill.RooftsSkillEvaluationTest --tests com.brain.skill.SafeSkillExecutionTest --no-daemon --stacktrace
+      - name: Run Python regression tests
+        run: python3 -m unittest discover -s tests
+
+      - name: Run architecture gate
+        run: ./scripts/architecture-gate.sh
+
+      - name: Run documentation lint
+        run: ./scripts/doc-lint.sh
+
+      - name: List unreferenced production files
+        run: ./scripts/orphan-check.py
 
       - name: Assemble Android debug APK
         if: always()
@@ -103,3 +111,17 @@ jobs:
       - name: Preserve test failure status
         if: steps.unit-tests.outcome == 'failure'
         run: exit 1
+
+  release-readiness:
+    name: Release readiness (manual)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up tools
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Run release readiness preflight
+        run: ./scripts/validate-release-readiness.sh

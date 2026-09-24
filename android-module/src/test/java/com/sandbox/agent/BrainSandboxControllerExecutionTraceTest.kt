@@ -62,6 +62,11 @@ class BrainSandboxControllerExecutionTraceTest {
             val controller = BrainSandboxController(
                 runtime = ManagedSandboxRuntime(TestLauncher(root), FileExecutionLogRepository(File(root, "logs")), sessionId = "session-trace-2"),
                 rootfsDir = root,
+                capabilityResolver = CapabilityResolver(mapOf(
+                    "sandbox.health" to { _: List<String> ->
+                        CapabilityResolver.Resolution.Comando(listOf("sh", "-c", "printf sandbox-health-ok"))
+                    }
+                )),
                 capabilityExecutors = mapOf("chat.respond" to ActionExecutor { _, _, _ -> ActionExecution(true, result = "ok", evidence = listOf("chat:test")) })
             )
 

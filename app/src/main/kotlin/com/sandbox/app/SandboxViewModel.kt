@@ -724,6 +724,18 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
                 runtime = prepared
+                if (!BuildConfig.E2E_FAKE_ROOTFS) {
+                    val promptDbResult = withContext(Dispatchers.IO) {
+                        PromptDatabaseInstaller(
+                            context = getApplication(),
+                            stateDir = File(dir, "brain")
+                        ).ensureInstalled()
+                    }
+                    if (promptDbResult is PromptDatabaseInstaller.InstallResult.Failure) {
+                        phase = SandboxPhase.Blocked(promptDbResult.reason)
+                        return@launch
+                    }
+                }
                 // ~13 MB de SQL + leitura do estado persistido: fora da thread principal.
                 val promptLibrary = withContext(Dispatchers.IO) {
                     InMemoryPromptLibrary(
