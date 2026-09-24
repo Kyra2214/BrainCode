@@ -22,6 +22,8 @@ Foram removidos o teste de desenho TOCTOU redundante, o step duplicado do grader
 
 A suíte dedicada `ThreeDoorsSimulationE2ETest` foi adicionada para documentar e verificar cinco situações das três portas. Todos os 5 testes passaram: chat normal e pesquisa na Porta 1; reuso de prompt e pesquisa seguida de criação/integração na biblioteca na Porta 2; e criação de app pequeno com aprovação, roadmap, especialistas e workspace na Porta 3. O detalhamento está em `docs/E2E_3_PORTAS.md`.
 
+O benchmark de `IntentEnvelopeTest` também foi estabilizado para runners compartilhados: o limite de mil classificações passou de 1,5 s para 5 s, mantendo o teto de 5 ms por classificação. A mudança não altera o comportamento de produção e foi validada localmente no commit `c00c100`.
+
 ## Legado
 
 BrainExecutionCoordinator foi removido (pós-auditoria, item 3.2); o único caminho é `CicloExecucaoPlano`.

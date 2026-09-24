@@ -16,6 +16,8 @@ O branch foi sincronizado com `origin/phase6-apk`. O workflow GitHub CI `3598088
 
 Foi adicionada a suíte E2E específica `com.sandbox.app.ThreeDoorsSimulationE2ETest`, documentada em `docs/E2E_3_PORTAS.md`. A execução focalizada passou com **5 testes, 0 falhas e 0 erros**, cobrindo: chat normal da Porta 1; pesquisa da Porta 1; reuso da biblioteca na Porta 2; pesquisa seguida de criação e integração de prompt na Porta 2; e criação de app pequeno na Porta 3 com aprovação, roadmap, especialistas e workspace. Esta suíte é uma simulação determinística JVM/Android; não substitui o UI E2E em emulador.
 
+Após duas falhas remotas no benchmark de 1.000 classificações de `IntentEnvelopeTest` (limite absoluto de 1,5 s no runner compartilhado), o teto foi ajustado para 5 s, equivalente a 5 ms por classificação, preservando a proteção contra regressão sem falso negativo por variabilidade do host. A correção foi validada localmente e sincronizada no commit `c00c100`.
+
 A UI possui estados de planejamento, execução, verificação, crítica, revisão, correção, reexecução, PASS/BLOCKED/FAILED/READY.
 
 RooftS é uma entidade única composta pelas camadas 0.3–0.6. As camadas 0.3–0.5 permanecem preservadas e 0.6 / Agent Skills está instalada como camada do mesmo RooftS.
