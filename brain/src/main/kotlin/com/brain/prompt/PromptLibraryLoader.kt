@@ -102,12 +102,15 @@ object PromptLibraryLoader {
          * PromptTemplate. Não conservar a lista inteira reduz drasticamente o
          * pico de heap no Android, sem mudar o contrato do loader.
          */
-        private val valoresNecessarios = colunasNecessarias(tabela).associateWith { coluna ->
-            colunas[coluna]?.let { valores.getOrNull(it) }?.takeIf { it.isNotBlank() }
+        private val slots = SLOTS_POR_TABELA[tabela].orEmpty()
+        private val valoresNecessarios = arrayOfNulls<String>(slots.size).also { compactos ->
+            slots.forEach { (coluna, slot) ->
+                compactos[slot] = colunas[coluna]?.let { valores.getOrNull(it) }?.takeIf { it.isNotBlank() }
+            }
         }
 
         /** Valor da coluna, ou null se a coluna não existe, é NULL ou está em branco. */
-        operator fun get(coluna: String): String? = valoresNecessarios[coluna]
+        operator fun get(coluna: String): String? = slots[coluna]?.let { valoresNecessarios[it] }
 
         companion object {
             private val COLUNAS_POR_TABELA = mapOf(
@@ -135,7 +138,9 @@ object PromptLibraryLoader {
                 "promptforge_tags" to setOf("prompt_id", "tag")
             )
 
-            private fun colunasNecessarias(tabela: String): Set<String> = COLUNAS_POR_TABELA[tabela].orEmpty()
+            private val SLOTS_POR_TABELA: Map<String, Map<String, Int>> = COLUNAS_POR_TABELA.mapValues { (_, colunas) ->
+                colunas.withIndex().associate { it.value to it.index }
+            }
         }
     }
 
