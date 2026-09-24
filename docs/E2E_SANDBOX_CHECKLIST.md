@@ -41,6 +41,35 @@ Objetivo: validar, a partir da instalação do APK, que o BrainCode está realme
 - [x] Nenhum componente crítico falhou silenciosamente.
 - [ ] Nenhum componente obrigatório ficou `null`, `UNAVAILABLE` ou equivalente sem justificativa.
 
+## 2A. E2E físico — Toolchains e execução local
+- [x] Bash/Proot executa comandos e retorna stdout.
+- [x] Filesystem: escrita e leitura em /tmp.
+- [x] Java 21 executa corretamente.
+- [x] Javac 21 compila programa Java.
+- [x] Java: argumentos de linha de comando validados.
+- [x] Java: escrita/leitura de arquivo validada.
+- [x] Python 3 executa corretamente.
+- [x] Python: subprocesso Bash validado.
+- [x] Python: escrita/leitura de arquivo validada.
+- [x] Node.js 20 executa corretamente.
+- [x] Node.js: subprocesso Bash validado.
+- [x] Node.js: escrita/leitura de arquivo validada.
+- [x] C++/g++ compila e executa.
+- [x] C++: subprocesso Bash validado.
+- [x] C++: escrita/leitura de arquivo validada.
+- [x] Rust/rustc compila e executa.
+- [x] Rust: subprocesso Bash validado.
+- [x] Rust: escrita/leitura de arquivo validada.
+- [x] Go 1.22.2 compila e executa.
+- [x] Go: subprocesso Bash validado.
+- [x] Go: escrita/leitura de arquivo validada.
+- [x] Limite virtual de memória observado: 10485760 KB (10 GB).
+- [x] Limite de CPU observado: 120 s.
+- [x] Limite de processos observado: 256.
+- [x] Limites de recursos foram verificados pelo marcador do Sandbox.
+
+Evidência: todos os testes de toolchain acima terminaram com exit 0; Java, Python, Node, C++, Rust e Go também validaram filesystem e subprocesso quando aplicável.
+
 ## 3. Inventário de Skills
 Para cada skill: instalada -> descoberta -> registrada -> disponível -> autorizada -> executor -> execução -> resultado.
 - [ ] Contar skills instaladas.
