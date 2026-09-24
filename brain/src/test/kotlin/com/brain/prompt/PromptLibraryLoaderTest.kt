@@ -105,12 +105,41 @@ class PromptLibraryLoaderTest {
     }
 
     @Test
+    fun `duas passagens preservam quantidade ids categorias tags prompts grandes e ordem`() {
+        val gigante = "conteudo ".repeat(20_000)
+        val sql = """
+            INSERT INTO gallery_prompts (id, title, category, prompt_text) VALUES
+            ('p-large', 'Large', 'Technical / Data', '$gigante');
+            INSERT INTO gallery_tags (prompt_id, tag) VALUES ('p-large', 'postgres'), ('p-large', 'indices');
+            INSERT INTO prompts (id, situation_id, title, prompt_text) VALUES
+            (2, 7, 'Segundo', 'Texto segundo'),
+            (1, 7, 'Primeiro', 'Texto primeiro');
+            INSERT INTO situations (id, name) VALUES (7, 'Team Communication');
+        """.trimIndent()
+
+        var passagens = 0
+        val templates = PromptLibraryLoader.fromSql {
+            passagens++
+            StringReader(sql)
+        }.associateBy { it.id }
+
+        assertEquals(2, passagens)
+        assertEquals(3, templates.size)
+        assertEquals(setOf("sql:gallery_prompts:p-large", "sql:prompts:1", "sql:prompts:2"), templates.keys)
+        assertTrue(templates.getValue("sql:gallery_prompts:p-large").contextoDeUso.contains("postgres"))
+        assertTrue(templates.getValue("sql:gallery_prompts:p-large").contextoDeUso.contains("indices"))
+        assertEquals(gigante, templates.getValue("sql:gallery_prompts:p-large").textoTemplate)
+        assertTrue(templates.getValue("sql:prompts:1").contextoDeUso.contains("Team Communication"))
+        assertEquals("Texto segundo", templates.getValue("sql:prompts:2").textoTemplate)
+    }
+
+    @Test
     fun `biblioteca SQL real do app carrega todos os prompts com ids unicos`() {
         // O diretório de trabalho dos testes do módulo é brain/.
         val arquivo = File("../app/src/main/assets/${PromptLibraryLoader.ASSET_NAME}")
         assertTrue("SQL não encontrado em ${arquivo.absolutePath}", arquivo.isFile)
 
-        val templates = arquivo.bufferedReader().use { PromptLibraryLoader.fromSql(it) }
+        val templates = PromptLibraryLoader.fromSql { arquivo.bufferedReader() }
 
         // 13.864 registros nas 13 tabelas de prompt; 1 (money_prompts id 10) não tem texto e é ignorado.
         assertEquals(13_863, templates.size)

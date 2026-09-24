@@ -1,6 +1,7 @@
 package com.brain.prompt
 
 import java.io.Reader
+import java.io.StringReader
 
 /**
  * Carrega a biblioteca de prompts a partir do SQL (assets/prompts_library.sql) — a única
@@ -83,11 +84,34 @@ object PromptLibraryLoader {
         "document.summarization" to listOf("resum", "document", "texto", "summar")
     )
 
-    /** Lê o SQL inteiro (streaming) e devolve os templates. O [reader] é lido até o fim, mas não é fechado. */
+    /**
+     * Mantém a API histórica para callers que já possuem um Reader. O conteúdo é materializado
+     * apenas para permitir a segunda passagem; o app Android deve preferir a sobrecarga com
+     * [abrirReader], que reabre o asset sem duplicar o SQL na memória.
+     */
     fun fromSql(reader: Reader): List<PromptTemplate> {
+        val sql = reader.readText()
+        return fromSql { StringReader(sql) }
+    }
+
+    /**
+     * Faz duas passagens sobre a mesma fonte: a primeira indexa categorias/tags e a segunda
+     * converte cada prompt diretamente em PromptTemplate. Nenhuma Linha de prompt é retida.
+     */
+    fun fromSql(abrirReader: () -> Reader): List<PromptTemplate> {
         val catalogo = Catalogo()
-        lerComandos(reader) { comando -> registrarInsert(comando, catalogo) }
-        return catalogo.prompts.mapNotNull { linha -> paraTemplate(linha, catalogo) }
+        abrirReader().use { reader ->
+            lerComandos(reader) { comando -> registrarInsert(comando, catalogo) }
+        }
+        val templates = ArrayList<PromptTemplate>()
+        abrirReader().use { reader ->
+            lerComandos(reader) { comando ->
+                registrarInsert(comando, catalogo) { linha ->
+                    paraTemplate(linha, catalogo)?.let(templates::add)
+                }
+            }
+        }
+        return templates
     }
 
     // ------------------------------------------------------------------ leitura do SQL
@@ -145,8 +169,6 @@ object PromptLibraryLoader {
     }
 
     private class Catalogo {
-        val prompts = ArrayList<Linha>()
-
         /** tabela de categorias -> (chave -> nome) */
         val categorias = HashMap<String, MutableMap<String, String>>()
 
@@ -217,7 +239,7 @@ object PromptLibraryLoader {
         atual.setLength(0)
     }
 
-    private fun registrarInsert(comando: String, catalogo: Catalogo) {
+    private fun registrarInsert(comando: String, catalogo: Catalogo, aoLerPrompt: ((Linha) -> Unit)? = null) {
         val cabecalho = CABECALHO_INSERT.find(comando.take(TAMANHO_MAX_CABECALHO)) ?: return
         val tabela = cabecalho.groupValues[1].lowercase()
         val ehPrompt = tabela in TABELAS_DE_PROMPT
@@ -232,7 +254,7 @@ object PromptLibraryLoader {
         lerLinhas(comando, cabecalho.range.last + 1) { valores ->
             val linha = Linha(tabela, indice, valores)
             when {
-                ehPrompt -> catalogo.prompts.add(linha)
+                ehPrompt -> aoLerPrompt?.invoke(linha)
                 ehCategoria -> {
                     val chave = linha["id"] ?: linha["slug"]
                     val nome = linha[COLUNA_NOME_CATEGORIA.getValue(tabela)]

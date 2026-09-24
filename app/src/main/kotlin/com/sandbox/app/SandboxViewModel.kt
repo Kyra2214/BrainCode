@@ -736,10 +736,13 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         return@launch
                     }
                 }
-                // ~13 MB de SQL + leitura do estado persistido: fora da thread principal.
+                // Duas passagens sobre o asset: categorias/tags primeiro, templates depois.
+                // O SQL não é materializado nem as Linhas intermediárias são retidas.
                 val promptLibrary = withContext(Dispatchers.IO) {
                     InMemoryPromptLibrary(
-                        getApplication<Application>().assets.open(PromptLibraryLoader.ASSET_NAME).bufferedReader().use { PromptLibraryLoader.fromSql(it) }
+                        PromptLibraryLoader.fromSql {
+                            getApplication<Application>().assets.open(PromptLibraryLoader.ASSET_NAME).bufferedReader()
+                        }
                     )
                 }
                 val preparedPlatform = SandboxPlatform(prepared, File(dir, "workspace"), File(dir, "components.tsv"), File(dir, "services"))
