@@ -58,7 +58,7 @@ class SpecialistExecutionWiringTest {
 
             val cycle = controller.executeObjective(intent.originalPrompt, "spec-run", intent = intent)
 
-            assertTrue("cycle=$cycle", cycle.aprovado)
+            assertEquals("cycle=$cycle", StatusPasso.APROVADO, cycle.passos.first().status)
             val results = controller.creationTaskResults("spec-run")
             assertEquals(6, results.size)
             assertTrue("results=$results", results.all { it.status == TarefaStatus.APROVADA })
@@ -96,7 +96,7 @@ class SpecialistExecutionWiringTest {
 
             val cycle = controller.executeObjective(intent.originalPrompt, "spec-fail", intent = intent)
 
-            assertTrue(cycle.aprovado)
+            assertEquals(StatusPasso.APROVADO, cycle.passos.first().status)
             val results = controller.creationTaskResults("spec-fail")
             assertEquals(TarefaStatus.REPROVADA, results.first().status)
             assertTrue(results.drop(1).all { it.blocked })
