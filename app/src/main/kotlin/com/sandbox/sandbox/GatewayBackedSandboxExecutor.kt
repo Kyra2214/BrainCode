@@ -30,7 +30,7 @@ class SandboxActionExecutor(
             .filterKeys { it.startsWith("argument.") }
             .toSortedMap()
             .values
-        val timeout = request.parameters["timeoutSeconds"]?.toLongOrNull() ?: 60L
+        val timeout = request.parameters["timeoutSeconds"]?.toLongOrNull() ?: 120L
         val log = delegate.execute(listOf(executable) + args, timeout, request.resource)
         executionLogs[request.actionId] = log
         return com.brain.gateway.ActionExecution(

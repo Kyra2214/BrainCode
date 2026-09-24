@@ -130,7 +130,7 @@ data class ProotResourceLimits(
          */
         val DEFAULT = ProotResourceLimits(
             maxMemoryBytes = 10L * 1024 * 1024 * 1024,
-            maxCpuSeconds = 60,
+            maxCpuSeconds = 120,
             maxProcesses = 256,
             maxOpenFiles = 64,
             maxFileSizeBytes = 100L * 1024 * 1024

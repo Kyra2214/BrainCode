@@ -18,7 +18,7 @@ class AuthorizedCapabilityExecutor(
         capability: String,
         parameters: List<String> = emptyList(),
         resource: String = capability,
-        timeoutSeconds: Long = 60,
+        timeoutSeconds: Long = 120,
         workingDir: String = "/home/sandbox",
         context: PolicyContext = PolicyContext(
             runId = "capability-run",

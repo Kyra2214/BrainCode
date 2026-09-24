@@ -32,7 +32,7 @@ class ManagedSandboxRuntime(
      * that explicitly need a network namespace may still pass false; the
      * launcher treats that isolation as best-effort on Android.
      */
-    fun execute(command: List<String>, timeoutSeconds: Long = 60, workingDir: String = "/home/sandbox", networkAllowed: Boolean = true, onOutput: (line: String, stderr: Boolean) -> Unit = { _, _ -> }): ExecutionLog {
+    fun execute(command: List<String>, timeoutSeconds: Long = 120, workingDir: String = "/home/sandbox", networkAllowed: Boolean = true, onOutput: (line: String, stderr: Boolean) -> Unit = { _, _ -> }): ExecutionLog {
         require(command.isNotEmpty()) { "command não pode ser vazio" }
         require(timeoutSeconds > 0) { "timeoutSeconds deve ser > 0" }
         val id = FileExecutionLogRepository.newId()

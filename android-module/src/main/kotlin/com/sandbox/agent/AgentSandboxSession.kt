@@ -59,7 +59,7 @@ class AgentSandboxSession(
      * é resolvida contra o catálogo, e seus parâmetros são validados pelo
      * CapabilityResolver antes de chegar ao runtime.
      */
-    fun rodarCapacidade(parametros: List<String> = emptyList(), timeoutSeconds: Long = 60): CommandOutcome {
+    fun rodarCapacidade(parametros: List<String> = emptyList(), timeoutSeconds: Long = 120): CommandOutcome {
         checkGate()?.let { return CommandOutcome.Refused(it) }
         return when (val resolution = capabilityResolver.resolve(authorization.capability, parametros)) {
             is CapabilityResolver.Resolution.Refused -> CommandOutcome.Refused(resolution.reason)
@@ -72,7 +72,7 @@ class AgentSandboxSession(
      * alimentado por texto/argv arbitrário vindo de outro módulo: toda
      * execução normal passa pelo catálogo de capacidades.
      */
-    internal fun rodarComandoInterno(comando: List<String>, timeoutSeconds: Long = 60): CommandOutcome {
+    internal fun rodarComandoInterno(comando: List<String>, timeoutSeconds: Long = 120): CommandOutcome {
         synchronized(lock) {
             checkGate()?.let { return CommandOutcome.Refused(it) }
             if (authorization.networkAllowed && namespaceSupport.compatibilityMode) {
