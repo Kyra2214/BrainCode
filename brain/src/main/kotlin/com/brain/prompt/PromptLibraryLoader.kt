@@ -94,12 +94,49 @@ object PromptLibraryLoader {
 
     private class Linha(
         val tabela: String,
-        private val colunas: Map<String, Int>,
-        private val valores: List<String?>
+        colunas: Map<String, Int>,
+        valores: List<String?>
     ) {
-        /** Valor da coluna, ou null se a coluna não existe, é NULL ou está em branco. */
-        operator fun get(coluna: String): String? =
+        /*
+         * INSERTs do seed possuem colunas auxiliares grandes que nunca entram no
+         * PromptTemplate. Não conservar a lista inteira reduz drasticamente o
+         * pico de heap no Android, sem mudar o contrato do loader.
+         */
+        private val valoresNecessarios = colunasNecessarias(tabela).associateWith { coluna ->
             colunas[coluna]?.let { valores.getOrNull(it) }?.takeIf { it.isNotBlank() }
+        }
+
+        /** Valor da coluna, ou null se a coluna não existe, é NULL ou está em branco. */
+        operator fun get(coluna: String): String? = valoresNecessarios[coluna]
+
+        companion object {
+            private val COLUNAS_POR_TABELA = mapOf(
+                "prompts" to setOf("id", "situation_id", "title", "prompt_text"),
+                "money_prompts" to setOf("id", "section_id", "title", "prompt_text", "context_note"),
+                "coding_prompts" to setOf("id", "category_id", "title", "prompt_text", "use_when"),
+                "finance_prompts" to setOf("id", "chapter_id", "section", "title", "prompt_text"),
+                "crafti_prompts" to setOf("id", "category_id", "prompt_text"),
+                "gallery_prompts" to setOf("id", "title", "category", "prompt_text"),
+                "everything_prompts" to setOf("id", "category_slug", "section", "title", "prompt_text"),
+                "llmprompts_prompts" to setOf("id", "title", "description", "system_prompt", "user_prompt"),
+                "awesome_prompts" to setOf("id", "title", "category", "prompt_text", "description"),
+                "aiprompts2026_prompts" to setOf("id", "category_title", "title", "prompt_text", "best_for"),
+                "promptforge_prompts" to setOf("id", "category", "title", "content", "description", "best_for"),
+                "promptschat_prompts" to setOf("id", "title", "prompt_text", "type"),
+                "extra_prompts" to setOf("id", "area", "title", "prompt_text"),
+                "situations" to setOf("id", "slug", "name"),
+                "money_sections" to setOf("id", "slug", "name"),
+                "coding_categories" to setOf("id", "slug", "name"),
+                "finance_chapters" to setOf("id", "slug", "title"),
+                "crafti_categories" to setOf("id", "slug", "name"),
+                "everything_categories" to setOf("id", "slug", "name"),
+                "gallery_tags" to setOf("prompt_id", "tag"),
+                "awesome_tags" to setOf("prompt_id", "tag"),
+                "promptforge_tags" to setOf("prompt_id", "tag")
+            )
+
+            private fun colunasNecessarias(tabela: String): Set<String> = COLUNAS_POR_TABELA[tabela].orEmpty()
+        }
     }
 
     private class Catalogo {

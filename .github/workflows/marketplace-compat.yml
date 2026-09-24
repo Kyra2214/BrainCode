@@ -38,7 +38,9 @@ jobs:
         with:
           api-level: ${{ matrix.api-level }}
           target: default
-          arch: x86_64
+          # O APK empacota as bibliotecas nativas do sandbox somente em arm64-v8a.
+          # x86_64 falha antes do teste com INSTALL_FAILED_NO_MATCHING_ABIS.
+          arch: arm64-v8a
           profile: pixel_2
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
