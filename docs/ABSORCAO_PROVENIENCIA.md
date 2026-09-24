@@ -54,12 +54,14 @@ Os casos `brain/src/test/resources/catalog/roofts-skill-evaluation-cases.json` s
 - **PASS** — `bash scripts/architecture-gate.sh`, `:app:assembleDebug` e `:app:lint`.
 - **PASS** — compilação dos testes instrumentados T-203; execução em emulador/dispositivo permanece pendente.
 
-CI, E2E, emulador/dispositivo e readiness de release ainda não foram executados nesta sessão.
+CI, E2E, emulador/dispositivo e readiness de release ainda não foram executados naquela sessão histórica.
 
 A segunda rodada adicionou `WorkflowEngine.runDocument`, scheduler persistente com ciclo due/claim/complete, dois workflows originais somente leitura, chaves públicas Ed25519 compartilhadas entre marketplace e `SkillRegistry`, workflow de compatibilidade API 26/33 e gate de assets do APK. Os gates locais continuam verdes; CI, E2E e execução física aguardam o GitHub Actions.
 
 Também foram incorporados `RooftsSemanticGrader`, opcional e offline para CI, e `SafeSkillResourceExecutor`, opt-in para hooks explicitamente declarados. Este último não usa shell, exige allowlist, workspace, timeout e limite de saída, nega rede e bloqueia permissões; descoberta ou seleção de Skill não o invoca automaticamente.
 
+**Atualização da execução `phase6-apk` (2026-09-24):** os gates locais foram repetidos no HEAD entregue: 159 testes Python, testes `brain`/`android-module`/`app`, `assembleDebug`, `lintDebug`, `architecture-gate`, `doc-lint` e `verify-apk-assets` passaram. O CI remoto `35980885173` também passou, incluindo release readiness manual, e o APK debug foi exportado com checksum registrado. Permanecem pendentes UI E2E em emulador/dispositivo e jornada manual do APK.
+
 ## Referências estudadas, não incorporadas
 
-`nikilster/clawflows` foi auditado no commit `f1e4094752b0359c7a3089720457a536a4ae2813` conforme `An#U00e1lisedeCodigos/Manus/deep/06-clawflows.md`. Seu formato `WORKFLOW.md` e ciclo de habilitação foram absorvidos nativamente no adapter do `WorkflowEngine`; nenhum código Clawflows, CLI, symlink, scheduler ou workflow comunitário foi copiado nesta rodada.
+`nikilster/clawflows` foi auditado no commit `f1e4094752b0359c7a3089720457a536a4ae2813` conforme `reference/braincode-python/AnalisedeCodigos/Manus/deep/06-clawflows.md`. Seu formato `WORKFLOW.md` e ciclo de habilitação foram absorvidos nativamente no adapter do `WorkflowEngine`; nenhum código Clawflows, CLI, symlink, scheduler ou workflow comunitário foi copiado nesta rodada.

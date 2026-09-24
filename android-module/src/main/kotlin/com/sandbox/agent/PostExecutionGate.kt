@@ -42,7 +42,7 @@ import com.brain.validation.ValidationResult
  */
 class PostExecutionGate(
     private val memory: LayeredMemory,
-    /** Fase 12 (ver PLANO_CONEXAO_FASE_12.md, seção 2): mesma decisão PASSED/FAILED/BLOCKED
+    /** Fase 12 (ver docs/LEGADO_E_DECISOES.md, "Fase 12 — conexão de trace e gates", seção 2): mesma decisão PASSED/FAILED/BLOCKED
      * usada por BehaviorGatesTest, para não duplicar critério em dois lugares. Injetáveis
      * para permitir espiar/mockar nos testes de unificação. */
     private val verificationGate: BehaviorGate<VerificationResult, VerificationResult> = VerificationGate(),

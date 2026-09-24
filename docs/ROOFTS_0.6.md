@@ -7,9 +7,11 @@ Asset: app/src/main/assets/roofts/0.6.
 Runtime: /opt/roofts/0.6.
 RooftS é a entidade única composta pelas camadas 0.3, 0.4, 0.5 e 0.6. As camadas 0.3–0.5 permanecem preservadas; esta documentação trata especificamente da camada 0.6 / Agent Skills. Consulte `docs/ROOFTS.md` para a definição da entidade completa.
 
+Conteúdo real (conferido em `app/src/main/assets/roofts/0.6`, `0.6.manifest.json`): 25 Skills (`skills/*/SKILL.md`, replicadas em `.opencode/skills/` pelo próprio upstream como alias de plugin — mesmo conteúdo, não é duplicação nova), 25 evals (`evals/cases/*.json`, um por Skill), 226 arquivos no total.
+
 Estado:
 ROOFTS 0.6 / AGENT SKILLS = INSTALLED
-SKILL RUNTIME INTEGRATION = LAZY CATALOG + ACTIVATION PLAN + SELECTOR FILTER INTEGRATED
+SKILL RUNTIME INTEGRATION = LAZY CATALOG + ACTIVATION PLAN + SELECTOR FILTER INTEGRATED (descoberta e seleção); execução de efeitos (scripts, hooks, recursos) NÃO integrada — continua exigindo capability/Policy/Gateway/Sandbox de fora do runtime Roofts.
 
 Instalação dos arquivos não significa conectar SKILL.md ao Planner/Dispatcher/ActionGateway. O caller real de geração da Porta 3 agora usa catálogo lazy: o loader retém frontmatter, hash e origem, o selector aplica triggers e exclusões, o planner gera activation plan e o corpo só é lido para Skills aprovadas sem permissões pendentes. Recursos declarados podem ser lidos somente pelo resolver que exige caminho declarado e relativo. Isso não concede capability nem autorização.
 

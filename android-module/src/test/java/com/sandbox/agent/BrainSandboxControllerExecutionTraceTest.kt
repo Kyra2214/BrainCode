@@ -13,7 +13,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Fase 12 (ver PLANO_CONEXAO_FASE_12.md, seção 1): comprova que o ActionGateway *real*
+ * Fase 12 (ver docs/LEGADO_E_DECISOES.md, "Fase 12 — conexão de trace e gates", seção 1): comprova que o ActionGateway *real*
  * instanciado por BrainSandboxController (não um ActionGateway construído à parte no
  * teste) produz eventos de trace recuperáveis pelo EventStore para um ciclo completo.
  */
@@ -62,6 +62,11 @@ class BrainSandboxControllerExecutionTraceTest {
             val controller = BrainSandboxController(
                 runtime = ManagedSandboxRuntime(TestLauncher(root), FileExecutionLogRepository(File(root, "logs")), sessionId = "session-trace-2"),
                 rootfsDir = root,
+                capabilityResolver = CapabilityResolver(mapOf(
+                    "sandbox.health" to { _: List<String> ->
+                        CapabilityResolver.Resolution.Comando(listOf("sh", "-c", "printf sandbox-health-ok"))
+                    }
+                )),
                 capabilityExecutors = mapOf("chat.respond" to ActionExecutor { _, _, _ -> ActionExecution(true, result = "ok", evidence = listOf("chat:test")) })
             )
 

@@ -62,7 +62,6 @@ Dois pontos críticos que quebram a estratégia se esquecidos:
 
 ### 5. Usar as classes Kotlin
 
-- `RuntimeFiles.kt` — helpers de baixo nível (lstat sem seguir symlink).
 - `RuntimeFailure.kt` — exceção tipada com código de erro.
 - `PackagedRuntime.kt` — a classe principal:
   1. Localiza os `.so` em `nativeLibraryDir`.

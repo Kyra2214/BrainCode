@@ -5,10 +5,12 @@ import com.sandbox.runtime.ManagedSandboxRuntime
 import java.io.File
 
 /**
- * Fachada única para abrir sessões de trabalho de agente
- * (docs/PLANO_INTEGRACAO_BRAIN_SANDBOX.md, Etapa 3).
+ * Fachada única para abrir sessões de trabalho de agente — Etapa 3 do plano de
+ * integração Brain+Sandbox original (docs/PLANO_INTEGRACAO_BRAIN_SANDBOX.md,
+ * consolidado em docs/ARQUITETURA_ATUAL.md e docs/LEGADO_E_DECISOES.md; não
+ * existe mais como arquivo separado).
  *
- * `Sandbox.abrirSessao(autorizacao)` no doc é pseudocódigo do fluxo, não
+ * `Sandbox.abrirSessao(autorizacao)` no doc original era pseudocódigo do fluxo, não
  * literalmente um `object` estático: um [Sandbox] real precisa saber ONDE
  * o rootfs já foi extraído e qual [ManagedSandboxRuntime] usar — ambos
  * vêm do [com.sandbox.android.AndroidSandboxFactory] num device real (ver

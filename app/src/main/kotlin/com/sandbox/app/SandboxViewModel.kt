@@ -141,7 +141,7 @@ val QUICK_COMMANDS = listOf(
 
 /** Comandos com execução real (não vêm do catálogo /comandos). Sempre prioritários no dispatcher. */
 val OPERATIONAL_SLASH_COMMANDS = listOf(
-    "/run ", "/testlab", "/security", "/git status", "/git diff", "/git commit ", "/git push", "/workflow", "/workflow list", "/workflow enable ", "/workflow disable ", "/workflow backup", "/workflow restore", "/approval demo",
+    "/run ", "/testlab", "/security", "/git status", "/git diff", "/git commit ", "/git push", "/workflow", "/workflow list", "/workflow enable ", "/workflow disable ", "/workflow run ", "/workflow backup", "/workflow restore", "/approval demo",
     "/workspace new ", "/sqlite start", "/sqlite stop", "/discovery", "/deliver"
 )
 
@@ -151,6 +151,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     private var runtime: ManagedSandboxRuntime? = null
 
     override fun onCleared() {
+        runCatching { brainIntegration?.stopWorkflowRunner() }
         runCatching { runtime?.shutdown() }
         runtime = null
         brainController = null
@@ -723,9 +724,24 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
                 runtime = prepared
-                val promptLibrary = InMemoryPromptLibrary(
-                    PromptLibraryLoader.fromJson(getApplication<Application>().assets.open("prompts_biblioteca.json").bufferedReader().use { it.readText() })
-                )
+                if (!BuildConfig.E2E_FAKE_ROOTFS) {
+                    val promptDbResult = withContext(Dispatchers.IO) {
+                        PromptDatabaseInstaller(
+                            context = getApplication(),
+                            stateDir = File(dir, "brain")
+                        ).ensureInstalled()
+                    }
+                    if (promptDbResult is PromptDatabaseInstaller.InstallResult.Failure) {
+                        phase = SandboxPhase.Blocked(promptDbResult.reason)
+                        return@launch
+                    }
+                }
+                // ~13 MB de SQL + leitura do estado persistido: fora da thread principal.
+                val promptLibrary = withContext(Dispatchers.IO) {
+                    InMemoryPromptLibrary(
+                        getApplication<Application>().assets.open(PromptLibraryLoader.ASSET_NAME).bufferedReader().use { PromptLibraryLoader.fromSql(it) }
+                    )
+                }
                 val preparedPlatform = SandboxPlatform(prepared, File(dir, "workspace"), File(dir, "components.tsv"), File(dir, "services"))
                 platform = preparedPlatform
                 val codeGenerationExecutor = CodeGenerationExecutor(
@@ -796,17 +812,30 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     capabilityProviders = listOf(
                         PluginCatalogCapabilityProvider(statusOf = { id -> statusCache[id]?.state })
                     ),
-                    capabilityExecutors = mapOf(
+                    capabilityExecutors = mapOf<String, com.brain.gateway.ActionExecutor>(
                         "workspace.generate" to codeGenerationExecutor,
                         "prompt.library.generate" to promptGenerationExecutor,
                         "prompt.library.write" to promptGenerationExecutor,
                         "sandbox.info" to webResearchExecutor,
                         "network.research" to webResearchExecutor,
                         "chat.respond" to chatResponseExecutor
+                    ) + if (BuildConfig.E2E_OFFLINE_AI) emptyMap() else mapOf<String, com.brain.gateway.ActionExecutor>(
+                        // Executa as tarefas do roadmap da Porta 3 pelos especialistas (uma chamada de provider por tarefa).
+                        // Remover esta entrada desliga a execução dos especialistas; a geração de prompts continua.
+                        com.brain.capability.SpecialistCapabilities.EXECUTE_CAPABILITY to SpecialistTaskExecutor(brainApiGateway),
+                        // Corpo de WORKFLOW.md como instrução de texto ao provider autorizado (só texto, sem ferramentas).
+                        // Sem esta entrada o CompositeActionExecutor falha fechado para qualquer workflow.run.
+                        com.brain.workflow.WORKFLOW_RUN_CAPABILITY to WorkflowRunExecutor(brainApiGateway)
                     ),
                     events = FileEventStore(File(dir, "brain/chat-events.jsonl"))
                 )
-                brainIntegration = BrainIntegrationFacade(getApplication(), File(dir, "brain"))
+                val integration = BrainIntegrationFacade(getApplication(), File(dir, "brain"))
+                brainIntegration = integration
+                // Única ponte de autorização de workflows (manual e agendado): PolicyBroker/ActionGateway do controller.
+                // A lambda é single-flight com o sandbox (não autoriza nada); o scheduler roda só com o app aberto.
+                brainController?.let { controller ->
+                    integration.attachWorkflowRunner(controller.workflowRunPort(), canStartRun = { phase == SandboxPhase.Ready })
+                }
                 pluginListVersion++
                 // O modo E2E usa um runtime determinístico e não deve depender de
                 // toolchains/plugins/estado persistente para habilitar o composer.
@@ -1023,6 +1052,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             lower == "/workflow list" -> { recordOperationalCommand(command); listWorkflows() }
             lower.startsWith("/workflow enable ") -> { recordOperationalCommand(command); changeWorkflowEnabled(command, enabled = true) }
             lower.startsWith("/workflow disable ") -> { recordOperationalCommand(command); changeWorkflowEnabled(command, enabled = false) }
+            lower.startsWith("/workflow run ") -> { recordOperationalCommand(command); runWorkflowDocument(command) }
             lower == "/workflow backup" -> { recordOperationalCommand(command); backupWorkflows() }
             lower == "/workflow restore" -> { recordOperationalCommand(command); restoreWorkflows() }
             lower == "/approval demo" -> { chatMessages.add(ChatMessage(ChatRole.USER, command)); appendThreadEvent(ThreadEvent.User(command)); chatInput = ""; requestApprovalDemo() }
@@ -1113,8 +1143,37 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             appendThreadEvent(ThreadEvent.System("Informe o id: /workflow ${if (enabled) "enable" else "disable"} <id>")); return
         }
         runCatching { if (enabled) integration.enableWorkflow(id) else integration.disableWorkflow(id) }
-            .onSuccess { appendThreadEvent(ThreadEvent.Report("Workflow ${if (enabled) "enable" else "disable"}", "$id: ${if (enabled) "enabled" else "disabled"}")) }
+            .onSuccess {
+                appendThreadEvent(ThreadEvent.Report("Workflow ${if (enabled) "enable" else "disable"}", "$id: ${if (enabled) "enabled" else "disabled"}"))
+                if (enabled) integration.scheduleRefusal(id)?.let { appendThreadEvent(ThreadEvent.System("Agendamento não ativado para $id: $it")) }
+            }
             .onFailure { appendThreadEvent(ThreadEvent.System("Falha ao ${if (enabled) "habilitar" else "desabilitar"} workflow $id: ${it.message ?: it.javaClass.simpleName}")) }
+    }
+
+    /** `/workflow run <id>`: execução manual pelo mesmo caminho autorizado (WorkflowRunPort -> PolicyBroker/ActionGateway). */
+    private fun runWorkflowDocument(command: String) {
+        val integration = brainIntegration ?: run {
+            appendThreadEvent(ThreadEvent.System("Workflow indisponível: Brain ainda não inicializado.")); return
+        }
+        val id = command.substringAfter(" ").substringAfter(" ").trim()
+        if (id.isBlank()) {
+            appendThreadEvent(ThreadEvent.System("Informe o id: /workflow run <id>")); return
+        }
+        if (phase != SandboxPhase.Ready) {
+            appendThreadEvent(ThreadEvent.System("Workflow indisponível: sandbox não está pronto.")); return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val runId = "workflow-run-${System.currentTimeMillis()}"
+            val outcome = runCatching { integration.runWorkflowNow(id, runId) }
+            withContext(Dispatchers.Main) {
+                outcome
+                    .onSuccess { result ->
+                        val text = result.steps.firstOrNull()?.output?.get("text") ?: result.error.orEmpty()
+                        appendThreadEvent(ThreadEvent.Report("Workflow run $id", "${result.status.name}\n$text"))
+                    }
+                    .onFailure { appendThreadEvent(ThreadEvent.System("Workflow $id não executou: ${it.message ?: it.javaClass.simpleName}")) }
+            }
+        }
     }
 
     private fun workflowBackupFile(): File = File(getApplication<Application>().filesDir, "brain/workflows-backup.zip")
@@ -1368,7 +1427,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             withContext(Dispatchers.Main) { deliverySummary = s; appendThreadEvent(ThreadEvent.Report("Delivery", s)) }
         }
     }
-    fun resetSandbox() { viewModelScope.launch { withContext(Dispatchers.IO) { runtime?.reset { factory.purgeAll() }; runtime = null; brainController = null; brainIntegration = null; factory.clearPersistentSession() }; platform = null; installingComponentIds = emptySet(); statusCache = emptyMap(); pluginSnapshots = emptyList(); pluginHistory = emptyList(); pluginListVersion++; lastResult = null; lastExecution = null; diagnosticsReport = null; lastBrainCycle = null; lastTestLabReport = null; lastSecurityAssessment = null; toolchainStatuses = emptyMap(); pendingApprovalId = null; pendingApprovalPlan = null; pendingApprovalRunId = null; workspaceProjects = emptyList(); lastGitStatus = null; sqliteServiceStatus = null; workspaceError = null; brainSkillSummary = emptyList(); lastWorkflowStatus = null; memorySuccessRate = null; discoverySummary = null; deliverySummary = null; selfCheckReport = null; selfCheckStage = null; selfCheckRunning = false; phase = SandboxPhase.NotReady } }
+    fun resetSandbox() { viewModelScope.launch { withContext(Dispatchers.IO) { runtime?.reset { factory.purgeAll() }; runtime = null; brainController = null; runCatching { brainIntegration?.stopWorkflowRunner() }; brainIntegration = null; factory.clearPersistentSession() }; platform = null; installingComponentIds = emptySet(); statusCache = emptyMap(); pluginSnapshots = emptyList(); pluginHistory = emptyList(); pluginListVersion++; lastResult = null; lastExecution = null; diagnosticsReport = null; lastBrainCycle = null; lastTestLabReport = null; lastSecurityAssessment = null; toolchainStatuses = emptyMap(); pendingApprovalId = null; pendingApprovalPlan = null; pendingApprovalRunId = null; workspaceProjects = emptyList(); lastGitStatus = null; sqliteServiceStatus = null; workspaceError = null; brainSkillSummary = emptyList(); lastWorkflowStatus = null; memorySuccessRate = null; discoverySummary = null; deliverySummary = null; selfCheckReport = null; selfCheckStage = null; selfCheckRunning = false; phase = SandboxPhase.NotReady } }
     fun recentExecutions(limit: Int = 20): List<ExecutionLog> = runtime?.getRecentExecutions(limit) ?: emptyList()
     fun pluginComponents(kind: ComponentKind, query: String, installedOnly: Boolean): List<SandboxComponent> { val base = (platform?.plugins?.components() ?: BuiltInCatalog.all).filter { it.kind == kind }; val searched = if (query.isBlank()) base else base.filter { it.name.contains(query, true) || it.description.contains(query, true) || it.id.contains(query, true) }; return if (!installedOnly) searched else searched.filter { statusCache[it.id]?.state == InstallationState.INSTALLED } }
     fun pluginStatus(id: String): InstalledComponent? = statusCache[id]

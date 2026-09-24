@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit
  *   enquanto binários minúsculos (`echo`, applet do busybox) continuam
  *   funcionando. Desligar a aceleração custa um pouco de performance e
  *   resolve a esmagadora maioria desses casos — por isso o padrão aqui é
- *   `true`. Ver docs/roadmap-sandbox-fase0.md, 0.3.
+ *   `true`.
  */
 class SandboxRuntime(
     private val prootExecutable: String,

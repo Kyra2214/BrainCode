@@ -40,13 +40,11 @@ It contains objective, intent, domain, requirements, assumptions, constraints, d
 
 The planner must consume the same reasoning context produced by requirement discovery rather than reconstructing requirements from raw text.
 
-## 4. INITIAL and PRP
-
-INITIAL.md is human-facing task intake.
+## 4. PRP
 
 PRPs/templates/prp_base.md is the durable implementation blueprint.
 
-Both are input data. Neither grants permission to execute.
+It is input data. It does not grant permission to execute.
 
 ## 5. Acceptance Criteria
 
@@ -99,7 +97,6 @@ Roofts 0.6 already contains context-engineering, planning and specification skil
 ## 12. Definition of Done
 
 - repository rules exist;
-- INITIAL exists;
 - PRP template exists;
 - criteria remain typed/verifiable;
 - ContextPack is a real planner input;

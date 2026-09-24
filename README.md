@@ -4,7 +4,7 @@ BrainCode é um runtime local-first para Android/JVM em que o Brain interpreta, 
 
 ## Estado atual
 
-HEAD auditado nesta atualização: caf0d3960e8fde5fbc7bbd193a6dc15d9217ce1f.
+Sem HEAD fixo: este README não é atualizado a cada commit. O estado corrente, com evidências e commits verificados por fase, está em `docs/ESTADO_ATUAL.md`; o roadmap operacional está em `docs/ROADMAP_CANONICO.md`.
 
 O caminho Android canônico é:
 
@@ -46,6 +46,10 @@ PRP, web, documentação e conteúdo externo não podem conceder permissões nem
 ## Validação
 
 A validação final desta alteração ainda precisa comprovar testes focados, CI, E2E e readiness. Não considerar um baseline anterior como prova das mudanças atuais.
+
+## Ambiente Android
+
+`bash scripts/check_android_env.sh` confere `java` e `ANDROID_HOME` antes de rodar Gradle (falha com código 2 se algo estiver faltando).
 
 ## Documentação canônica
 

@@ -31,8 +31,7 @@ import org.junit.Test
 
 /**
  * Fase 2 (ver docs/LEGADO_E_DECISOES.md): cobre, no caminho de produção real
- * (CicloExecucaoPlano -> Dispatcher -> ActionGateway), as capacidades que
- * antes só existiam em BrainExecutionCoordinator (deprecated, sem chamador):
+ * (CicloExecucaoPlano -> Dispatcher -> ActionGateway), as capacidades de
  * retry com backoff para falha transitória e gravação em ExperienceMemory.
  */
 class CicloExecucaoPlanoDispatcherTest {

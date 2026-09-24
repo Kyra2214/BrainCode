@@ -39,8 +39,7 @@ import org.junit.Test
 
 /**
  * Fase 2 (ver docs/LEGADO_E_DECISOES.md): fecha, no caminho de produção real
- * (CicloExecucaoPlano -> Dispatcher -> ActionGateway), o item de backlog que antes só
- * existia em BrainExecutionCoordinator (deprecated, sem chamador): fallback entre contas
+ * (CicloExecucaoPlano -> Dispatcher -> ActionGateway), o fallback entre contas
  * da mesma capability, com a saúde da conta atualizada no AccountRegistry.
  */
 class CicloExecucaoPlanoAccountFallbackTest {

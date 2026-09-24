@@ -20,7 +20,7 @@ class ProcessTreeTest(unittest.TestCase):
             result = SandboxExecutor().execute(SandboxJob(
                 job_id="tree-timeout", run_id="run", session_id="session",
                 argv=("python3", str(script), str(marker)), cwd=directory,
-                timeout_seconds=1, max_processes=256,
+                timeout_seconds=1, max_processes=2048,
             ))
             self.assertEqual("TIMEOUT", result.status, result.stderr or repr(result.diagnostics))
             time.sleep(1.3)

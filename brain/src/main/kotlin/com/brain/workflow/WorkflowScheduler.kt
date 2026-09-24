@@ -15,7 +15,9 @@ data class ScheduledWorkflow(
     val zoneId: String,
     val nextRun: Instant,
     val claimedBy: String? = null,
-    val claimUntil: Instant? = null
+    val claimUntil: Instant? = null,
+    /** Pin do conteúdo aprovado ao agendar; vazio = schedule legado, que não roda (ver [WorkflowAutomationPolicy.pinRefusal]). */
+    val contentHash: String = ""
 )
 
 class WorkflowScheduler(private val stateFile: File? = null) {
@@ -23,12 +25,22 @@ class WorkflowScheduler(private val stateFile: File? = null) {
 
     init { load() }
 
+    /**
+     * Registra o schedule do documento, amarrado à versão e ao contentHash atuais.
+     * Devolve null quando não há o que agendar (on-demand) OU quando [WorkflowAutomationPolicy]
+     * recusa o schedule (período abaixo do piso, documento que declara permissions/tools/effects).
+     * Um registro anterior do mesmo id é removido nesse caso: recusar nunca deixa o schedule velho ativo.
+     */
     @Synchronized
     fun register(document: WorkflowDocument, zoneId: String = "UTC", now: Instant = Instant.now()): ScheduledWorkflow? {
         val expression = document.schedule?.takeIf { it.isNotBlank() } ?: return null
         val zone = ZoneId.of(zoneId)
+        if (WorkflowAutomationPolicy.scheduleRefusal(document, zone, now) != null) {
+            if (states.remove(document.id) != null) persist()
+            return null
+        }
         val next = WorkflowSchedule(expression).nextAfter(now, zone) ?: return null
-        val scheduled = ScheduledWorkflow(document.id, document.version, expression, zone.id, next)
+        val scheduled = ScheduledWorkflow(document.id, document.version, expression, zone.id, next, contentHash = document.contentHash)
         states[document.id] = scheduled
         persist()
         return scheduled
@@ -77,6 +89,7 @@ class WorkflowScheduler(private val stateFile: File? = null) {
                 JSONObject().put("id", state.id).put("version", state.version).put("expression", state.expression)
                     .put("zoneId", state.zoneId).put("nextRun", state.nextRun.toString())
                     .put("claimedBy", state.claimedBy ?: JSONObject.NULL).put("claimUntil", state.claimUntil?.toString() ?: JSONObject.NULL)
+                    .put("contentHash", state.contentHash)
             }).toString())
         }
     }
@@ -94,7 +107,8 @@ class WorkflowScheduler(private val stateFile: File? = null) {
                     zoneId = item.getString("zoneId"),
                     nextRun = Instant.parse(item.getString("nextRun")),
                     claimedBy = item.optString("claimedBy").takeUnless { it == "null" || it.isBlank() },
-                    claimUntil = item.optString("claimUntil").takeUnless { it == "null" || it.isBlank() }?.let(Instant::parse)
+                    claimUntil = item.optString("claimUntil").takeUnless { it == "null" || it.isBlank() }?.let(Instant::parse),
+                    contentHash = item.optString("contentHash").takeUnless { it == "null" }.orEmpty()
                 )
             }
         }

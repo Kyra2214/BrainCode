@@ -60,8 +60,8 @@ Cada item marcado como concluído aponta para código de produção e um teste q
 | Workflows: parser, catálogo custom/community, enable/disable e schedule | [x] | `WorkflowCatalog` e `WorkflowScheduler` no núcleo | `WorkflowDocumentTest`, `WorkflowInfrastructureTest` |
 | Workflows: backup/restore seguro | [x] | `BrainIntegrationFacade.backupWorkflows`/`restoreWorkflows` e `WorkflowCatalog.restore` | `WorkflowDocumentTest` cobre zip-slip, caminho absoluto, hash adulterado e atomicidade |
 | Workflows: capability estável e comandos operacionais | [x] | `BrainSandboxController` registra `workflow.run`; `SandboxViewModel` expõe list/enable/disable/backup/restore | `PolicyBrokerDoorTest`, `CompositeActionExecutorTest` e `WorkflowDocumentTest` cobrem Porta 3, fail-closed e `runDocument` |
-| Workflows: execução autorizada e scheduler no app | [x] | `BrainIntegrationFacade.runWorkflow`/`runDueWorkflows` usa engine, lease e scheduler persistente | `WorkflowDocumentTest`, `WorkflowInfrastructureTest` e gates locais |
-| Marketplace: manifesto HTTPS pinado e assinatura Ed25519 | [x] | `WorkflowMarketplaceRegistry.pin` | `WorkflowInfrastructureTest` cobre assinatura válida e cinco rejeições |
+| Workflows: execução autorizada e scheduler no app | [ ] | Ligado no item 8b: `WorkflowRunPort` → `GatewayWorkflowRunPort` (PolicyBroker/ActionGateway do `BrainSandboxController`), `WorkflowIntegrationService` único, `/workflow run <id>`, scheduler só com app aberto, schedule pinado por contentHash, piso de 15 min, `WorkflowRunExecutor` (texto). ADR em `LEGADO_E_DECISOES.md`. Marcar `[x]` quando o CI passar | `WorkflowIntegrationServiceTest`, `WorkflowAutomationPolicyTest`, `GatewayWorkflowRunPortTest` (ainda não executados) |
+| Marketplace: manifesto HTTPS pinado e assinatura Ed25519 | [ ] | `WorkflowMarketplaceRegistry.pin` existe e é exposto por `BrainIntegrationFacade.pinMarketplaceManifest`/`listMarketplaceManifests`/`resolveMarketplaceManifest`, **sem caller de produção** (sem UI de marketplace) | `WorkflowInfrastructureTest` cobre assinatura válida e cinco rejeições (núcleo apenas) |
 | Marketplace: chaves confiáveis e compatibilidade Android | [x] | `BrainIntegrationFacade` carrega asset de chaves e compartilha o mapa com os registries | `Ed25519CompatibilityInstrumentedTest` em API 26/33 via CI |
 | Conteúdo executável externo, scripts/hooks e download automático | [ ] | Nenhum por decisão de segurança | ADR T-601 e decisão E/F; não implementar sem novo gate |
 | Prompts do PDF do projeto3 | [ ] | Nenhum; licença ainda não comprovada | T-701 bloqueia T-702/T-703 |
@@ -70,17 +70,28 @@ As decisões por fonte estão em `docs/DECISOES_MARCO_2_6_ABSORCAO.md`. A proven
 
 ## Marco 3 — Segurança
 
-[ ] isolamento OS-level.
-[ ] limites CPU/memória/PIDs/FDs/disco.
-[ ] trust chain de RootFS.
+[ ] isolamento OS-level: hoje `proot` + sandbox por UID/SELinux; `NamespaceSupport.detect()` faz só um preflight parcial de `CLONE_NEWUSER`, sem launcher de namespaces (ver `docs/LEGADO_E_DECISOES.md`, "Launcher equivalente ao bwrap").
+[ ] limites CPU/memória/PIDs/FDs/disco:
+  - [ ] proot limits (`maxProcesses` via `ulimit -u`): implementado, mas opt-in e **desligado por padrão** (`RLIMIT_NPROC` é por UID no Android); sem watchdog equivalente.
+  - [x] process tree: kill de process group (`setsid` + TERM/KILL, fallback `ProcessHandle.descendants()`) cobre líder e descendentes observáveis no cancelamento/timeout/falha de cgroup; não equivale a namespace de PID (ver `docs/ITEM_10_PROCESS_TREE.md`).
+  - [ ] limites de FD e quota de disco por job (quota agregada de workspace já existe — `WorkspaceManager.maxWorkspaceBytes`, 2 GiB — mas não é limite por job).
+[ ] trust chain de RootFS:
+  - [ ] `RootfsSignatureVerifier` existe no código, mas os três manifestos têm `signatureRequired=false` e `rootfs_trusted_keys.json` está vazio — verificação não é aplicada hoje (ver `docs/ROOTFS_SIGNATURES.md`).
 [ ] credential binding.
-[ ] SSRF/DNS rebinding.
-[ ] bypass regression corpus.
+[ ] SSRF/DNS rebinding:
+  - [x] `NetworkPolicy` cobre loopback, site-local, link-local e IPv4-mapped IPv6.
+  - [x] DNS pinning implementado em `SandboxResourceManager` (ver `docs/PROOT_NETWORK_ISOLATION.md`).
+  - [ ] `RemotePluginCatalog` ainda não foi conferido contra SSRF/DNS rebinding.
+[ ] bypass regression corpus: probes existem em `tests/attack-probes/` (fork bomb, `dd`/`mount`, `/dev/tcp`, DNS rebinding, truncamento do EventStore), mas `attack-probes-runner.sh` não está ligado ao CI.
 
 ## Marco 4 — Jobs
 
 [ ] durable jobs completos.
-[ ] leases/fencing.
+[ ] leases/fencing:
+  - [x] `WorkflowLease`/`WorkflowLeaseStore` implementado em `WorkflowEngine` (fencing token, TTL, acquire/check/release) e ligado em produção via `WorkflowRunPort`/`GatewayWorkflowRunPort`, com autorização real pelo `PolicyBroker`/`ActionGateway` (Porta 3, fase APROVADA) e execução single-flight com o sandbox — ver `docs/LEGADO_E_DECISOES.md`, "Autorização de workflows automáticos (Marco 4, item 8b)".
+  - [ ] budget por run (`PolicyContext.budget`) ainda não é aplicado por nenhum componente.
+  - [ ] mapeamento `permissions`/`tools`/`effects` → capability, pré-requisito para rodar documentos com efeitos (hoje `WorkflowRunExecutor` só devolve texto).
+  - [ ] trilha de auditoria de pré-voo bloqueado (hoje só `workflow.error` no EventStore).
 [ ] retry/timeout/cancelamento uniforme.
 [ ] recuperação de tarefas longas.
 
@@ -99,7 +110,7 @@ A evolução das portas será sequencial:
 
 Não iniciar a integração de APIs externas antes de Porta 1 e Porta 2 estarem consolidadas. A Porta 3 já possui aproximadamente 81% da infraestrutura funcional necessária; portanto, não será reconstruída nem congelada. Os componentes existentes serão preservados e os ~19% restantes serão fechados depois da consolidação das Portas 1 e 2 e da camada de APIs.
 
-**Exceção documentada:** o gating de chamada de API por porta (booleano `DoorScope.externalAccountsAllowed`, calculado por `DoorPolicy.externalAccountsAllowed`) já foi adiantado conscientemente antes da consolidação formal de Porta 1/2 — Porta 3 libera incondicionalmente desde o início da fase de criação e Porta 2 libera condicionalmente via `escalationRequested`. Isso não antecipa a camada completa de integração de APIs/providers (Marco 5.3), só essa fatia de gating booleano. Ver `PLANO_CORRECAO_AUDITORIA_ESCALONAMENTO.md`, seção 2, para o histórico da decisão (Opção A aplicada em 23/09/2026).
+**Exceção documentada:** o gating de chamada de API por porta (booleano `DoorScope.externalAccountsAllowed`, calculado por `DoorPolicy.externalAccountsAllowed`) já foi adiantado conscientemente antes da consolidação formal de Porta 1/2 — Porta 3 libera incondicionalmente desde o início da fase de criação e Porta 2 libera incondicionalmente desde 23/09/2026 (`escalationRequested` foi removido do código; o parâmetro existiu numa versão anterior e tinha um bug que impedia o escalonamento no primeiro pedido). Quem decide se a IA é de fato chamada é sempre o executor (`PromptGenerationExecutor.escalonar`, por `forcarIa` ou `scoreInicial.abaixoDoPadrao`), não a porta. Isso não antecipa a camada completa de integração de APIs/providers (Marco 5.3), só essa fatia de gating booleano. Ver `docs/LEGADO_E_DECISOES.md, "Escalonamento da Porta 2 e DoorPolicy"`, seção 2, para o histórico da decisão (Opção A aplicada em 23/09/2026).
 
 ### Marco 5.1 — Porta 1: Chat / Plano — ~92%
 
@@ -122,7 +133,7 @@ Não iniciar a integração de APIs externas antes de Porta 1 e Porta 2 estarem 
 [x] formalizar entrada da Porta 2 pelo Secretário.
 [x] preservar Prompt Agent/Creator, pesquisa Web, biblioteca, crítica, otimização e validação já existentes.
 [x] Web permitida conforme Policy.
-[x] APIs externas: contas visíveis ao executor desde o início, no mesmo padrão da Porta 3 (`DoorPolicy.externalAccountsAllowed(Door.PROMPT)`; ver exceção documentada na regra de execução do Marco 5). **Bug corrigido em 23/09/2026** (ver `docs/auditoria/PLANO_CORRECAO_AUDITORIA_ESCALONAMENTO.md`, item 1): antes, a liberação dependia de um gatilho explícito de melhoria calculado uma única vez em `DeterministicSecretary.classify()`, o que tornava o escalonamento por qualidade insuficiente inalcançável num primeiro pedido ("crie um prompt de X"). Quem decide se a IA é de fato chamada continua sendo o executor (`PromptGenerationExecutor.escalonar`, com base em `scoreInicial.abaixoDoPadrao` ou gatilho de melhoria) — a porta só passou a deixar a conta visível.
+[x] APIs externas: contas visíveis ao executor desde o início, no mesmo padrão da Porta 3 (`DoorPolicy.externalAccountsAllowed(Door.PROMPT)`; ver exceção documentada na regra de execução do Marco 5). **Bug corrigido em 23/09/2026** (ver `docs/LEGADO_E_DECISOES.md, "Escalonamento da Porta 2 e DoorPolicy"`, item 1): antes, a liberação dependia de um gatilho explícito de melhoria calculado uma única vez em `DeterministicSecretary.classify()`, o que tornava o escalonamento por qualidade insuficiente inalcançável num primeiro pedido ("crie um prompt de X"). Quem decide se a IA é de fato chamada continua sendo o executor (`PromptGenerationExecutor.escalonar`, com base em `scoreInicial.abaixoDoPadrao` ou gatilho de melhoria) — a porta só passou a deixar a conta visível.
 [ ] permitir conversa controlada com a Porta 1 quando contexto for necessário.
 [x] garantir que concluir um prompt não inicie criação/desenvolvimento/execução automaticamente.
 [x] consolidar regras e permissões próprias da Porta 2.
@@ -132,7 +143,7 @@ Não iniciar a integração de APIs externas antes de Porta 1 e Porta 2 estarem 
 
 ### Marco 5.3 — Integração de APIs externas — após Portas 1 e 2
 
-**Nota:** a fatia de gating booleano por porta (`externalAccountsAllowed`) já foi adiantada — ver exceção documentada na regra de execução do Marco 5 e `PLANO_CORRECAO_AUDITORIA_ESCALONAMENTO.md`, seção 2. Os itens abaixo, referentes à camada completa de integração (Provider/API, registro/descoberta/seleção, testes de contrato), seguem como estavam, sem evidência de avanço além do já registrado.
+**Nota:** a fatia de gating booleano por porta (`externalAccountsAllowed`) já foi adiantada — ver exceção documentada na regra de execução do Marco 5 e `docs/LEGADO_E_DECISOES.md, "Escalonamento da Porta 2 e DoorPolicy"`, seção 2. Os itens abaixo, referentes à camada completa de integração (Provider/API, registro/descoberta/seleção, testes de contrato), seguem como estavam, sem evidência de avanço além do já registrado.
 
 [ ] somente iniciar quando Porta 1 e Porta 2 estiverem formalmente consolidadas.
 [ ] criar camada de Provider/API sem contaminar o Brain Core.

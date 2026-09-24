@@ -4,8 +4,7 @@ Este diretório contém tudo o que é necessário para construir o rootfs
 completo (**Ubuntu 24.04**) que será baixado e executado dentro do app via
 `proot`.
 
-> Trocamos de Alpine (v0.1.0) para Ubuntu (v0.2.0) — motivo registrado em
-> `docs/roadmap-sandbox-fase0.md`, item 0.1: musl (Alpine) quebra
+> Trocamos de Alpine (v0.1.0) para Ubuntu (v0.2.0): musl (Alpine) quebra
 > compatibilidade com a maioria dos wheels binários do pip e com binários
 > pré-compilados comuns do npm, forçando recompilar tudo do zero. Ubuntu
 > usa glibc, igual ao ambiente de referência (runtime mobile da DeepSeek).
@@ -93,9 +92,9 @@ O script migra exatamente estes três releases:
 | `rootfs-agent-v0.4.1` | `rootfs-agent-v0.4.1` | `rootfs-agent-extra-0.4.1.tar.gz` |
 | `rootfs-agent-android-v0.5.0` | `rootfs-agent-android-v0.5.0` | `rootfs-agent-android-0.5.0.tar.gz` |
 
-Os tamanhos e hashes esperados estão registrados em
-`docs/SANDBOX_RELEASE_MIGRATION.md`. Se qualquer verificação falhar, o
-script interrompe a migração. Não há rebuild automático.
+Os tamanhos e hashes esperados estão no próprio `migrate-sandbox-releases.sh`
+(e nos manifests `app/src/main/res/raw/rootfs_*_manifest.json`). Se qualquer
+verificação falhar, o script interrompe a migração. Não há rebuild automático.
 
 O script também atualiza os manifests para as URLs do BrainCode somente após
 publicar/verificar os assets.
@@ -145,3 +144,13 @@ excessivamente pesado em telefones.
 
 Os comandos adicionais são `sandbox-artifact`, `sandbox-job` e
 `sandbox-health-android`, destinados a agentes que trabalham via API.
+
+## Manifestos: molde do builder × manifestos do app
+
+`agent_extra_manifest.json` e `agent_android_manifest.json` (aqui) são o **molde** emitido pelo builder; o app usa `app/src/main/res/raw/rootfs_manifest.json` (base 0.3.3), `rootfs_extra_manifest.json` e `rootfs_android_manifest.json`. Para os dois perfis que existem nos dois lugares, a **única diferença** é `"signatureRequired": false`, presente só nos manifestos do app.
+
+Isso é intencional e reflete o estado atual: um manifesto sem `signatureRequired` é tratado como `true` (fail-closed, ver `docs/ROOTFS_SIGNATURES.md`), mas os três RootFS homologados ainda não foram assinados, então os manifestos do app declaram `false` explicitamente e `app/src/main/assets/rootfs_trusted_keys.json` está vazio. Ao assinar os artefatos (Marco 3): remover o campo dos manifestos do app (ou passar a `true`), publicar a chave pública e manter as duas cópias sincronizadas (o molde do builder não deve receber `false`).
+
+## Verificação no host (manual)
+
+`scripts/e2e-rootfs-host.sh [diretório-de-trabalho]` baixa as três camadas declaradas em `app/src/main/res/raw/rootfs_manifest.json`, `rootfs-builder/agent_extra_manifest.json` e `rootfs-builder/agent_android_manifest.json`, confere tamanho e SHA-256, extrai uma sobre a outra e valida binários essenciais e symlinks que escapam do rootfs. Requer `curl`, `jq`, `tar` e `python3`, e acesso à rede; não roda no CI.

@@ -4,23 +4,23 @@
   "upstreamCommit": "c004a74784a08295d52749b04cda634125b9a581",
   "upstreamTag": "0.6.10",
   "importDate": "2026-09-18",
-  "status": "INSTALLED_NOT_INTEGRATED",
+  "status": "INSTALLED_DISCOVERY_AND_SELECTION_INTEGRATED_EFFECTS_NOT_INTEGRATED",
   "content": {
-    "skills": 30,
+    "skills": 25,
     "agents": 4,
     "references": 7,
     "docs": 16,
     "hooks": 8,
     "scripts": 13,
     "commands": 9,
-    "evals": 75,
-    "allFiles": 195,
+    "evals": 25,
+    "allFiles": 226,
     "topLevelEntries": 23
   },
   "installation": {
     "apkAsset": "roofts/0.6",
     "rootfsPath": "/opt/roofts/0.6",
-    "skillIntegration": "NOT_STARTED"
+    "skillIntegration": "LAZY_CATALOG_ACTIVATION_PLAN_SELECTOR_FILTER_INTEGRATED_EFFECTS_NOT_INTEGRATED"
   },
   "integrity": {
     "README.md": "0956874d6ba30f65d45ff90a9d51e615627a836e22745f43b7aece14537bb028",

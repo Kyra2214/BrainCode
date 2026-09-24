@@ -9,7 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Fase 12 (ver PLANO_CONEXAO_FASE_12.md, seção 2): prova que PostExecutionGate
+ * Fase 12 (ver docs/LEGADO_E_DECISOES.md, "Fase 12 — conexão de trace e gates", seção 2): prova que PostExecutionGate
  * de fato invoca VerificationGate/CriticGate/ReadinessGate/LearningGate — em vez
  * de reimplementar a decisão inline — para impedir que uma futura edição volte a
  * duplicar a lógica em dois lugares sem que este teste acuse a regressão.

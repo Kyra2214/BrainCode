@@ -1,10 +1,22 @@
 # BrainCode — Estado Atual
 
-HEAD funcional da auditoria: será atualizado após o commit da Fase 2.
+Sem HEAD fixo: este documento é atualizado incrementalmente a cada fase, não a cada commit. Cada seção abaixo registra o commit e as evidências verificadas na época; o estado consolidado mais recente é o das últimas seções ("Fase conversacional", "Research Harness e Web Access" e "Ciclo textual").
 
 ## Consolidado
 
 Capability Registry/Discovery, PolicyBroker, ActionGateway, Dispatcher, Agents bounded, SkillRegistry, ReasoningEngine, RequirementDiscovery, AssumptionManager, ContextPack, Planner, AcceptanceCriteria, PlanningGate, AuthorizedPlan, BrainSandboxController, CicloExecucaoPlano, DurableJobRunner/WorkflowEngine, PostExecutionGate, Verification, UniversalCritic, Revision/Fix, Readiness, ValidatedLearning, LayeredMemory e EventStore/BehaviorTrace.
+
+## Atualização da Fase 6/7 — branch `phase6-apk` (2026-09-24)
+
+No HEAD `97f9fbf`, foram aplicadas as correções do segundo cenário de `BrainSandboxControllerExecutionTraceTest`, removido o teste de desenho TOCTOU redundante em favor da cobertura de `SandboxResourceManagerDnsPinningTest`, adicionados os gates Python/architecture/doc/orphan ao CI, removido o grader Roofts duplicado e disponibilizado o job manual de release readiness. Também foi corrigido o fixture de proveniência do `SpecialistCapabilitiesTest`, o fixture de readiness de `SpecialistExecutionWiringTest` e o limite de processos do teste Python para não conflitar com threads do runner.
+
+Evidências locais no mesmo HEAD: `python3 -m unittest discover -s tests` (**159 testes OK**), `:brain:test`, `:android-module:testDebugUnitTest`, `:app:testDebugUnitTest`, `:app:assembleDebug`, `:app:lintDebug`, `scripts/verify-apk-assets.sh` (**25 Roofts Skills + trusted signing keys**), `scripts/architecture-gate.sh` e `scripts/doc-lint.sh` verdes. O APK debug entregue está em `braincode-release-artifacts/BrainCode-debug.apk`, SHA-256 `2ba9b49ca7c520c04c11ad4a75b16664b83e020cf4acf3b064b236df05ed15da`.
+
+O branch foi sincronizado com `origin/phase6-apk`. O workflow GitHub CI `35980885173` passou, incluindo o job manual `release-readiness`. Permanecem pendentes, e não devem ser marcados como concluídos: UI E2E em emulador, validação manual da jornada completa do APK e validação automática de identificadores canônicos no `doc-lint`.
+
+Foi adicionada a suíte E2E específica `com.sandbox.app.ThreeDoorsSimulationE2ETest`, documentada em `docs/E2E_3_PORTAS.md`. A execução focalizada passou com **5 testes, 0 falhas e 0 erros**, cobrindo: chat normal da Porta 1; pesquisa da Porta 1; reuso da biblioteca na Porta 2; pesquisa seguida de criação e integração de prompt na Porta 2; e criação de app pequeno na Porta 3 com aprovação, roadmap, especialistas e workspace. Esta suíte é uma simulação determinística JVM/Android; não substitui o UI E2E em emulador.
+
+Após duas falhas remotas no benchmark de 1.000 classificações de `IntentEnvelopeTest` (limite absoluto de 1,5 s no runner compartilhado), o teto foi ajustado para 5 s, equivalente a 5 ms por classificação, preservando a proteção contra regressão sem falso negativo por variabilidade do host. A correção foi validada localmente e sincronizada no commit `c00c100`.
 
 A UI possui estados de planejamento, execução, verificação, crítica, revisão, correção, reexecução, PASS/BLOCKED/FAILED/READY.
 
@@ -40,7 +52,7 @@ O primeiro módulo da consolidação das três portas foi implementado sem subst
 
 O escopo da porta é transportado pelo `PolicyContext`, `PolicyDecision`, `AuthorizationToken` e `ExecutionAuthorization`. O `PolicyBroker` continua sendo a autoridade final. O `BrainSandboxController` emite `DoorDesignated`, e `ThreadSession` persiste `SecretaryState` mantendo compatibilidade com JSONs antigos sem esse campo.
 
-A decisão D1 permanece na opção A: APIs e contas externas seguem bloqueadas nas três portas. A Web continua sendo uma capability sujeita à matriz e às restrições explícitas.
+A decisão D1 permanece na opção A. **Atualização de 23/09/2026:** o gating booleano `DoorPolicy.externalAccountsAllowed(door)` foi adiantado (ver Fase 5 / `docs/LEGADO_E_DECISOES.md`, "Escalonamento da Porta 2 e DoorPolicy"): `Door.CHAT` continua `false` (contas externas bloqueadas), mas `Door.PROMPT` e `Door.CREATE` já retornam `true` — a conta fica visível ao executor, que decide se a chama. Isso não antecipa a camada completa de integração de APIs/providers do Marco 5.3. A Web continua sendo uma capability sujeita à matriz e às restrições explícitas.
 
 ### Evidências executadas
 
@@ -75,7 +87,7 @@ O fluxo formal de `Door.PROMPT` foi coberto com corpus de entrada, follow-up e `
 
 ## Fase 4.0 — Porta 3: máquina, aprovação e especialistas bounded
 
-`CreatePhaseMachine` e `SecretaryState.approve()` registram a sequência `DISCUSSION → REQUIREMENTS → ARCHITECTURE → PLAN → APPROVED` e bloqueiam saltos ou execução prematura. O `SandboxViewModel` reconhece aprovação explícita para uma intenção CREATE ativa e persiste o novo estado antes de executar. `BuiltInAgentDefinitions.boundedSpecialists()` declara os 11 especialistas previstos com provenance local e sem provider próprio.
+`CreatePhaseMachine` e `SecretaryState.approve()` registram a sequência `DISCUSSION → REQUIREMENTS → ARCHITECTURE → PLAN → APPROVED` e bloqueiam saltos ou execução prematura. O `SandboxViewModel` reconhece aprovação explícita para uma intenção CREATE ativa e persiste o novo estado antes de executar. `BuiltInAgentDefinitions.boundedSpecialists()` declara os 12 especialistas previstos (`BuiltInSpecialistsTest` exige 12) com provenance local e sem provider próprio. **Estado real:** são apenas definições declarativas — hoje só testes as consomem; não estão registrados no `CapabilityRegistry` do `BrainSandboxController` nem são usados pelo `CreationWorkflowPlanner`. A integração pertence ao Marco 5.4/5.5 (especialistas com executor + contrato + Self-E2E).
 
 ### Evidências locais executadas
 
@@ -143,4 +155,4 @@ O novo contrato está implementado no núcleo e no executor Android. `Conversati
 
 O `ChatResponseExecutor` registra evidências explícitas (`chat:conversation`, `chat:secretary:block`, `chat:websearch:executed`, `chat:websearch:evidence`, `chat:conversation:synthesis` e `chat:secretary:accept`), limita a recuperação a uma tentativa e só promove conhecimento depois do `ACCEPT`. WebSearch nunca devolve texto diretamente à UI; fontes, citations, evidence e diagnósticos continuam internos. Fallbacks neutros e perguntas do tipo “quer que eu pesquise?” foram removidos da saída final.
 
-O teste de contrato `TextConversationContractsTest` impede que fallback, resultado bruto ou resposta sem evidência atravessem o gate. O teste Android do executor comprova o fast path local e a recuperação automática com as seis evidências mínimas do ciclo. CI, UI E2E e APK devem ser executados no novo commit antes da declaração de conclusão.
+O teste de contrato `TextConversationContractsTest` impede que fallback, resultado bruto ou resposta sem evidência atravessem o gate. O teste Android do executor comprova o fast path local e a recuperação automática com as seis evidências mínimas do ciclo. Na execução `phase6-apk`, os testes Android, o APK debug, lint e gate de assets passaram localmente e no CI remoto `35980885173`; UI E2E no emulador e a jornada manual do APK continuam sem evidência e não são declarados concluídos.

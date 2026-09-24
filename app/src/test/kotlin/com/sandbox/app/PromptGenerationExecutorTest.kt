@@ -307,7 +307,7 @@ class PromptGenerationExecutorTest {
     }
 
     // Regressão do bug corrigido em 23/09/2026 (ver
-    // docs/auditoria/PLANO_CORRECAO_AUDITORIA_ESCALONAMENTO.md, item 1): um PRIMEIRO pedido, sem
+    // docs/LEGADO_E_DECISOES.md, "Escalonamento da Porta 2 e DoorPolicy", item 1): um PRIMEIRO pedido, sem
     // nenhuma palavra de melhoria ("crie um prompt de X", não "melhore"), com qualidade local
     // insuficiente e uma conta autorizada disponível, deve de fato chamar a IA real — antes,
     // authorizedAccountIds chegava sempre vazio nesse caminho e a IA nunca era acionada, mesmo

@@ -1,5 +1,5 @@
 {
-  "version": "2026-09-14.4",
+  "version": "2026-09-23.1",
   "focus": "ai-api-free-only",
   "providers": [
     {"id":"qwen","name":"Qwen / Alibaba Model Studio","region":"CHINA","officialUrl":"https://www.alibabacloud.com/en/model-studio","documentationUrl":"https://platform.qianwenai.com/docs/api-reference/chat/dashscope","modelsEndpoint":"https://dashscope-intl.aliyuncs.com/api/v1/models","models":[{"id":"qwen-bootstrap","name":"Dynamic free models","capabilities":["chat","reasoning","coding","agent","multimodal"],"access":"FREE_TIER","endpoint":"https://dashscope-intl.aliyuncs.com/compatible-mode/v1","requiresKey":true}]},
@@ -10,6 +10,7 @@
     {"id":"openrouter","name":"OpenRouter","region":"GLOBAL","officialUrl":"https://openrouter.ai","documentationUrl":"https://openrouter.ai/docs","models":[{"id":"openrouter-free","name":"Free models pool","capabilities":["chat","reasoning","coding"],"access":"FREE_TIER","endpoint":"https://openrouter.ai/api/v1","requiresKey":true}]},
     {"id":"groq","name":"Groq API","region":"GLOBAL","officialUrl":"https://groq.com","documentationUrl":"https://console.groq.com/docs","models":[{"id":"groq-bootstrap","name":"Dynamic free models","capabilities":["chat","reasoning","coding","agent"],"access":"FREE_TIER","endpoint":"https://api.groq.com/openai/v1","requiresKey":true}]},
     {"id":"gemini","name":"Google Gemini API","region":"GLOBAL","officialUrl":"https://ai.google.dev","documentationUrl":"https://ai.google.dev/gemini-api/docs","models":[{"id":"gemini-bootstrap","name":"Dynamic free models","capabilities":["chat","reasoning","coding","agent","multimodal"],"access":"FREE_TIER","endpoint":"https://generativelanguage.googleapis.com/v1beta/openai","requiresKey":true}]},
-    {"id":"mistral","name":"Mistral AI API","region":"EUROPE","officialUrl":"https://mistral.ai","documentationUrl":"https://docs.mistral.ai","models":[{"id":"mistral-bootstrap","name":"Dynamic free models","capabilities":["chat","reasoning","coding","agent"],"access":"FREE_PERMANENT","endpoint":"https://api.mistral.ai/v1","requiresKey":true}]}
+    {"id":"mistral","name":"Mistral AI API","region":"EUROPE","officialUrl":"https://mistral.ai","documentationUrl":"https://docs.mistral.ai","models":[{"id":"mistral-bootstrap","name":"Dynamic free models","capabilities":["chat","reasoning","coding","agent"],"access":"FREE_PERMANENT","endpoint":"https://api.mistral.ai/v1","requiresKey":true}]},
+    {"id":"zai","name":"Z.ai / GLM","region":"CHINA","officialUrl":"https://z.ai","documentationUrl":"https://docs.z.ai","models":[{"id":"glm-4.7-flash","name":"GLM-4.7-Flash","capabilities":["chat","coding","agent"],"access":"FREE_TIER","endpoint":"https://api.z.ai/api/paas/v4","requiresKey":true},{"id":"glm-4.5-flash","name":"GLM-4.5-Flash","capabilities":["chat","coding","agent"],"access":"FREE_TIER","endpoint":"https://api.z.ai/api/paas/v4","requiresKey":true}]}
   ]
 }

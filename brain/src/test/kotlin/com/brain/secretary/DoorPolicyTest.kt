@@ -74,11 +74,23 @@ class DoorPolicyTest {
     @Test
     fun `secretario libera contas visiveis a porta 2 mesmo sem gatilho de melhoria no pedido original`() {
         // Regressão do bug corrigido em 23/09/2026 (ver
-        // docs/auditoria/PLANO_CORRECAO_AUDITORIA_ESCALONAMENTO.md, item 1): antes, um primeiro
+        // docs/LEGADO_E_DECISOES.md, "Escalonamento da Porta 2 e DoorPolicy", item 1): antes, um primeiro
         // pedido sem "melhore"/"refaça" fazia authorizedAccountIds chegar sempre vazio ao executor.
         val scope = DeterministicSecretary().classify("crie um prompt de uma xícara de café").scope
         assertEquals(Door.PROMPT, scope.door)
         assertTrue(scope.externalAccountsAllowed)
         assertEquals(setOf("acct-1"), scope.visibleAccounts(setOf("acct-1")))
+    }
+
+    @Test
+    fun `specialist execute so na porta de criacao aprovada com contas externas e sem NO_EXTERNAL_APIS`() {
+        val id = com.brain.capability.SpecialistCapabilities.EXECUTE_CAPABILITY
+        val approved = DoorScope(Door.CREATE, CreatePhase.APPROVED, externalAccountsAllowed = true)
+        assertTrue(DoorPolicy.allows(approved, id))
+        assertFalse(DoorPolicy.allows(DoorScope(Door.CREATE, CreatePhase.PLAN, externalAccountsAllowed = true), id))
+        assertFalse(DoorPolicy.allows(DoorScope(Door.CREATE, CreatePhase.APPROVED), id))
+        assertFalse(DoorPolicy.allows(DoorScope(Door.CREATE, CreatePhase.APPROVED, setOf(Restriction.NO_EXTERNAL_APIS)), id))
+        assertFalse(DoorPolicy.allows(DoorScope(Door.CHAT, CreatePhase.CHAT), id))
+        assertFalse(DoorPolicy.allows(DoorScope(Door.PROMPT, CreatePhase.PROMPT, externalAccountsAllowed = true), id))
     }
 }

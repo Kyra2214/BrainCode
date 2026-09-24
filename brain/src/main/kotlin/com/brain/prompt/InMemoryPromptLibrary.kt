@@ -15,6 +15,17 @@ class InMemoryPromptLibrary(
     private val file = storageFile ?: defaultStorageFile()
     private val statsFile = File(file.parentFile ?: File("."), "${file.name}.stats")
 
+    /** Seeds como chegaram (mesmas instâncias). Só o que difere delas vai para o disco: com a
+     *  biblioteca SQL (~14 mil seeds) regravar os inalterados a cada resultado registrado custaria
+     *  dezenas de MB por escrita. Um seed inalterado é recarregado do próprio SQL a cada partida. */
+    private val sementes: Map<String, PromptTemplate> = templatesIniciais.associateBy { it.id }
+
+    /** Palavras-chave (contexto + finalidade + skill) já tokenizadas, por template. Com ~14 mil
+     *  templates, tokenizar de novo a cada busca/deduplicação era o custo dominante. A entrada só vale
+     *  enquanto [origem] for a mesma instância guardada em [templates] (todo update cria uma cópia). */
+    private class PalavrasChave(val origem: PromptTemplate, val chaves: Set<String>)
+    private val palavrasChave = ConcurrentHashMap<String, PalavrasChave>()
+
     init {
         val persisted = loadPersisted()
         templatesIniciais.forEach { seed -> templates[seed.id] = persisted[seed.id]?.takeIf { it.versao >= seed.versao } ?: seed }
@@ -38,8 +49,13 @@ class InMemoryPromptLibrary(
     fun snapshotTemplates(): List<PromptTemplate> = templates.values.toList()
 
     override suspend fun salvarNovaVersao(template: PromptTemplate): String {
-        val similar = templates.values.filter { it.id != template.id }
-            .map { it to PromptSimilarity.contentSimilarity("${it.finalidade} ${it.contextoDeUso} ${it.textoTemplate}", "${template.finalidade} ${template.contextoDeUso} ${template.textoTemplate}") }
+        // Duplicata = mesmo assunto (palavras-chave parecidas, barato, com cache) E conteúdo quase igual
+        // (texto completo, caro — só para os poucos candidatos que passam no pré-filtro).
+        val chavesNovo = tokenizarPalavrasChave(template)
+        val textoNovo = "${template.finalidade} ${template.contextoDeUso} ${template.textoTemplate}"
+        val similar = templates.values.asSequence().filter { it.id != template.id }
+            .filter { jaccard(palavrasChaveDe(it), chavesNovo) >= LIMIAR_PALAVRAS_CHAVE }
+            .map { it to PromptSimilarity.contentSimilarity("${it.finalidade} ${it.contextoDeUso} ${it.textoTemplate}", textoNovo) }
             .filter { it.second >= DUPLICATE_THRESHOLD }.maxByOrNull { it.second }?.first
         val atual = templates[template.id]
         val finalTemplate = when {
@@ -140,8 +156,25 @@ class InMemoryPromptLibrary(
 
     private fun valueAfter(text: String, key: String): Double = text.substringAfter(key, "").substringBefore(';').toDoubleOrNull() ?: 0.0
     private fun valueAfterLong(text: String, key: String): Long = text.substringAfter(key, "").substringBefore(';').toLongOrNull() ?: 0L
+    private fun tokenizarPalavrasChave(template: PromptTemplate): Set<String> =
+        PromptSimilarity.tokenize("${template.contextoDeUso} ${template.finalidade} ${template.skillRelacionada.orEmpty()}")
+
+    private fun palavrasChaveDe(template: PromptTemplate): Set<String> {
+        val emCache = palavrasChave[template.id]
+        if (emCache != null && emCache.origem === template) return emCache.chaves
+        val chaves = tokenizarPalavrasChave(template)
+        palavrasChave[template.id] = PalavrasChave(template, chaves)
+        return chaves
+    }
+
+    private fun jaccard(a: Set<String>, b: Set<String>): Double {
+        if (a.isEmpty() || b.isEmpty()) return 0.0
+        val comuns = a.count { it in b }
+        return comuns.toDouble() / (a.size + b.size - comuns)
+    }
+
     private fun relevancia(template: PromptTemplate, pedido: Set<String>): Int {
-        val searchable = PromptSimilarity.tokenize("${template.contextoDeUso} ${template.finalidade} ${template.skillRelacionada.orEmpty()}")
+        val searchable = palavrasChaveDe(template)
         return pedido.count { token -> searchable.any { it == token || it.contains(token) || token.contains(it) } }
     }
     private fun loadPersisted(): Map<String, PromptTemplate> = runCatching {
@@ -158,7 +191,7 @@ class InMemoryPromptLibrary(
     private fun persist() = runCatching {
         file.parentFile?.mkdirs()
         val tmp = File(file.parentFile ?: File("."), "${file.name}.tmp")
-        tmp.writeText(templates.values.joinToString("\n") { t -> listOf(t.id, t.versao.toString(), t.finalidade, t.contextoDeUso, t.skillRelacionada.orEmpty(), t.agenteRelacionado.orEmpty(), t.textoTemplate, t.taxaSucesso.toString(), t.custoMedio.toString(), t.tempoMedioMs.toString(), t.historicoMelhorias.joinToString("\u001f"), t.amostrasObservadas.toString(), t.aposentado.toString()).joinToString("\t", transform = ::encode) })
+        tmp.writeText(templates.values.filter { sementes[it.id] != it }.joinToString("\n") { t -> listOf(t.id, t.versao.toString(), t.finalidade, t.contextoDeUso, t.skillRelacionada.orEmpty(), t.agenteRelacionado.orEmpty(), t.textoTemplate, t.taxaSucesso.toString(), t.custoMedio.toString(), t.tempoMedioMs.toString(), t.historicoMelhorias.joinToString("\u001f"), t.amostrasObservadas.toString(), t.aposentado.toString()).joinToString("\t", transform = ::encode) })
         if (!tmp.renameTo(file)) { file.delete(); tmp.renameTo(file) }
     }
 
@@ -174,6 +207,8 @@ class InMemoryPromptLibrary(
     companion object {
         private const val STORAGE_NAME = "brain-prompt-library.db"
         private const val DUPLICATE_THRESHOLD = 0.90
+        /** Pré-filtro da deduplicação: similaridade mínima das palavras-chave para valer a comparação do texto completo. */
+        private const val LIMIAR_PALAVRAS_CHAVE = 0.5
         private const val MAX_HISTORY = 100
         /** Poda automática: amostras mínimas antes de considerar o histórico confiável o
          *  suficiente pra aposentar, e taxa de sucesso abaixo da qual isso acontece. */

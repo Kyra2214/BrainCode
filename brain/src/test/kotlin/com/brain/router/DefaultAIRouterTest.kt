@@ -6,7 +6,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Cobre o "critério de pronto" da Etapa 5 (docs/PLANO_INTEGRACAO_BRAIN_SANDBOX.md):
+ * Cobre o "critério de pronto" da Etapa 5 do plano de integração original
+ * (docs/PLANO_INTEGRACAO_BRAIN_SANDBOX.md, consolidado em docs/ARQUITETURA_ATUAL.md
+ * e docs/LEGADO_E_DECISOES.md; não existe mais como arquivo separado):
  * o Router recebe a capacidade/papel e escolhe provider/modelo por
  * qualidade, confiabilidade (histórico via LiveStats), velocidade e
  * fallback — sem o usuário participar da escolha.

@@ -68,5 +68,35 @@ class InMemoryPromptLibraryTest {
         File("${storage.absolutePath}.stats").delete()
     }
 
+    @Test
+    fun `palavras-chave muito diferentes nao consolidam mesmo com texto quase igual`() {
+        val storage = File.createTempFile("brain-prompt-keywords", ".db").apply { delete() }
+        val corpo = (1..100).joinToString(" ") { "palavra$it" }
+        val library = InMemoryPromptLibrary(listOf(
+            PromptTemplate("a", 1, "gerar imagem realista", "imagem fotografia", null, null, corpo, 0.8, 0.0, 0)
+        ), storage)
+        runBlockingCompat {
+            library.salvarNovaVersao(PromptTemplate("b", 1, "planilha orcamento mensal", "financas planilha", null, null, corpo, 0.5, 0.0, 0))
+        }
+        assertEquals(setOf("a", "b"), library.snapshotTemplates().map { it.id }.toSet())
+        storage.delete()
+        File("${storage.absolutePath}.stats").delete()
+    }
+
+    @Test
+    fun `busca enxerga palavras-chave novas depois de salvar nova versao`() {
+        val storage = File.createTempFile("brain-prompt-cache", ".db").apply { delete() }
+        val library = InMemoryPromptLibrary(listOf(
+            PromptTemplate("x", 1, "gerar imagem", "imagem foguete", null, null, "texto um", 0.6, 0.0, 0)
+        ), storage)
+        assertTrue(library.buscarPorContextoSnapshot("planilha orcamento").isEmpty())
+        runBlockingCompat {
+            library.salvarNovaVersao(PromptTemplate("x", 1, "gerar planilha", "planilha orcamento", null, null, "texto dois", 0.6, 0.0, 0))
+        }
+        assertTrue(library.buscarPorContextoSnapshot("planilha orcamento").any { it.id == "x" })
+        storage.delete()
+        File("${storage.absolutePath}.stats").delete()
+    }
+
     private fun runBlockingCompat(block: suspend () -> Unit) = kotlinx.coroutines.runBlocking { block() }
 }

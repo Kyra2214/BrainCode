@@ -32,11 +32,11 @@ import com.brain.workflow.WorkflowCatalog
 import com.brain.workflow.WorkflowDocument
 import com.brain.workflow.WorkflowEngine
 import com.brain.workflow.WorkflowLeaseStore
-import com.brain.workflow.WorkflowNode
+import com.brain.workflow.WorkflowAutomationPolicy
+import com.brain.workflow.WorkflowIntegrationService
 import com.brain.workflow.WorkflowRunResult
 import com.brain.workflow.WorkflowScheduler
-import com.brain.workflow.WorkflowStepResult
-import com.brain.workflow.WorkflowStatus
+import com.brain.workflow.WorkflowRunPort
 import com.brain.workflow.WorkflowMarketplaceRegistry
 import com.brain.workflow.WorkflowPackageManifest
 import java.io.File
@@ -48,12 +48,12 @@ import org.json.JSONObject
 /**
  * Fachada Android para os subsistemas Brain locais e persistentes.
  *
- * Importante: esta fachada NÃO expõe mais um workflow próprio. Qualquer execução de
- * workflow/health-check passa exclusivamente por BrainSandboxController.healthCheck(),
- * que roda o ciclo autorizado real (BrainSandboxController -> BrainSandboxExecutionBridge
- * -> CicloExecucaoPlano). Isso elimina a duplicidade histórica entre um WorkflowEngine
- * "local/demonstrativo" aqui e o caminho real do Sandbox (ver PLANO_LIMPEZA_E_REESTRUTURACAO,
- * Fase 2).
+ * Esta fachada NÃO autoriza nem executa workflow por conta própria. Ela guarda catálogo,
+ * scheduler e engine (estado persistente) e os entrega a UM WorkflowIntegrationService,
+ * cuja única saída de autorização/execução é a WorkflowRunPort do BrainSandboxController
+ * (PolicyBroker + ActionGateway reais). Não existe aqui parâmetro `authorize` nem
+ * `executeBody` fornecido pelo caller. Health-check continua em BrainSandboxController.healthCheck().
+ * Ver docs/LEGADO_E_DECISOES.md, "Autorização de workflows automáticos".
  */
 class BrainIntegrationFacade(private val context: Context, private val stateDir: File) {
     private val trustedSigningKeys = loadTrustedSigningKeys()
@@ -70,6 +70,7 @@ class BrainIntegrationFacade(private val context: Context, private val stateDir:
         File(stateDir, "workflows/runs.json"),
         WorkflowLeaseStore(File(stateDir, "workflows/lease.json"))
     )
+    @Volatile private var workflowService: WorkflowIntegrationService? = null
 
     init {
         stateDir.mkdirs()
@@ -119,8 +120,11 @@ class BrainIntegrationFacade(private val context: Context, private val stateDir:
 
     fun availableWorkflows(): List<WorkflowDocument> = workflowCatalog.list()
     fun enabledWorkflows(): List<WorkflowDocument> = workflowCatalog.enabled()
+    /** Habilitar só muda estado: não autoriza nada. O scheduler recusa o schedule que a policy não permite. */
     fun enableWorkflow(id: String): WorkflowDocument = workflowCatalog.enable(id).also { workflowScheduler.register(it) }
     fun disableWorkflow(id: String) { workflowCatalog.disable(id); workflowScheduler.unregister(id) }
+    /** Motivo pelo qual o schedule do workflow não foi (ou não seria) ativado; null se não há recusa. */
+    fun scheduleRefusal(id: String): String? = workflowCatalog.resolve(id)?.let { WorkflowAutomationPolicy.scheduleRefusal(it) }
     fun backupWorkflows(output: File) = workflowCatalog.backup(output)
     fun restoreWorkflows(input: File) = workflowCatalog.restore(input)
     fun listMarketplaceManifests(): List<WorkflowPackageManifest> = marketplace.list()
@@ -128,42 +132,32 @@ class BrainIntegrationFacade(private val context: Context, private val stateDir:
     fun pinMarketplaceManifest(manifest: WorkflowPackageManifest): WorkflowPackageManifest = marketplace.pin(manifest)
     fun scheduledWorkflows() = enabledWorkflows().mapNotNull { workflowScheduler.get(it.id) }
 
-    /** Executa um documento somente quando o caller fornece a decisão do PolicyBroker. */
-    fun runWorkflow(
-        id: String,
-        runId: String,
-        idempotencyKey: String = "workflow:$id:$runId",
-        authorize: (String) -> Boolean,
-        executeBody: (WorkflowDocument, WorkflowNode, Int) -> WorkflowStepResult
-    ): WorkflowRunResult {
-        val document = workflowCatalog.resolve(id) ?: throw NoSuchElementException("workflow não encontrado: $id")
-        check(workflowCatalog.isEnabled(id)) { "workflow desabilitado: $id" }
-        val result = workflowEngine.runDocument(
-            document = document,
-            runId = runId,
-            idempotencyKey = idempotencyKey,
-            authorize = authorize,
-            executeBody = { _, node, attempt -> executeBody(document, node, attempt) }
-        )
-        emit(runId, "workflow.run", "Workflow${result.status.name}", mapOf("workflowId" to id, "status" to result.status.name, "steps" to result.steps.size.toString()))
-        return result
+    /**
+     * Conecta o runner de workflows à porta do controller e inicia o scheduler (somente com o app aberto).
+     * [canStartRun] é single-flight com o sandbox, NÃO autorização. Chamar de novo troca a porta.
+     */
+    fun attachWorkflowRunner(port: WorkflowRunPort, canStartRun: () -> Boolean) {
+        workflowService?.stopScheduler()
+        workflowService = WorkflowIntegrationService(
+            catalog = workflowCatalog,
+            scheduler = workflowScheduler,
+            engine = workflowEngine,
+            eventStore = events,
+            port = port,
+            canStartRun = canStartRun,
+            owner = "android-app-scheduler"
+        ).also { it.startScheduler() }
     }
 
-    /** Consome apenas os schedules vencidos; o executor continua sendo fornecido pelo gateway autorizado. */
-    fun runDueWorkflows(
-        owner: String,
-        now: Instant = Instant.now(),
-        authorize: (String) -> Boolean,
-        executeBody: (WorkflowDocument, WorkflowNode, Int) -> WorkflowStepResult
-    ): List<WorkflowRunResult> = workflowScheduler.due(now).mapNotNull { due ->
-        val claimed = runCatching { workflowScheduler.claim(due.id, owner, now) }.getOrNull() ?: return@mapNotNull null
-        val result = runCatching {
-            runWorkflow(due.id, "scheduled:${due.id}:${claimed.nextRun}", authorize = authorize, executeBody = executeBody)
-        }.getOrElse { error ->
-            WorkflowRunResult("scheduled:${due.id}:${claimed.nextRun}", "workflow:${due.id}:${claimed.nextRun}", WorkflowStatus.FAILED, emptyList(), error.message)
-        }
-        if (result.status != WorkflowStatus.RUNNING) workflowScheduler.complete(due.id, owner, now)
-        result
+    fun stopWorkflowRunner() {
+        workflowService?.stopScheduler()
+        workflowService = null
+    }
+
+    /** Execução manual de um workflow habilitado; passa pela mesma porta (PolicyBroker/ActionGateway) do scheduler. */
+    suspend fun runWorkflowNow(id: String, runId: String): WorkflowRunResult {
+        val service = workflowService ?: error("runner de workflows não conectado")
+        return service.runWorkflow(id, runId)
     }
 
     private fun loadTrustedSigningKeys(): Map<String, ByteArray> = runCatching {

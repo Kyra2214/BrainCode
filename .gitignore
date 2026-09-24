@@ -18,3 +18,9 @@ __pycache__/
 
 # Artefatos locais de build
 BrainCode-debug.apk
+
+# Segredos de assinatura e artefatos de CI/E2E locais
+*.jks
+*.keystore
+.ci/
+e2e-report/

@@ -48,3 +48,23 @@ A chave privada nunca deve entrar no repositório, no Dockerfile ou no APK. A ch
 ## Validação
 
 Foram validados a sintaxe Bash dos cinco scripts de build/verificação e a integração dos novos campos no contrato Kotlin. A suíte Gradle foi iniciada; o resultado final deve ser registrado no commit desta etapa.
+
+## Estado atual dos três manifestos distribuídos (2026-09-24)
+
+Apesar do mecanismo acima existir e do comportamento fail-closed (ausência de
+`signatureRequired` equivale a `true`), **os três manifestos hoje empacotados no app não
+usam assinatura**:
+
+- `app/src/main/res/raw/rootfs_manifest.json`, `rootfs_android_manifest.json` e
+  `rootfs_extra_manifest.json` têm `"signatureRequired": false` explícito.
+- `app/src/main/assets/rootfs_trusted_keys.json` está vazio (`{"keys": {}}`), ou seja,
+  não há nenhuma chave pública confiável configurada mesmo que um manifesto viesse a
+  exigir assinatura.
+
+Isso significa que, na build atual, a verificação de integridade do RootFS depende só do
+SHA-256 do manifesto — não há autoridade de confiança criptográfica ativa. Esse é o
+estado real, não um bug: o Marco 3 do `ROADMAP_CANONICO` (assinatura Ed25519 dos RootFS
+0.3.3/0.4.1/0.5.0 em produção) segue em aberto. Reemitir os três RootFS com assinatura,
+publicar a chave pública em `rootfs_trusted_keys.json` e então virar
+`signatureRequired: true` nos manifestos é o trabalho pendente desse marco — não faz
+parte do escopo da Fase 4 (pós-auditoria).

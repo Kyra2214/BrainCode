@@ -152,7 +152,7 @@ class CicloExecucaoPlano(
     private val capabilityFallbackCandidates: Int = 3,
     /** Aprendizado por passo (Fase 2 — ver LEGADO_E_DECISOES.md); null = não registra. */
     private val memory: ExperienceMemory? = null,
-    /** Diagnóstico/auto-reparo pós-falha (Fase 2); Noop até existir implementação real. */
+    /** Diagnóstico/auto-reparo pós-falha (Fase 2). O BrainSandboxController injeta RuntimeDoctorImpl; Noop é só o default para uso isolado/testes. */
     private val runtimeDoctor: RuntimeDoctor = NoopRuntimeDoctor,
     /** Tentativas extras (além da primeira) para passos idempotentes cujo executor sinaliza falha transitória. */
     private val maxRetries: Int = 1,
@@ -311,8 +311,12 @@ class CicloExecucaoPlano(
                 erro = gatewayExecution?.error
             )
             if (!sucesso) {
-                val diagnosis = runtimeDoctor.diagnose(authorization.runId, passo.id, gatewayExecution?.error)
-                if (!diagnosis.healthy) runtimeDoctor.repair(authorization.runId, passo.id, diagnosis)
+                // Diagnóstico/reparo é best-effort: uma falha do próprio doutor (ex.: I/O do EventStore)
+                // não pode transformar uma falha de passo já tratada em exceção do ciclo.
+                runCatching {
+                    val diagnosis = runtimeDoctor.diagnose(authorization.runId, passo.id, gatewayExecution?.error)
+                    if (!diagnosis.healthy) runtimeDoctor.repair(authorization.runId, passo.id, diagnosis)
+                }
             }
             val chatResponse = if (passo.capacidade == "chat.respond" && sucesso) {
                 gatewayExecution?.userResponse ?: gatewayExecution?.result?.takeIf { it.isNotBlank() }?.let {
@@ -395,8 +399,7 @@ class CicloExecucaoPlano(
     }
 
     /**
-     * Fallback de conta/provider (Fase 2 — ver LEGADO_E_DECISOES.md): a única cobertura disso
-     * antes era o BrainExecutionCoordinator legado. Aqui a saúde é atualizada para toda conta
+     * Fallback de conta/provider (Fase 2 — ver LEGADO_E_DECISOES.md): a saúde é atualizada para toda conta
      * efetivamente tentada pelo Dispatcher nesta chamada (inclusive alternativas usadas em
      * fallback), sucesso ou falha — sem isso, uma conta com chave inválida ou rate limit nunca
      * fica marcada como não saudável no caminho real, mesmo com fallback funcionando.

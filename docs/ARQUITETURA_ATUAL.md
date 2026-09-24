@@ -47,6 +47,16 @@ Ordem real no caminho Android — `CicloExecucaoPlano → Dispatcher → ActionG
 
 **Decisão sobre renomear (opcional, conforme o plano):** avaliado renomear `CapabilityResolver` → `SandboxCommandCatalog`, mas mantido o nome atual por ora — a classe já é referenciada por múltiplos pontos de instanciação (`AuthorizedCapabilityExecutor`, `Sandbox`, `AgentSandboxSession`) e por `CapabilityResolverTest`; este documento já resolve a ambiguidade de responsabilidade sem esse churn. Reavaliar renomear se a colisão de nome continuar gerando confusão na prática.
 
+## 2.2 ADR — `SandboxPlatform` mantém Policy/Gateway/Registry locais (item 3.4 do pós-auditoria)
+
+`SandboxPlatform` (`app/.../sandbox/`) instancia seu próprio `PolicyBroker`, `ActionGateway`, `CapabilityRegistry` e `InMemoryActionAuditLog`, e o `BrainSandboxController` (`android-module`) tem os seus. A regra da seção 9 proíbe segundo Gateway/Policy/Registry **para a mesma responsabilidade**; aqui a responsabilidade é distinta:
+
+- `SandboxPlatform` é a fachada local das operações do próprio sandbox (`sandbox.git`, `sandbox.toolchain`, `sandbox.test`, `sandbox.diagnostics`, `sandbox.plugin`), com actor fixo `sandbox-platform`, allowlist fechada e sem `runId`/sessão de conversa, plano ou Porta.
+- `BrainSandboxController` é o único caminho de execução de **planos do Brain** (Secretário → Planner → `CicloExecucaoPlano`), com `EventStore`, aprovações e `DoorScope`.
+- Os dois usam as mesmas classes (`PolicyBroker` deny-by-default, `ActionGateway`); não há lógica de autorização duplicada, apenas instâncias com allowlists diferentes. A allowlist da instância do `SandboxPlatform` contém somente essas 5 capabilities `sandbox.*`; capabilities de plano não são autorizadas por ela.
+
+**Decisão:** manter a separação agora. **Dívida registrada:** no Marco 4 (jobs/leases), injetar o `PolicyBroker`/`ActionGateway`/`EventStore` do controller no `SandboxPlatform` (uma instância por processo) e passar o `SandboxPlatform` a usar `runId` e trace. Até lá, o `InMemoryActionAuditLog` do `SandboxPlatform` não é persistido.
+
 ## 3. Plano e contexto
 
 PlanoExecucao contém objetivo, passos, assumptions, policies, fallback, requisitos ausentes e ContextPack opcional.
@@ -65,6 +75,7 @@ SandboxViewModel.submitThreadInput
 → DeterministicSecretary / SecretaryState
 → BrainSandboxController.executeObjective
 → ReasoningEngine
+→ PlanningAgent (PlanningArtifact persistido via FilePlanningArtifactStore; só na rota CREATION)
 → RequirementGate
 → KeywordPlanner
 → ContextPack/ExecutionPlan
@@ -79,6 +90,8 @@ SandboxViewModel.submitThreadInput
 → UI/Evidence/Learning.
 
 Texto livre não possui fallback direto para BrainApiGateway quando o Sandbox não está pronto. A UI bloqueia e pede preparação.
+
+Para intenções `Door.CREATE` (rota `CREATION`), o `PlanningAgent` roda logo após o `ReasoningEngine` e antes do `RequirementGate`: materializa e persiste um `PlanningArtifact` (ideia, requisitos, decisões, pendências e referências) via `FilePlanningArtifactStore`, e o evento `PlanningArtifactCreated` é emitido no EventStore. Para `Door.CHAT`/`Door.PROMPT` (fast path, fora da rota `CREATION`), esse passo não roda.
 
 ## 5. Pós-execução
 
@@ -135,7 +148,7 @@ O `WebResearchAgent` é determinístico e provider-agnostic. `SearchProvider`, `
 
 `ResearchSecurityPolicy` trata páginas como dados não confiáveis, detecta prompt injection, limita conteúdo entregue e mantém policy/permissions fora do conteúdo web. URLs passam por sanitização, allow/block domains e exigência HTTPS antes de serem aceitas.
 
-`AgentRegistry` registra especialistas por categoria, contrato, capability, provenance e licença: `conversation.no-inference`, `research.brain-harness` e `web.providers`. O Router continua selecionando por capability/contrato; o nome dos projetos externos não é autoridade de roteamento.
+`AgentRegistry` registra especialistas por categoria, contrato, capability, provenance e licença: `conversation.no-inference`, `research.brain-harness` e `web.providers`. O Router continua selecionando por capability/contrato; o nome dos projetos externos não é autoridade de roteamento. **Estado real (mesma categoria do item 3.3 de `docs/LEGADO_E_DECISOES.md`):** `AgentRegistry` é hoje só declarativo — `AgentRegistry.default()` existe e tem cobertura de teste (`AgentRegistryTest`), mas não há caller de produção nenhum instanciando ou consultando o registry em `android-module`/`app`; o roteamento real de `ChatResponseExecutor`/`WebResearchAgent` não passa por ele. Não tratar a existência da classe como prova de que o Router seleciona especialistas por este registry hoje.
 
 Após uma pesquisa automática bem-sucedida, `ResearchKnowledgePromoter` usa o `KnowledgeLearningCycle`/`KnowledgeMemory` existente para promover somente sínteses com quality gate, citations e confiança suficientes. A entrada estruturada recebe `WEB_RESEARCH`, referências, TTL para perguntas temporais e deduplicação por similaridade; conteúdo com prompt injection não é promovido. O próximo pedido equivalente tenta primeiro esse conhecimento validado e, se expirado ou ausente, volta ao WebResearch.
 

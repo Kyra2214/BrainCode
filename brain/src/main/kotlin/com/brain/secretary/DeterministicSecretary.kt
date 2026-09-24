@@ -36,7 +36,7 @@ class DeterministicSecretary(
         }.getOrDefault(deterministicDoor) else deterministicDoor
         val phase = phaseFor(door, normalized)
         // Contas externas ficam visíveis ao executor desde a classificação (ver
-        // docs/auditoria/PLANO_CORRECAO_AUDITORIA_ESCALONAMENTO.md, item 1); quem decide se de fato
+        // docs/LEGADO_E_DECISOES.md, "Escalonamento da Porta 2 e DoorPolicy", item 1); quem decide se de fato
         // usa é cada executor — ex.: PromptGenerationExecutor.escalonar só chama a IA quando o score
         // local é insuficiente ou há gatilho explícito de melhoria ("melhore", "refaça").
         val scope = DoorScope(

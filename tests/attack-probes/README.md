@@ -17,3 +17,13 @@ PROBE_ALLOW=1 bash tests/attack-probes/fork-bomb-controlled.sh
 ```
 
 Nenhum probe substitui a validação ARM64 real do harness. Eles devem ser chamados pelo executor autorizado, não por uma nova superfície de terminal livre.
+
+## Suite completa
+
+`scripts/attack-probes-runner.sh` valida a sintaxe de todos os probes e executa `fork-bomb-controlled`, `bash-c-mount-dd`, `dev-tcp-controlled` e `dns-rebinding-fixture` em sequência (não inclui `eventstore-truncation-fixture.sh`, que se roda à parte):
+
+```bash
+PROBE_ALLOW=1 bash scripts/attack-probes-runner.sh
+```
+
+Ainda não está ligada ao CI (Marco 3, bypass regression corpus).

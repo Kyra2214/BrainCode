@@ -70,8 +70,7 @@ data class DispatchResult(
  * parecem específicas da conta (limite, chave inválida, timeout, erro de servidor); falhas de
  * policy/requisição inválida não dependem da conta, então já pulam para o próximo candidato.
  *
- * Isso fecha a lacuna de fallback de conta/provider que só existia em
- * BrainExecutionCoordinator (ver docs/LEGADO_E_DECISOES.md, Fase 2) sem redesenhar quem decide
+ * Isso implementa o fallback de conta/provider (ver docs/LEGADO_E_DECISOES.md, Fase 2) sem redesenhar quem decide
  * candidatos (Discovery) nem quem decide contas (AccountRouter) — o Dispatcher continua sem
  * conhecer AccountRegistry; ele só recebe e itera IDs de conta que o caller já escolheu.
  */

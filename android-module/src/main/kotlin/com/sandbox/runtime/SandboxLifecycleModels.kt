@@ -71,8 +71,11 @@ interface SandboxProcessLauncher {
 
     /**
      * Variante com política de rede. Launchers antigos continuam compatíveis;
-     * launchers reais devem sobrescrever para aplicar isolamento ou falhar
-     * fechado quando [networkAllowed] for false.
+     * launchers reais devem sobrescrever para aplicar isolamento quando
+     * [networkAllowed] for false. O `ProotProcessLauncher` é best-effort: sem
+     * user namespaces ou sem `unshare`, inicia sem isolamento de rede (ver
+     * docs/PROOT_NETWORK_ISOLATION.md, "Decisão adotada", para a regra de
+     * falhar fechado apenas quando a policy exigir isolamento).
      */
     fun launch(command: List<String>, workingDir: String, networkAllowed: Boolean): Process =
         launch(command, workingDir)

@@ -35,7 +35,7 @@ O mecanismo (`DoorPolicy.externalAccountsAllowed(door)`) nasce na Fase 1; o valo
 - PR 1 — pacote `com.brain.secretary` em `:brain`: `Door`, `CreatePhase`, `Restriction`, `DoorScope`, `OrderIntent`, `SecretaryState`, `DeterministicSecretary`, `DoorPolicy`, `DoorAwareSplitter`.
 - PR 2 — `PolicyContext`, `PolicyDecision` e `AuthorizationToken` ganham `doorScope`; `PolicyBroker` nega capability fora da porta; `CicloExecucaoPlano` propaga a porta ao contexto usado pelo `ActionGateway`; `BrainSandboxController.executeObjective` recebe `intent` opcional e emite `DoorDesignated`.
 - PR 3 — `ThreadSession` persiste `SecretaryState`; `sendChatMessage` designa a porta sobre `resolved.currentPrompt`; comandos do catálogo `/…` entram fixos na Porta 2.
-- Correção de CI: incluir `:android-module:test` no `ci.yml` (hoje só roda `:brain:test :app:testDebugUnitTest`).
+- Correção de CI aplicada na Fase 6: o `ci.yml` inclui `:android-module:testDebugUnitTest` junto dos testes do `brain` e `app`.
 
 **Não muda:** comportamento sem `OrderIntent`; `KeywordPlannerTest` e `FunctionSplitterTest` (sem edição).
 
@@ -91,7 +91,7 @@ O mecanismo (`DoorPolicy.externalAccountsAllowed(door)`) nasce na Fase 1; o valo
 4. **Web e restrições:** hoje pedidos visuais ganham pesquisa mesmo sem "pesquise". Com `NO_WEB` isso deve ser removido; testar.
 5. **APIs (D1):** com `authorizedAccountIds` vazio, o `PromptGenerationExecutor` cai no caminho local + `RevisionEngine`. Cobrir os dois caminhos (com e sem conta autorizada) e o limiar de score.
 6. **Regras próprias da Porta 2:** matriz de permissões e `NO_PRODUCE`/`NO_EXECUTE` aplicáveis; criar prompt sobre código não vira execução de código (teste já existente no splitter; manter).
-7. **Não regredir:** `PromptGenerationExecutorTest`, `PromptCreatorWebResearchIntegrationTest`, `LocalPromptCreatorAgentTest`, `PromptLibraryFlowE2ETest` e o comportamento descrito em `docs/CORRECAO_FOLLOWUP_PROMPT_NO_PROGRESS.md`.
+7. **Não regredir:** `PromptGenerationExecutorTest`, `PromptCreatorWebResearchIntegrationTest`, `LocalPromptCreatorAgentTest`, `PromptLibraryFlowE2ETest` e o comportamento de follow-up sem progresso (nota original preservada na tag `pre-auditoria`).
 
 **Mapeamento do doc → código (provável, confirmar):** Prompt Agent → `LocalPromptCreatorAgent`; Prompt Research → pesquisa Web do Prompt Creator; Prompt Critic → `PromptQualityValidator`/`SelfCritic`; Prompt Optimizer → `RevisionEngine`/melhorador; Prompt Library → `PromptLibrary`.
 
@@ -116,7 +116,7 @@ O mecanismo (`DoorPolicy.externalAccountsAllowed(door)`) nasce na Fase 1; o valo
 2. **Aprovação do usuário:** transição explícita e persistida, reaproveitando `ApprovalStore`/`FileApprovalStore` (sem mecanismo novo).
 3. **Requisitos e arquitetura:** reaproveitar `ReasoningEngine`, `RequirementDiscovery`, `AssumptionManager` e `RequirementGate`; roadmap e tarefas sobre os modelos `Roadmap`/`Tarefa` e `TarefaStateMachine` (`com.brain.core`).
 4. **Prompts especializados por tarefa:** `generatePrompts(roadmap, library)` da `BrainIntegrationFacade` já gera prompts a partir do roadmap; ligar ao fluxo autorizado.
-5. **Especialistas amarrados:** hoje só `agent.research` e `agent.code` existem, e `agent_catalog.json` tem 0 agentes. Declarar os demais (Requirements, Architecture, Roadmap, UI, Backend, Database, Security, Test, Review, Integration, Release) como definições bounded em `BuiltInAgentDefinitions`, sem LLM próprio, escolhidos pelo Brain, com capabilities explícitas.
+5. **Especialistas amarrados:** `agent.research` e `agent.code` eram os únicos; os demais já estão declarados em `BuiltInAgentDefinitions.boundedSpecialists()` (12 definições, ainda não integradas). Declarar os demais (Requirements, Architecture, Roadmap, UI, Backend, Database, Security, Test, Review, Integration, Release) como definições bounded em `BuiltInAgentDefinitions`, sem LLM próprio, escolhidos pelo Brain, com capabilities explícitas.
 6. **Execução:** `CodeGenerationExecutor`, `sandbox.build/test`, `ExecutorValidacaoProjeto` e detecção de stack já existem; ligar por tarefa e por especialista.
 7. **Integração, revisão global e testes:** `PostExecutionGate` (Verification → Critic → Revision → Readiness → Learning) aplicado ao conjunto, não só por passo.
 8. **Erro → responsável:** findings com o agente responsável; devolver para correção e revalidar (`RevisionFixer` já reescreve por findings); segunda opinião por outro especialista/provider só depois do gate de APIs.
@@ -185,3 +185,38 @@ O BrainCode não deve simplesmente importar o projeto inteiro. Antes de qualquer
 Mesmo com um provider MeiGen/ComfyUI instalado no código, **provider instalado ≠ provider autorizado**. APIs/providers continuam bloqueados até o Marco 5.3 e pela Policy.
 
 O conceito só deve ser implementado na Porta 2 depois que a Porta 1 estiver formalmente consolidada com CI/E2E/readiness verdes.
+
+---
+
+## Fase 6 — CI, testes e prevenção de regressão
+
+Itens só devem ser marcados após execução da verificação correspondente no mesmo HEAD. A coluna **Evidência** deve conter o workflow, comando ou artefato que confirmou o item.
+
+| Estado | # | Ação | Esforço | Evidência |
+|---|---:|---|---|---|
+| [x] | 6.1 | Corrigir `BrainSandboxControllerExecutionTraceTest`: passar o `capabilityResolver` de teste também ao segundo cenário. | P | `android-module:testDebugUnitTest`, HEAD `5c5e893` |
+| [x] | 6.2 | Reescrever `RootfsDnsToctouFixDesignTest` para exercitar `SandboxResourceManager`, ou removê-lo com justificativa porque `SandboxResourceManagerDnsPinningTest` já cobre o caso. | M | Teste de design removido; cobertura mantida em `SandboxResourceManagerDnsPinningTest`, HEAD `9cae0bc` |
+| [x] | 6.3 | Adicionar ao CI `python3 -m unittest discover -s tests`, mantendo `brain_runtime` sob a decisão D3. | P | CI `35980885173`; 159 testes Python OK |
+| [x] | 6.4 | Executar `scripts/architecture-gate.sh` no CI, instalando `ripgrep` quando necessário. | P | CI `35980885173`; gate verde |
+| [~] | 6.5 | Adicionar `scripts/doc-lint.sh` para links Markdown vivos, identificadores canônicos e arquivos declarados como removidos no `LEGADO`. | M | Links e marcadores de remoção OK; validação automática de identificadores canônicos ainda pendente |
+| [x] | 6.6 | Adicionar `scripts/orphan-check.py` informativo, com baseline aprovado na Fase 3.3. | M | `scripts/orphan-check.py` executado informativamente |
+| [x] | 6.7 | Remover o step duplicado do grader semântico Roofts ou documentar a justificativa. | P | Step duplicado removido de `.github/workflows/ci.yml` |
+| [x] | 6.8 | Disponibilizar `scripts/validate-release-readiness.sh` como job manual via `workflow_dispatch`. | P | Job manual verde no CI `35980885173` |
+
+## Fase 7 — Validação final e entrega
+
+| Estado | Critério de aceite | Evidência |
+|---|---|---|
+| [x] | `:brain:test :android-module:test :app:testDebugUnitTest` verdes no mesmo HEAD, com remoções justificadas. | CI remoto `35980885173` verde |
+| [x] | `:app:assembleDebug`, `:app:lintDebug` e `scripts/verify-apk-assets.sh` verdes. | CI remoto `35980885173`; 25 Roofts Skills + trusted signing keys |
+| [x] | `scripts/architecture-gate.sh` verde. | CI remoto `35980885173` verde |
+| [x] | E2E lógico específico das três portas: cinco situações documentadas e verdes. | `ThreeDoorsSimulationE2ETest`: 5 testes, 0 falhas, 0 erros; `docs/E2E_3_PORTAS.md` |
+| [ ] | UI E2E (`ui-e2e.yml`) verde no emulador. | — |
+| [~] | `doc-lint` verde, sem links ou símbolos quebrados nos documentos canônicos. | `doc-lint` verde para links/marcadores; símbolos canônicos pendentes |
+| [ ] | APK abre e percorre Chave de API, Skills, Comandos, Prompt Library, Chat e Criação com aprovação. | — |
+| [x] | `git diff --stat` revisado e limitado às alterações previstas. | Checkpoints Git limpos após cada correção |
+| [ ] | `LEGADO_E_DECISOES.md` atualizado com o resumo da execução e o plano removido somente após a conclusão. | Resumo atualizado; plano permanece até UI E2E, jornada manual e lint de símbolos |
+
+### Regra de atualização
+
+Não marcar itens por inspeção estática ou por compilação parcial. Cada caixa deve ser marcada somente depois de a evidência ter sido executada no mesmo `HEAD` que será entregue; falhas devem permanecer desmarcadas e ser registradas ao lado do comando correspondente.

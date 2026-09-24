@@ -33,7 +33,7 @@ O Agent Extra 0.4.1 usa esta release como `baseRootfs: 0.3.3`. O perfil Android/
 
 ## Fonte e migração
 
-Esta documentação foi consolidada a partir de `rootfs-builder/README.md`, `rootfs-builder/Dockerfile`, `rootfs-builder/build.sh`, `output/rootfs-build-info.txt`, `docs/roadmap-sandbox-fase0.md` e do manifesto original no repositório [Kyra2214/SandBox](https://github.com/Kyra2214/SandBox). O artefato foi migrado para o BrainCode sem rebuild, alteração interna ou recompressão.
+Esta documentação foi consolidada a partir de `rootfs-builder/README.md`, `rootfs-builder/Dockerfile`, `rootfs-builder/build.sh`, `output/rootfs-build-info.txt`, `docs/ROADMAP_CANONICO.md` e do manifesto original no repositório [Kyra2214/SandBox](https://github.com/Kyra2214/SandBox). O artefato foi migrado para o BrainCode sem rebuild, alteração interna ou recompressão.
 
 - [Release no BrainCode](https://github.com/Kyra2214/BrainCode/releases/tag/rootfs-v0.3.3)
 - [Artefato no BrainCode](https://github.com/Kyra2214/BrainCode/releases/download/rootfs-v0.3.3/rootfs-ubuntu-0.3.3.tar.gz)

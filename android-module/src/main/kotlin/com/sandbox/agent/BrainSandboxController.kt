@@ -9,6 +9,9 @@ import com.brain.capability.CapabilityDiscovery
 import com.brain.capability.CapabilityProvenance
 import com.brain.capability.CapabilityProvider
 import com.brain.capability.CapabilityRegistry
+import com.brain.capability.SpecialistCapabilities
+import com.brain.runtime.RuntimeDoctor
+import com.brain.runtime.RuntimeDoctorImpl
 import com.brain.dispatch.Dispatcher
 import com.brain.gateway.ActionGateway
 import com.brain.gateway.ActionExecutor
@@ -29,6 +32,9 @@ import com.brain.workflow.WorkflowEngine
 import com.brain.workflow.WorkflowManifest
 import com.brain.workflow.WorkflowNode
 import com.brain.workflow.WorkflowStepResult
+import com.brain.prompt.DefaultPromptGenerator
+import com.brain.prompt.InMemoryPromptLibrary
+import com.brain.prompt.PromptGenerator
 import com.brain.prompt.PromptLibrary
 import com.brain.prompt.PromptOutcomeTracker
 import com.brain.prompt.PromptOutcomeTrackers
@@ -65,7 +71,14 @@ import com.brain.planner.TreeOfThoughts
 import com.brain.secretary.OrderIntent
 import com.brain.secretary.Door
 import com.brain.secretary.CreatePhase
+import com.brain.core.CreationWorkflowExecutor
+import com.brain.core.CreationWorkflowPlan
+import com.brain.core.CreationTaskRunner
 import com.brain.core.CreationWorkflowPlanner
+import com.brain.core.SpecialistDispatcher
+import com.brain.core.SpecialistOutcome
+import com.brain.core.TaskRunResult
+import com.brain.core.TarefaExecution
 import com.brain.core.Roadmap
 import com.brain.core.RoadmapValidationCoordinator
 import com.brain.secretary.SecretaryValidationRouter
@@ -113,12 +126,16 @@ class BrainSandboxController(
     private val secretary: com.brain.secretary.DeterministicSecretary = com.brain.secretary.DeterministicSecretary(),
     private val reasoningAnalyzer: ReasoningAnalyzer = ReasoningAnalyzer { ReasoningEngine().analyze(it) },
     private val planningArtifactPlanner: PlanningArtifactPlanner = PlanningArtifactPlanner { runId, reasoning, references -> PlanningAgent().plan(runId, reasoning, references) },
-    private val requirementEvaluator: RequirementEvaluator = RequirementEvaluator { reasoning -> RequirementGate().evaluate(reasoning) }
+    private val requirementEvaluator: RequirementEvaluator = RequirementEvaluator { reasoning -> RequirementGate().evaluate(reasoning) },
+    /** Diagnóstico pós-falha de passo; por padrão grava no mesmo EventStore do controller (nunca um segundo armazenamento). */
+    private val runtimeDoctor: RuntimeDoctor = RuntimeDoctorImpl(events),
+    /** Gera o prompt de cada tarefa do roadmap da Porta 3 (reuso de template antes de criar do zero). */
+    promptGenerator: PromptGenerator = DefaultPromptGenerator()
 ) {
     private val inputInterpreter = BrainInputInterpreter(secretary)
     private val brainRouter = BrainRouter()
     private val behaviorDiagnostics = BehaviorDiagnostics(EventStoreBehaviorTraceSink(events, "android-local"))
-    /** Fase 12 (ver PLANO_CONEXAO_FASE_12.md, seção 1): mesmo EventStore do controller, nunca um
+    /** Fase 12 (ver docs/LEGADO_E_DECISOES.md, "Fase 12 — conexão de trace e gates", seção 1): mesmo EventStore do controller, nunca um
      * segundo armazenamento — o traceId é sempre o runId/actionId já usado pelo ActionAuditLog. */
     private val executionTraceSink = EventStoreTraceSink(events, "android-local")
     private val executionTrace = ExecutionTrace(executionTraceSink)
@@ -126,6 +143,8 @@ class BrainSandboxController(
     private val approvals = FileApprovalStore(File(rootfsDir, "approvals.jsonl"))
     private val planningArtifacts = FilePlanningArtifactStore(File(rootfsDir, "planning-artifacts.jsonl"))
     private val sandbox = Sandbox(runtime = runtime, rootfsDir = rootfsDir, capabilityResolver = capabilityResolver)
+    /** Execução dos especialistas só existe quando o app fornece o executor (chamada de provider = custo). */
+    private val specialistExecutionEnabled = capabilityExecutors.containsKey(SpecialistCapabilities.EXECUTE_CAPABILITY)
     private val capabilities = CapabilityRegistry(
         listOf(
             capability("sandbox.health", setOf("sandbox.health")),
@@ -138,11 +157,19 @@ class BrainSandboxController(
             capability("chat.respond", emptySet()),
             capability("sandbox.clean", emptySet()),
             capability("workflow.run", setOf("workflow.run"), com.brain.capability.CapabilityCategory.WORKFLOW)
-        ) + capabilityProviders.flatMap { it.capabilities().toList() }
+        ).let { base ->
+            // Especialistas da Porta 3 (agent.*) entram no registry para descoberta/metadados
+            // (usados por CreationWorkflowExecutor). Um provider que já registrou o mesmo id prevalece.
+            val executable = if (specialistExecutionEnabled) listOf(SpecialistCapabilities.executionCapability()) else emptyList()
+            SpecialistCapabilities.mergeInto(base + executable + capabilityProviders.flatMap { it.capabilities().toList() })
+        }
     )
+    /** Especialistas são declarativos (sem executor): nunca entram no grant do ator. */
+    private val grantedCapabilities = SpecialistCapabilities.grantable(capabilities.all())
+        .flatMap { listOf(it.id) + it.providedCapabilities }
     private val policy = PolicyBroker(
-        allowedCapabilities = capabilities.all().flatMap { listOf(it.id) + it.providedCapabilities },
-        actorCapabilities = mapOf(actor to capabilities.all().flatMap { listOf(it.id) + it.providedCapabilities })
+        allowedCapabilities = grantedCapabilities,
+        actorCapabilities = mapOf(actor to grantedCapabilities)
     ).withCapabilityRegistry(capabilities)
     private val actionGateway = ActionGateway(
         registry = capabilities,
@@ -152,6 +179,13 @@ class BrainSandboxController(
         trace = executionTrace
     )
     private val dispatcher = Dispatcher(CapabilityDiscovery(capabilities), actionGateway)
+
+    /**
+     * Porta única de execução de workflows (ver GatewayWorkflowRunPort): mesma policy, mesmo ActionGateway
+     * e mesmo audit/trace deste controller. O scheduler e o WorkflowIntegrationService só perguntam a ela.
+     */
+    fun workflowRunPort(allowExternalAccountsWhenScheduled: Boolean = false): com.brain.workflow.WorkflowRunPort =
+        GatewayWorkflowRunPort(policy, actionGateway, actor, authorizedAccountIds, allowExternalAccountsWhenScheduled)
 
     /** Recalcula metadados dinâmicos, como disponibilidade de plugins instalados. */
     fun refreshCapabilities() {
@@ -182,7 +216,8 @@ class BrainSandboxController(
                 accountRouter = AccountRouter(),
                 authorizedAccountIds = authorizedAccountIds,
                 accountRegistry = accountRegistry,
-                memory = stepExperienceMemory
+                memory = stepExperienceMemory,
+                runtimeDoctor = runtimeDoctor
         )
     )
     private val planningGate = PlanningGate()
@@ -192,6 +227,18 @@ class BrainSandboxController(
     private val pendingCreateScopes = mutableMapOf<String, com.brain.secretary.DoorScope>()
     private val pendingCreatePlans = mutableMapOf<String, PlanoExecucao>()
     private val activeRoadmaps = mutableMapOf<String, Roadmap>()
+    /** Plano de criação de runs que aguardam aprovação: os prompts só são gerados depois dela. */
+    private val pendingCreationPlans = mutableMapOf<String, CreationWorkflowPlan>()
+    private val creationExecutionsByRun = mutableMapOf<String, List<TarefaExecution>>()
+    private val creationTaskResultsByRun = mutableMapOf<String, List<TaskRunResult>>()
+    private val creationWorkflowExecutor = CreationWorkflowExecutor(
+        capabilityRegistry = capabilities,
+        eventStore = events,
+        promptGenerator = promptGenerator,
+        // Sem biblioteca configurada, uma vazia equivale a "nenhum template para reuso" (gera do zero).
+        promptLibrary = promptLibrary ?: InMemoryPromptLibrary(emptyList(), File(rootfsDir, "creation-prompt-library.jsonl"))
+    )
+    private val creationTaskRunner = CreationTaskRunner(creationWorkflowExecutor)
     @Volatile private var taskState: TaskState? = null
 
     /** Executa o primeiro caso de uso real do Brain dentro do Sandbox preparado. */
@@ -221,7 +268,15 @@ class BrainSandboxController(
     fun resumePlan(plano: PlanoExecucao, runId: String, approvalId: String): ResultadoCiclo =
         executeWithEvents(pendingCreatePlans[runId] ?: plano, runId, createPhase = pendingCreateScopes[runId]?.phase?.name) {
             attemptPlan, _ -> bridge.resume(attemptPlan, runId = runId, actor = actor, approvalId = approvalId, doorScope = pendingCreateScopes[runId])
-        }.also { pendingCreateScopes.remove(runId); pendingCreatePlans.remove(runId) }
+        }.also { cycle ->
+            // Aprovação aceita => a fase APPROVED foi alcançada de fato; só então gera os prompts do roadmap.
+            val approvalRejected = cycle.passos.singleOrNull()?.let { it.passoId == "approval" && it.status == StatusPasso.NEGADO_PELA_POLICY } == true
+            pendingCreationPlans.remove(runId)?.takeUnless { approvalRejected }?.let { creation ->
+                generateCreationPrompts(runId, creation, CreatePhase.APPROVED)
+                runSpecialistTasks(runId, creation, pendingCreateScopes[runId], cycle)
+            }
+            pendingCreateScopes.remove(runId); pendingCreatePlans.remove(runId)
+        }
 
     fun approve(approvalId: String): Boolean = approvals.decide(approvalId, approved = true)?.status == com.brain.policy.ApprovalStatus.APPROVED
 
@@ -369,6 +424,7 @@ class BrainSandboxController(
         val plan = basePlan.copy(
             assumptions = basePlan.assumptions + treeAssumptions + if (promptHit != null) setOf("prompt-template:${promptHit.id}") else emptySet()
         )
+        var creationPlan: CreationWorkflowPlan? = null
         if (planningIntent.door == Door.CREATE && planningIntent.phase >= CreatePhase.APPROVED) {
             val creation = CreationWorkflowPlanner.build(planningIntent, reasoning.requirements.map { it.text })
             activeRoadmaps[runId] = creation.roadmap
@@ -376,6 +432,11 @@ class BrainSandboxController(
             creation.assignments.forEach { assignment ->
                 emit(runId, assignment.taskId, "TaskAssigned", mapOf("specialist" to assignment.specialistId, "capability" to assignment.capability))
                 emit(runId, assignment.taskId, "SpecialistSelected", mapOf("specialist" to assignment.specialistId))
+            }
+            creationPlan = creation
+            // planningIntent é promovido a APPROVED só para planejar; a aprovação real é a da intent designada.
+            if (designatedIntent.phase >= CreatePhase.APPROVED) {
+                generateCreationPrompts(runId, creation, designatedIntent.phase)
             }
         }
         if (designatedIntent.door == Door.CREATE && designatedIntent.phase < CreatePhase.APPROVED) {
@@ -392,6 +453,7 @@ class BrainSandboxController(
                 )
                 pendingCreateScopes[runId] = planningIntent!!.scope
                 pendingCreatePlans[runId] = plan
+                creationPlan?.let { pendingCreationPlans[runId] = it }
                 emit(runId, "secretary", "CreateApprovalRequested", mapOf("approvalId" to approval.request.id, "phase" to designatedIntent.phase.name, "nextPhase" to CreatePhase.APPROVED.name))
                 return ResultadoCiclo(
                     plan.objetivo,
@@ -456,6 +518,9 @@ class BrainSandboxController(
                 Provenance("web-research:${source.source}", confidence = source.confidence),
                 source.validationStatus.name == "VERIFIED"
             )
+        }
+        if (designatedIntent.door == Door.CREATE && designatedIntent.phase >= CreatePhase.APPROVED) {
+            creationPlan?.let { runSpecialistTasks(runId, it, planningIntent.scope, finalCycle) }
         }
         return finalCycle
     }
@@ -570,6 +635,85 @@ class BrainSandboxController(
                 ResultadoPasso(step.id, StatusPasso.REPROVADO, motivo = reason, capacidade = step.capacidade)
             }
         )
+
+    /** Prompts por tarefa gerados pelo CreationWorkflowExecutor para o run (vazio se ainda não aprovado). */
+    fun creationExecutions(runId: String): List<TarefaExecution> = creationExecutionsByRun[runId].orEmpty()
+
+    /**
+     * Executor da Porta 3: valida transições, resolve o especialista no CapabilityRegistry e gera o
+     * prompt de cada tarefa. Best-effort — falha aqui vira evento e não bloqueia o ciclo de execução.
+     */
+    private fun generateCreationPrompts(runId: String, plan: CreationWorkflowPlan, phase: CreatePhase) {
+        try {
+            val executions = runBlockingPlanner { creationWorkflowExecutor.executePlan(plan, phase, runId) }
+            creationExecutionsByRun[runId] = executions
+            emit(runId, "roadmap", "CreationPromptsGenerated", mapOf("generated" to executions.size.toString(), "tasks" to plan.tasks.size.toString(), "phase" to phase.name))
+        } catch (e: Exception) {
+            emit(runId, "roadmap", "CreationPromptsFailed", mapOf("error" to (e.message ?: e::class.simpleName.orEmpty())))
+        }
+    }
+
+    /** Resultado por tarefa da execução dos especialistas (vazio se não executou para o run). */
+    fun creationTaskResults(runId: String): List<TaskRunResult> = creationTaskResultsByRun[runId].orEmpty()
+
+    /**
+     * Executa as tarefas do roadmap pelos especialistas DEPOIS do ciclo de construção, e só se ele foi
+     * aprovado (não há o que documentar/revisar de um build que falhou). A tarefa do `agent.code` é a
+     * própria construção — usa o resultado do ciclo em vez de chamar o provider de novo. As demais
+     * passam pelo mesmo bridge/PolicyBroker/ActionGateway (capability `specialist.execute`).
+     * Best-effort: nunca altera o [cycle] devolvido ao usuário.
+     */
+    private fun runSpecialistTasks(runId: String, plan: CreationWorkflowPlan, scope: com.brain.secretary.DoorScope?, cycle: ResultadoCiclo) {
+        if (!specialistExecutionEnabled) {
+            emit(runId, "roadmap", "SpecialistExecutionSkipped", mapOf("reason" to "executor-not-configured"))
+            return
+        }
+        val prompts = creationExecutionsByRun[runId].orEmpty()
+        if (!cycle.aprovado || prompts.isEmpty()) {
+            emit(runId, "roadmap", "SpecialistExecutionSkipped", mapOf("reason" to if (!cycle.aprovado) "build-not-approved" else "no-prompts"))
+            return
+        }
+        val dispatcher = SpecialistDispatcher { task ->
+            if (task.specialistId == IMPLEMENTATION_SPECIALIST) {
+                SpecialistOutcome(
+                    success = cycle.aprovado,
+                    output = "Construção aprovada pelo ciclo (${cycle.passos.size} passo(s)). " + cycle.passos.mapNotNull { it.resultado }.joinToString(" | "),
+                    evidence = cycle.passos.flatMap { it.executionEvidence }
+                )
+            } else {
+                val step = PassoPlano(
+                    id = "specialist-${task.tarefa.id}",
+                    capacidade = SpecialistCapabilities.EXECUTE_CAPABILITY,
+                    criterioSucesso = "entrega do especialista ${task.specialistId} não vazia",
+                    parametros = listOf(task.prompt, task.specialistId, task.tarefa.id)
+                )
+                val result = bridge.authorizeAndExecute(
+                    PlanoExecucao("especialista ${task.specialistId}: ${task.tarefa.id}", listOf(step)),
+                    "$runId:specialist:${task.tarefa.id}:${task.attempt}",
+                    actor,
+                    doorScope = scope
+                )
+                val passo = result.passos.singleOrNull()
+                SpecialistOutcome(
+                    success = passo?.status == StatusPasso.APROVADO,
+                    output = passo?.resultado,
+                    error = passo?.motivo ?: if (passo == null) "ciclo não devolveu o passo do especialista" else null,
+                    evidence = passo?.executionEvidence.orEmpty()
+                )
+            }
+        }
+        try {
+            val results = runBlockingPlanner { creationTaskRunner.run(plan, prompts, runId, dispatcher) }
+            creationTaskResultsByRun[runId] = results
+            emit(runId, "roadmap", "SpecialistTasksCompleted", mapOf(
+                "approved" to results.count { it.approved }.toString(),
+                "failed" to results.count { !it.approved && !it.blocked }.toString(),
+                "blocked" to results.count { it.blocked }.toString()
+            ))
+        } catch (e: Exception) {
+            emit(runId, "roadmap", "SpecialistTasksFailed", mapOf("error" to (e.message ?: e::class.simpleName.orEmpty())))
+        }
+    }
 
     fun localEvents(runId: String? = null) = events.replay(runId)
     fun localEventsHealthy(): Boolean = events.verifyIntegrity()
@@ -799,15 +943,23 @@ class BrainSandboxController(
     )
 }
 
+private const val IMPLEMENTATION_SPECIALIST = "agent.code"
+
+/**
+ * Executa uma suspend fun de forma síncrona. Se ela completar sem suspender (caso das bibliotecas em
+ * memória) retorna direto; se suspender de verdade e for retomada por outra thread, espera o resultado
+ * em vez de falhar. Aceita T anulável (não usa null como "sem valor").
+ */
 private fun <T> runBlockingPlanner(block: suspend () -> T): T {
-    var value: T? = null
-    var failure: Throwable? = null
+    val latch = java.util.concurrent.CountDownLatch(1)
+    var outcome: Result<T>? = null
     block.startCoroutine(object : Continuation<T> {
         override val context = EmptyCoroutineContext
         override fun resumeWith(result: Result<T>) {
-            result.onSuccess { value = it }.onFailure { failure = it }
+            outcome = result
+            latch.countDown()
         }
     })
-    failure?.let { throw it }
-    return requireNotNull(value)
+    latch.await()
+    return outcome!!.getOrThrow()
 }

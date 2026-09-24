@@ -6,9 +6,12 @@
 //
 // Quem consome este módulo é :android-module, que implementa a ponte real
 // entre o contrato Job/JobResult (com.brain.execution.SandboxContract) e o
-// SandboxRuntime real (proot). Essa ponte é a Etapa 2/3 do plano de
-// integração (docs/PLANO_INTEGRACAO_BRAIN_SANDBOX.md) e ainda não foi
-// escrita nesta rodada — só a fundação de compilação.
+// SandboxRuntime real (proot). Essa ponte já está escrita (BrainSandboxController,
+// ActionGateway, CicloExecucaoPlano etc. — ver docs/ARQUITETURA_ATUAL.md, §4);
+// este comentário é histórico da fundação inicial de compilação do módulo.
+// O plano de integração original (docs/PLANO_INTEGRACAO_BRAIN_SANDBOX.md) foi
+// consolidado em docs/ARQUITETURA_ATUAL.md e docs/LEGADO_E_DECISOES.md e não
+// existe mais como arquivo separado.
 plugins {
     id("org.jetbrains.kotlin.jvm")
 }
@@ -23,7 +26,7 @@ kotlin {
 }
 
 dependencies {
-    // org.json é o que ApiCatalogLoader/PromptLibraryLoader já usavam no
+    // org.json é o que o ApiCatalogLoader (e outros loaders) já usavam no
     // BraimCode original. No Android ele vem embutido no SDK; aqui, como
     // módulo JVM puro, precisa ser declarado explicitamente.
     implementation("org.json:json:20240303")

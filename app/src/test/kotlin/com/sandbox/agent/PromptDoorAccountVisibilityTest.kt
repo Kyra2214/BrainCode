@@ -40,7 +40,7 @@ import org.junit.Test
 
 /**
  * Regressão do bug corrigido em 23/09/2026 (ver
- * docs/auditoria/PLANO_CORRECAO_AUDITORIA_ESCALONAMENTO.md, item 1): antes, `authorizedAccountIds`
+ * docs/LEGADO_E_DECISOES.md, "Escalonamento da Porta 2 e DoorPolicy", item 1): antes, `authorizedAccountIds`
  * chegava sempre vazio ao `PromptGenerationExecutor` para um PRIMEIRO pedido na Porta 2 ("crie um
  * prompt de X"), sem nenhuma palavra de melhoria — porque `DoorScope.externalAccountsAllowed` só
  * era verdadeiro quando `DeterministicSecretary.classify()` já via um gatilho de melhoria no texto

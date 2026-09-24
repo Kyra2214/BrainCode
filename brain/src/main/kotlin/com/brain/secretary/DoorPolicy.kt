@@ -9,12 +9,15 @@ object DoorPolicy {
         if (Restriction.NO_EXECUTE in scope.restrictions && isExecution(capability)) return false
         if (Restriction.NO_EXTERNAL_APIS in scope.restrictions && isExternal(capability)) return false
         if (isExternal(capability) && !scope.externalAccountsAllowed) return false
+        // Chama provider externo em nome de um especialista: respeita NO_EXTERNAL_APIS e contas externas.
+        if (capability == SPECIALIST_EXECUTE && (Restriction.NO_EXTERNAL_APIS in scope.restrictions || !scope.externalAccountsAllowed)) return false
 
         return when (scope.door) {
             Door.CHAT -> capability in CHAT_CAPABILITIES
             Door.PROMPT -> capability in PROMPT_CAPABILITIES
             Door.CREATE -> when {
                 isWriteOrExecute(capability) -> scope.phase >= CreatePhase.APPROVED
+                capability == SPECIALIST_EXECUTE -> scope.phase >= CreatePhase.APPROVED
                 else -> capability in CREATE_BASE_CAPABILITIES
             }
         }
@@ -26,7 +29,7 @@ object DoorPolicy {
      * escala quando o score local é insuficiente ou há gatilho explícito de melhoria). Chat nunca
      * libera; Prompt e Criação liberam desde o início, no mesmo padrão.
      *
-     * Corrigido em 23/09/2026 (ver docs/auditoria/PLANO_CORRECAO_AUDITORIA_ESCALONAMENTO.md, item 1):
+     * Corrigido em 23/09/2026 (ver docs/LEGADO_E_DECISOES.md, "Escalonamento da Porta 2 e DoorPolicy", item 1):
      * antes, a Porta 2 só liberava contas quando o texto original já continha um gatilho de
      * melhoria ("melhore", "refaça"), calculado uma única vez em `DeterministicSecretary.classify()`
      * — antes de qualquer prompt existir. Isso tornava o escalonamento por qualidade insuficiente
@@ -45,7 +48,7 @@ object DoorPolicy {
     /**
      * Reservado para uso futuro: hoje nenhuma capability registrada no catálogo/planner usa os
      * prefixos "provider."/"account."/"external." (verificado em toda a base em 23/09/2026 — ver
-     * docs/auditoria/PLANO_CORRECAO_AUDITORIA_ESCALONAMENTO.md, seção 3). O gating real de chamada de API/conta hoje
+     * docs/LEGADO_E_DECISOES.md, "Escalonamento da Porta 2 e DoorPolicy", seção 3). O gating real de chamada de API/conta hoje
      * é feito só por [DoorScope.externalAccountsAllowed] + o filtro de authorizedAccountIds no
      * AccountPool (BrainApiGateway.complete). Se no futuro uma UI/fluxo passar a autorizar acesso a
      * provider/conta via capability nomeada (em vez de só o booleano), esta função passa a valer —
@@ -55,6 +58,8 @@ object DoorPolicy {
     private fun isProduction(capability: String): Boolean = capability == "workspace.write" || capability.startsWith("workspace.") || capability == "prompt.library.write"
     private fun isExecution(capability: String): Boolean = capability == "sandbox.code" || capability.startsWith("sandbox.build") || capability.startsWith("sandbox.test") || capability == "workflow.run"
     private fun isWriteOrExecute(capability: String): Boolean = isProduction(capability) || isExecution(capability)
+
+    private const val SPECIALIST_EXECUTE = com.brain.capability.SpecialistCapabilities.EXECUTE_CAPABILITY
 
     private val CHAT_CAPABILITIES = setOf("brain.analyze", "chat.respond", "sandbox.diagnose", "network.research", "sandbox.info", "sandbox.health")
     private val PROMPT_CAPABILITIES = setOf("brain.analyze", "chat.respond", "sandbox.diagnose", "network.research", "prompt.library.write", "prompt.library.generate", "sandbox.info")

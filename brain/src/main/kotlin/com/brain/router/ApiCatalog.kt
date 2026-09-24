@@ -58,8 +58,7 @@ enum class TipoErro {
          * Classificação heurística por texto de erro. Fonte única para qualquer
          * coordenador/dispatcher que só tem uma String de erro (não um código
          * estruturado) e precisa decidir retry, fallback de conta/provider ou
-         * saúde de conta. Antes duplicada em BrainExecutionCoordinator; agora
-         * também usada por Dispatcher e CicloExecucaoPlano — ver
+         * saúde de conta. Usada por Dispatcher e CicloExecucaoPlano — ver
          * docs/LEGADO_E_DECISOES.md, Fase 2.
          */
         fun classify(error: String?): TipoErro {

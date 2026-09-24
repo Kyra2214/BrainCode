@@ -43,7 +43,7 @@ class SandboxPlatform(
     ).withCapabilityRegistry(gatewayCapabilities)
     private val gatewayExecutionLogs = GatewayBackedSandboxExecutor.logs()
     /**
-     * Fase 12 (ver PLANO_CONEXAO_FASE_12.md, seção 1, passo 3): este ActionGateway fica
+     * Fase 12 (ver docs/LEGADO_E_DECISOES.md, "Fase 12 — conexão de trace e gates", seção 1, passo 3): este ActionGateway fica
      * deliberadamente sem `trace` (ExecutionTrace/TraceSink). SandboxPlatform não recebe nem
      * constrói um EventStore — é uma fachada local das fases do sandbox (git, toolchain,
      * plugins, diagnostics), sem sessão/runId de conversação para correlacionar. Criar um
