@@ -68,18 +68,3 @@ object ResearchAnswerSynthesizer {
         return uiPattern.containsMatchIn(normalized) || navigationLike
     }
 }
-            .filter { it.isNotBlank() }
-            .map { it.take(360) }
-            .distinct()
-            .take(3)
-            .toList()
-        return if (useful.isEmpty()) {
-            "Encontrei fontes, mas elas não continham informação suficiente para responder com segurança."
-        } else {
-            val sourceNames = sources.mapNotNull { runCatching { java.net.URI(it.url).host }.getOrNull() }.distinct()
-            "A resposta encontrada indica os seguintes pontos principais:\n" +
-                useful.joinToString("\n") { "• $it" } +
-                if (sourceNames.isEmpty()) "" else "\n\nFontes consultadas: ${sourceNames.joinToString(", ")}."
-        }
-    }
-}
