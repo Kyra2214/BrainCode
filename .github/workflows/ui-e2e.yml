@@ -38,7 +38,16 @@ jobs:
         run: |
           sudo chmod 666 /dev/kvm
 
+      # A jornada Ed25519CompatibilityInstrumentedTest usa org.junit.Assume
+      # para virar "skip" (não "fail") quando o provider JCA Ed25519 não
+      # existe nesta imagem de emulador — isso é opcional e não é uma falha
+      # do app. O código de saída real da task de teste nem sempre reflete
+      # essa distinção com confiabilidade quando há skips misturados com
+      # passes, então o pass/fail definitivo da jornada é decidido no passo
+      # "Generate human-readable E2E report" a seguir, lendo o XML.
       - name: Run Android UI E2E on emulator
+        id: ui-e2e-instrumentation
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34

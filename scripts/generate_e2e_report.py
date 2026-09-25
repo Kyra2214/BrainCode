@@ -1,73 +1,62 @@
 #!/usr/bin/env python3
-import glob
 import html
 import os
-import xml.etree.ElementTree as ET
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _instrumented_test_report import summarize  # noqa: E402
 
 patterns = [
     "app/build/outputs/androidTest-results/connected/**/*.xml",
     "**/build/outputs/androidTest-results/connected/**/*.xml",
 ]
-files = sorted(set(path for pattern in patterns for path in glob.glob(pattern, recursive=True)))
+summary = summarize(patterns)
 
-tests = failures = errors = skipped = 0
-rows = []
-
-for path in files:
-    try:
-        root = ET.parse(path).getroot()
-    except Exception:
-        continue
-    for case in root.iter("testcase"):
-        tests += 1
-        name = case.attrib.get("name", "unknown")
-        cls = case.attrib.get("classname", "")
-        status = "PASS"
-        if case.find("failure") is not None:
-            failures += 1
-            status = "FAIL"
-        elif case.find("error") is not None:
-            errors += 1
-            status = "ERROR"
-        elif case.find("skipped") is not None:
-            skipped += 1
-            status = "SKIPPED"
-        rows.append((status, cls, name, case.attrib.get("time", "")))
-
-passed = tests - failures - errors - skipped
-
-if not files or tests == 0:
+if not summary.files or not summary.ran_anything:
     status = "NOT_EXECUTED"
-elif failures == 0 and errors == 0 and skipped == 0:
-    status = "PASS"
-else:
+elif not summary.ok:
     status = "FAIL"
+else:
+    status = "PASS"
 
 lines = [
     "# BrainCode — Relatório E2E",
     "",
     f"**Resultado:** {status}",
     "",
-    f"- Testes: **{tests}**",
-    f"- Passaram: **{passed}**",
-    f"- Falharam: **{failures}**",
-    f"- Erros: **{errors}**",
-    f"- Ignorados: **{skipped}**",
+    f"- Testes: **{summary.tests}**",
+    f"- Passaram: **{summary.passed}**",
+    f"- Falharam: **{summary.failures}**",
+    f"- Erros: **{summary.errors}**",
+    f"- Ignorados (capacidade opcional indisponível): **{summary.skipped}**",
     "",
     "## Jornadas",
     "",
     "| Resultado | Classe | Teste | Tempo |",
     "|---|---|---|---|",
 ]
-for result, cls, name, duration in rows:
+for result, cls, name, duration in summary.rows:
     lines.append(f"| {result} | {html.escape(cls)} | {html.escape(name)} | {duration}s |")
 
-if not rows:
+if not summary.rows:
     lines += ["", "> Nenhum resultado XML de instrumentação foi encontrado."]
+
+if summary.skipped:
+    lines += [
+        "",
+        "> Testes ignorados representam capacidades de plataforma opcionais "
+        "ausentes na imagem do emulador (ex.: provider JCA Ed25519) e não "
+        "são tratados como falha da jornada do BrainCode.",
+    ]
 
 os.makedirs("e2e-report", exist_ok=True)
 open("e2e-report/BrainCode-E2E-Report.md", "w", encoding="utf-8").write("\n".join(lines) + "\n")
 print("\n".join(lines))
 
-if status == "FAIL":
+if status in ("FAIL", "NOT_EXECUTED"):
+    # NOT_EXECUTED also fails the build: the emulator step now runs with
+    # continue-on-error so a skipped-but-otherwise-healthy Ed25519 test
+    # doesn't block the pipeline, but that means a genuine infra failure
+    # (emulator never booted, no tests ran at all) must be caught here
+    # instead, or it would silently pass the job.
     raise SystemExit(1)

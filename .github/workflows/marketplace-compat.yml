@@ -34,6 +34,8 @@ jobs:
       - name: Make Gradle executable
         run: chmod +x ./gradlew
       - name: Run compatibility instrumentation
+        id: ed25519-instrumentation
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api-level }}
@@ -45,3 +47,25 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
           script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.sandbox.app.Ed25519CompatibilityInstrumentedTest --no-daemon --stacktrace
+
+      # O teste usa org.junit.Assume para virar "skip" (não "fail") quando o
+      # provider JCA Ed25519 não existe nesta imagem de emulador. O runner do
+      # Gradle/AGP nem sempre propaga essa distinção de forma confiável no
+      # código de saída da task quando ela é a única classe filtrada, então a
+      # decisão real de pass/fail é feita aqui, lendo o XML de instrumentação.
+      - name: Evaluate Ed25519 compatibility result
+        if: always()
+        env:
+          BRAINCODE_API_LEVEL: ${{ matrix.api-level }}
+        run: python3 scripts/check_ed25519_compat_result.py
+
+      - name: Upload Ed25519 instrumentation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BrainCode-marketplace-compat-api${{ matrix.api-level }}-${{ github.sha }}
+          path: |
+            **/build/outputs/androidTest-results/connected/**
+            **/build/reports/androidTests/**
+          if-no-files-found: ignore
+          retention-days: 14
