@@ -69,7 +69,7 @@ class DeterministicSecretaryGate {
     /** Promove um candidato interno a UserResponse somente após a avaliação do gate. */
     fun accept(candidate: ConversationCandidate, recoveryAvailable: Boolean = false): UserResponse? {
         val evaluation = evaluate(
-            ConversationResult(candidate.text, candidate.status, candidate.evidence, candidate.requestId, candidate.prompt),
+            ConversationResult(candidate.text, candidate.status, candidate.evidence, candidate.requestId, candidate.prompt, candidate.researchAttempted),
             recoveryAvailable
         )
         return if (evaluation.decision == SecretaryDecision.ACCEPT) {
