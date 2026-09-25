@@ -59,7 +59,9 @@ class DeterministicSecretaryGate {
                 it == "chat:context:read-only" ||
                 it == "chat:research-context-included"
         } && (!recoveryAvailable || result.researchAttempted)
-        val webResearchBacked = result.researchAttempted && result.evidence.any { it == "chat:websearch:evidence" }\n        if (result.prompt.isNotBlank() && !evidenceBackedException && !webResearchBacked && !isSemanticallyRelated(result.prompt, text))
+        val webResearchBacked = result.researchAttempted && result.evidence.any { it == "chat:websearch:evidence" }
+        val plausibleResearchAnswer = webResearchBacked && isPlausibleResearchAnswer(text)
+        if (result.prompt.isNotBlank() && !evidenceBackedException && !isSemanticallyRelated(result.prompt, text) && !plausibleResearchAnswer)
             return SecretaryEvaluation(SecretaryDecision.BLOCK, BlockReason.INCOMPLETE_RESPONSE)
         return SecretaryEvaluation(SecretaryDecision.ACCEPT)
     }
@@ -73,6 +75,14 @@ class DeterministicSecretaryGate {
         return if (evaluation.decision == SecretaryDecision.ACCEPT) {
             UserResponse(candidate.text.trim(), candidate.evidence, candidate.requestId, candidate.requestId)
         } else null
+    }
+
+    private fun isPlausibleResearchAnswer(response: String): Boolean {
+        val normalized = response.trim().lowercase()
+        if (normalized.length < 3) return false
+        if (normalized.matches(Regex("(?i)^(ok|certo|sim|não|nao|entendi|beleza|claro)[.!?]*$"))) return false
+        if (prohibitedFallbacks.any { normalized.contains(it) }) return false
+        return Regex("[\\p{L}\\p{N}]{3,}").containsMatchIn(normalized)
     }
 
     private fun isSemanticallyRelated(prompt: String, response: String): Boolean {
