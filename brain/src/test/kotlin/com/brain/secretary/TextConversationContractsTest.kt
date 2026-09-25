@@ -95,4 +95,35 @@ class TextConversationContractsTest {
             assertEquals(text, BlockReason.FALLBACK_RESPONSE, result.reason)
         }
     }
+    @Test
+    fun `pesquisa respaldada aceita resposta factual sem overlap lexical`() {
+        val result = gate.evaluate(
+            ConversationResult(
+                "Moscou.",
+                ConversationStatus.ANSWER_READY,
+                evidence = listOf("chat:websearch:evidence"),
+                prompt = "Qual é a capital da Rússia?",
+                researchAttempted = true
+            ),
+            recoveryAvailable = true
+        )
+        assertEquals(SecretaryDecision.ACCEPT, result.decision)
+    }
+
+    @Test
+    fun `pesquisa respaldada nao aceita resposta vazia de conteudo`() {
+        val result = gate.evaluate(
+            ConversationResult(
+                "ok",
+                ConversationStatus.ANSWER_READY,
+                evidence = listOf("chat:websearch:evidence"),
+                prompt = "Qual é a capital da Rússia?",
+                researchAttempted = true
+            ),
+            recoveryAvailable = true
+        )
+        assertEquals(SecretaryDecision.BLOCK, result.decision)
+        assertEquals(BlockReason.INCOMPLETE_RESPONSE, result.reason)
+    }
+
 }
