@@ -794,19 +794,11 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     conversationEngine = noInferenceEngine(getApplication()),
                     researchFallback = automaticConversationResearch.takeUnless { BuildConfig.E2E_FAKE_ROOTFS },
                     knowledgeCycle = conversationKnowledgeCycle,
-                    knowledgePromoter = com.brain.memory.ResearchKnowledgePromoter(
-                        conversationKnowledgeCycle,
-                        interpreter = com.brain.conversation.LlmConversationInterpreter(
-                            conversationGateway,
-                            accounts = chatDoorAccounts
-                        )
-                    ),
-                    structuredInterpreter = if (!BuildConfig.E2E_FAKE_ROOTFS && chatDoorAccounts.isNotEmpty()) {
-                        com.brain.conversation.LlmConversationInterpreter(conversationGateway, accounts = chatDoorAccounts)
-                    } else null,
-                    outputReviewer = if (!BuildConfig.E2E_FAKE_ROOTFS && chatDoorAccounts.isNotEmpty()) {
-                        com.brain.conversation.LlmOutputReviewer(conversationGateway, accounts = chatDoorAccounts)
-                    } else null
+                    // Porta 1 permanece sem LLM: o promoter usa o interpretador determinístico
+                    // padrão e o Secretário valida a saída sem reviewer externo.
+                    knowledgePromoter = com.brain.memory.ResearchKnowledgePromoter(),
+                    structuredInterpreter = null,
+                    outputReviewer = null
                 )
                 brainController = BrainSandboxController(
                     prepared,
