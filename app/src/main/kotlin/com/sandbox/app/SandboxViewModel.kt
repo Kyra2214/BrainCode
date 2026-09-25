@@ -777,16 +777,6 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     )
                 )
                 val conversationKnowledgeCycle = com.brain.memory.KnowledgeLearningCycle()
-                val conversationGateway = ConversationBrainGatewayAdapter(brainApiGateway)
-                // Item 3 do PLANO_ESCALONAMENTO: Porta 1 (Chat) NUNCA pode ter conta externa liberada
-                // (DoorPolicy.externalAccountsAllowed(Door.CHAT) é sempre false). Antes, estes três
-                // pontos recebiam apiProviders.map{...} diretamente, por fora do PolicyBroker/DoorScope —
-                // ou seja, o Chat conseguia de fato chamar a API paga. chatDoorAccounts força a mesma
-                // regra que o resto do app usa (DoorScope.visibleAccounts), então some com Door.CHAT.
-                val chatDoorAccounts = com.brain.secretary.DoorScope(
-                    door = com.brain.secretary.Door.CHAT,
-                    phase = com.brain.secretary.CreatePhase.CHAT
-                ).visibleAccounts(apiProviders.map { "android:${it.id}" }.toSet())
                 val chatResponseExecutor = ChatResponseExecutor(
                     contextProvider = {
                         sessions.firstOrNull { it.id == activeSessionId }?.conversationContext ?: ConversationContext()
