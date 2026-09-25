@@ -68,4 +68,16 @@ class ResponseComposerTest {
         assertFalse(result.text.startsWith("Bem-vindo"))
     }
 
+
+    @Test
+    fun `resposta factual limita sintese a dois fatos`() {
+        val raw = "Macaé tem temperatura de 24°C. A probabilidade de chuva é de 70%. O vento sopra a 30 km/h. " +
+            "Consulte também nossas ofertas e assine a newsletter."
+        val result = ResponseComposer(clock).compose("como está o tempo em Macaé hoje?", research = raw)
+        assertTrue(result.text.contains("24°C"))
+        assertTrue(result.text.contains("70%"))
+        assertFalse(result.text.contains("30 km/h"))
+        assertTrue(result.text.length <= 700)
+    }
+
 }
