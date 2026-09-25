@@ -53,6 +53,68 @@ class WebResearchAgentTest {
     }
 
     @Test
+    fun `sem FetchProvider configurado o comportamento de busca pura nao muda`() {
+        // Garante que ligar o seam de fetch (enrichWithRealContent) não quebra o
+        // caso em que nenhum FetchProvider é fornecido — WebProviderSet(fetch =
+        // emptyList()) é o default usado por todo o resto desta suíte.
+        val agent = WebResearchAgent(WebProviderSet(search = listOf(SearchProvider {
+            Result.success(listOf(result("https://a.example/x"), result("https://b.example/x")))
+        })), clock, { "run-no-fetch" })
+        val output = agent.research(ResearchRequest("pesquise algo", sourceRequirements = SourceRequirements(minimumDistinctDomains = 2)))
+        assertEquals(SourceQuality.HIGH, output.sourceQuality)
+        assertEquals("Conteúdo verificável", output.sources.first().relevantContent)
+    }
+
+    @Test
+    fun `com FetchProvider o conteudo real da pagina substitui o snippet e ganha confidence real`() {
+        val semConfidence = ResearchResult(
+            query = "q", source = "test", title = "Fonte", url = "https://previsao.example/macae",
+            relevantContent = "snippet raso de SEO", retrievedAt = clock.instant(), confidence = 0.0
+        )
+        val agent = WebResearchAgent(
+            WebProviderSet(
+                search = listOf(SearchProvider { Result.success(listOf(semConfidence)) }),
+                fetch = listOf(FetchProvider { url, request ->
+                    Result.success(semConfidence.copy(relevantContent = "Macaé hoje: máxima de 29°C.", url = url))
+                })
+            ),
+            clock, { "run-fetch" }
+        )
+        val output = agent.research(ResearchRequest("qual a temperatura em Macaé"))
+        val fonte = output.sources.single()
+        assertTrue(fonte.relevantContent.contains("29°C"))
+        assertTrue("confidence não deveria mais ficar em 0.0 quando o conteúdo real bate com a pergunta", fonte.confidence > 0.0)
+    }
+
+    @Test
+    fun `FetchProvider que falha cai de volta para o snippet original sem apagar o resultado`() {
+        val semConfidence = ResearchResult(
+            query = "q", source = "test", title = "Fonte", url = "https://exemplo.example/x",
+            relevantContent = "snippet original", retrievedAt = clock.instant(), confidence = 0.0
+        )
+        val agent = WebResearchAgent(
+            WebProviderSet(
+                search = listOf(SearchProvider { Result.success(listOf(semConfidence)) }),
+                fetch = listOf(FetchProvider { _, _ -> Result.failure(IllegalStateException("timeout")) })
+            ),
+            clock, { "run-fetch-falho" }
+        )
+        val output = agent.research(ResearchRequest("pesquise algo"))
+        assertEquals("snippet original", output.sources.single().relevantContent)
+    }
+
+    @Test
+    fun `provider que ja define confidence explicito nao e sobrescrito pelo score automatico`() {
+        // result(url, confidence = .9) simula um provider que já calcula seu próprio
+        // sinal de confiança — o agente não deve substituí-lo pelo score de sobreposição.
+        val agent = WebResearchAgent(WebProviderSet(search = listOf(SearchProvider {
+            Result.success(listOf(result("https://a.example/x", confidence = .9)))
+        })), clock, { "run-confidence-explicito" })
+        val output = agent.research(ResearchRequest("pesquise algo totalmente diferente do conteudo"))
+        assertEquals(.9, output.sources.single().confidence, 0.0)
+    }
+
+    @Test
     fun `pergunta IPTV usa reescrita generica e sintese baseada na fonte`() {
         var receivedQuery = ""
         val agent = WebResearchAgent(WebProviderSet(search = listOf(SearchProvider { request ->

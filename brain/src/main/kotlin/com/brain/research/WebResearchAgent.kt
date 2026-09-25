@@ -35,6 +35,7 @@ class WebResearchAgent(
                 if (accepted.isNotEmpty()) {
                     providerId = "search-$index"
                     found += accepted.take(request.constraints.maxSources - found.size)
+                        .map { enrichWithRealContent(it, request) }
                 }
             }.onFailure { error ->
                 failures += FailedSource("search-$index", safeQuery, error.message ?: "falha de pesquisa")
@@ -83,6 +84,39 @@ class WebResearchAgent(
             average >= .5 -> SourceQuality.MEDIUM
             else -> SourceQuality.LOW
         }
+    }
+
+    /**
+     * Substitui o teaser da SERP pelo conteúdo real da página quando algum
+     * `FetchProvider` estiver configurado (ver `WebProviderSet.fetch`) — esse
+     * seam já existia no contrato, mas nenhum caller o usava, então
+     * `relevantContent` nunca era mais que o snippet do buscador.
+     *
+     * Só recalcula `confidence` quando o provider de busca não assumiu esse
+     * papel (deixou no default 0.0): um provider que já calcula seu próprio
+     * confidence continua no controle e não é sobrescrito aqui.
+     */
+    private fun enrichWithRealContent(result: ResearchResult, request: ResearchRequest): ResearchResult {
+        val paginaReal = fetchRealContent(result.url, request)
+        val conteudoFinal = paginaReal?.takeIf { it.isNotBlank() } ?: result.relevantContent
+        val truncado = conteudoFinal.take(request.constraints.maxContentCharsPerSource)
+        return if (result.confidence == 0.0) {
+            result.copy(relevantContent = truncado, confidence = ContentRelevanceScorer.score(truncado, request.query))
+        } else {
+            result.copy(relevantContent = truncado)
+        }
+    }
+
+    private fun fetchRealContent(url: String, request: ResearchRequest): String? {
+        for (fetcher in providers.fetch) {
+            val texto = runCatching { fetcher.fetch(url, request) }
+                .getOrElse { Result.failure(it) }
+                .getOrNull()
+                ?.relevantContent
+                ?.trim()
+            if (!texto.isNullOrBlank()) return texto
+        }
+        return null
     }
 
     private fun isAllowed(result: ResearchResult, constraints: ResearchConstraints): Boolean {

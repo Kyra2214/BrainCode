@@ -10,9 +10,14 @@ import com.brain.policy.ApprovalRequired
 import com.brain.policy.Decision
 import com.brain.policy.PolicyContext
 import com.brain.policy.PolicyDecision
+import com.brain.research.LegacySearchProviderAdapter
+import com.brain.research.ResearchRequest
 import com.brain.research.ResearchResult
+import com.brain.research.WebProviderSet
+import com.brain.research.WebResearchAgent
 import com.brain.research.WebResearchProvider
 import java.time.Instant
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -49,13 +54,57 @@ class WebResearchExecutorTest {
         val provider = WebResearchProvider { query, _ ->
             Result.success(listOf(ResearchResult(query, "exemplo.com", "Guia X", "https://exemplo.com/x", "conteúdo relevante", agora)))
         }
-        val executor = WebResearchExecutor(provider)
+        // Sem fetch provider aqui de propósito: este teste verifica o mapeamento de
+        // fonte/título/URL/evidência do executor, não a busca de rede real (ver o
+        // teste de enriquecimento abaixo para isso, com um FetchProvider fake).
+        val executor = WebResearchExecutor(
+            provider,
+            researchAgent = WebResearchAgent(WebProviderSet(search = listOf(LegacySearchProviderAdapter(provider))))
+        )
         val execution = executor.execute(request("como configurar X"), capability, decision)
         assertTrue(execution.success)
         assertTrue(execution.result.orEmpty().contains("exemplo.com"))
         assertTrue(execution.evidence.any { it.contains("url=https://exemplo.com/x") })
         assertTrue(execution.researchSources.single().title == "Guia X")
         assertTrue(execution.researchSources.single().url == "https://exemplo.com/x")
+    }
+
+    @Test fun `conteudo real da pagina substitui o snippet da SERP quando o fetch funciona`() {
+        val agora = Instant.now()
+        val provider = WebResearchProvider { query, _ ->
+            Result.success(listOf(ResearchResult(query, "previsaoagora.com.br", "Previsão Macaé", "https://previsaoagora.com.br/macae", "Guia de leitura: a previsão do tempo ganha sentido quando...", agora)))
+        }
+        val fetcher = com.brain.research.FetchProvider { url, req ->
+            Result.success(ResearchResult(req.query, "previsaoagora.com.br", "", url, "Macaé hoje: máxima de 29°C, mínima de 22°C, parcialmente nublado.", agora))
+        }
+        val executor = WebResearchExecutor(
+            provider,
+            researchAgent = WebResearchAgent(
+                WebProviderSet(search = listOf(LegacySearchProviderAdapter(provider)), fetch = listOf(fetcher))
+            )
+        )
+        val execution = executor.execute(request("qual a temperatura em Macaé"), capability, decision)
+        val fonte = execution.researchSources.single()
+        assertTrue("relevantContent deve vir da página real, não do teaser da SERP", fonte.relevantContent.contains("29°C"))
+        assertTrue(fonte.relevantContent.contains("Macaé"))
+        assertTrue("confidence deve refletir a sobreposição real com a pergunta", fonte.confidence > 0.0)
+    }
+
+    @Test fun `fetch indisponivel cai de volta pro snippet sem quebrar o passo`() {
+        val agora = Instant.now()
+        val provider = WebResearchProvider { query, _ ->
+            Result.success(listOf(ResearchResult(query, "exemplo.com", "Guia X", "https://exemplo.com/x", "conteúdo relevante do snippet", agora)))
+        }
+        val fetcherFalho = com.brain.research.FetchProvider { _, _ -> Result.failure(IllegalStateException("timeout")) }
+        val executor = WebResearchExecutor(
+            provider,
+            researchAgent = WebResearchAgent(
+                WebProviderSet(search = listOf(LegacySearchProviderAdapter(provider)), fetch = listOf(fetcherFalho))
+            )
+        )
+        val execution = executor.execute(request("como configurar X"), capability, decision)
+        assertTrue(execution.success)
+        assertEquals("conteúdo relevante do snippet", execution.researchSources.single().relevantContent)
     }
 
     @Test fun `zero resultados nao vira erro duro`() {

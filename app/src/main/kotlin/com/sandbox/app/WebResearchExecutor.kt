@@ -25,7 +25,12 @@ class WebResearchExecutor(
     private val provider: WebResearchProvider,
     private val maxResultados: Int = 3,
     private val researchAgent: WebResearchAgent = WebResearchAgent(
-        WebProviderSet(search = listOf(LegacySearchProviderAdapter(provider)))
+        WebProviderSet(
+            search = listOf(LegacySearchProviderAdapter(provider)),
+            // Sem isto, relevantContent nunca é mais que o snippet da SERP —
+            // ver HttpPageFetchProvider para o porquê.
+            fetch = listOf(HttpPageFetchProvider())
+        )
     )
 ) : ActionExecutor {
     override fun execute(request: ActionRequest, capability: CapabilityDefinition, decision: PolicyDecision): ActionExecution {

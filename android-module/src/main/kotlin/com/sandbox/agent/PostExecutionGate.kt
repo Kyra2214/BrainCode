@@ -312,6 +312,12 @@ class PostExecutionGate(
         }.distinct()
         val checks = plan.passos.map { step ->
             val result = cycle.passos.firstOrNull { it.passoId == step.id }
+            // ID de evidência do próprio passo — antes isto caía sempre em
+            // evidenceIds.firstOrNull(), então o check de todo passo (inclusive
+            // responder) apontava para a evidência do primeiro passo do plano
+            // (tipicamente pesquisar), o que não causava o bug de conteúdo mas
+            // impedia auditar qual check validou o quê.
+            val ownEvidenceId = "${cycle.runId}:chat-step:${step.id}"
             val evidence = result?.executionEvidence.orEmpty()
             val response = result?.userResponse
             val researchStep = step.capacidade == "network.research"
@@ -319,9 +325,19 @@ class PostExecutionGate(
             val evidenceComplete = "chat:secretary:accept" in evidence &&
                 evidence.any { it.startsWith("chat:request:") } &&
                 (!recoveryRequested || "chat:websearch:executed" in evidence)
+            // web-research:quality já era emitido por WebResearchExecutor e nunca era
+            // consultado aqui: um passo com texto não-vazio passava mesmo quando o
+            // conteúdo era estruturalmente incapaz de responder à pergunta (ex.:
+            // snippet de SEO em vez do dado pedido). `null` (nenhuma pesquisa online
+            // rodou, ex. rede indisponível) continua aprovando — é degradação
+            // operacional esperada, documentada em WebResearchExecutor, não um erro.
+            val qualidadePesquisa = evidence.firstOrNull { it.startsWith("web-research:quality=") }
+                ?.removePrefix("web-research:quality=")
+            val qualidadeUtilizavel = qualidadePesquisa == null || qualidadePesquisa !in setOf("REJECTED", "LOW")
             val stepPassed = if (researchStep) {
                 result?.status == StatusPasso.APROVADO &&
-                    (result.resultado?.isNotBlank() == true || evidence.isNotEmpty() || result.evidencias.isNotEmpty())
+                    (result.resultado?.isNotBlank() == true || evidence.isNotEmpty() || result.evidencias.isNotEmpty()) &&
+                    qualidadeUtilizavel
             } else {
                 result?.status == StatusPasso.APROVADO && response?.text?.isNotBlank() == true && evidenceComplete
             }
@@ -330,8 +346,11 @@ class PostExecutionGate(
                 passed = stepPassed,
                 detail = if (stepPassed) {
                     if (researchStep) "pesquisa aprovada com evidência própria" else "UserResponse aceita e correlacionada"
-                } else if (researchStep) "pesquisa/evidência ausente" else "UserResponse/evidência Secretary ausente",
-                evidenceId = evidenceIds.firstOrNull()
+                } else if (researchStep) {
+                    if (!qualidadeUtilizavel) "pesquisa com qualidade insuficiente ($qualidadePesquisa) para responder com segurança"
+                    else "pesquisa/evidência ausente"
+                } else "UserResponse/evidência Secretary ausente",
+                evidenceId = ownEvidenceId
             )
         }
         val verification = VerificationResult(
