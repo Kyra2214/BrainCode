@@ -37,7 +37,7 @@ class PublicDataCapabilityProvider : CapabilityProvider {
     )
 }
 
-private abstract class DeterministicApiExecutor(
+abstract class DeterministicApiExecutor(
     protected val http: ApiHttpClient,
     private val serviceName: String
 ) : ActionExecutor {

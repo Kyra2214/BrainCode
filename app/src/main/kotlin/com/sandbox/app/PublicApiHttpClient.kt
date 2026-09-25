@@ -8,8 +8,10 @@ import java.net.URL
 data class ApiHttpResponse(val statusCode: Int, val body: String)
 
 fun interface ApiHttpClient {
-    fun get(url: String, headers: Map<String, String> = emptyMap()): ApiHttpResponse
+    fun get(url: String, headers: Map<String, String>): ApiHttpResponse
 }
+
+fun ApiHttpClient.get(url: String): ApiHttpResponse = get(url, emptyMap())
 
 class UrlConnectionApiHttpClient(
     private val timeoutMs: Int = 10_000,
