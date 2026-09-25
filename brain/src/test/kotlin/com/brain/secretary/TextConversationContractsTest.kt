@@ -126,4 +126,20 @@ class TextConversationContractsTest {
         assertEquals(BlockReason.INCOMPLETE_RESPONSE, result.reason)
     }
 
+
+    @Test
+    fun `promocao preserva pesquisa para resposta factual sem overlap lexical`() {
+        val candidate = ConversationCandidate(
+            requestId = "russia-1",
+            prompt = "Qual é a capital da Rússia?",
+            status = ConversationStatus.ANSWER_READY,
+            source = "web-research",
+            evidence = listOf("chat:websearch:evidence"),
+            text = "Moscou.",
+            researchAttempted = true
+        )
+        val response = gate.accept(candidate, recoveryAvailable = true)
+        assertEquals("Moscou.", response?.text)
+    }
+
 }
