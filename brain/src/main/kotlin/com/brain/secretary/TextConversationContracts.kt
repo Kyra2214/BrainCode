@@ -77,6 +77,17 @@ class DeterministicSecretaryGate {
 
     private fun isSemanticallyRelated(prompt: String, response: String): Boolean {
         if (Regex("(?i)\\b(oi|olá|ola|bom dia|boa tarde|boa noite)\\b").containsMatchIn(prompt)) return true
+
+        // Respostas aritméticas determinísticas não precisam compartilhar tokens com a
+        // expressão de entrada: "35 × 2" -> "70" é semanticamente correto mesmo sem
+        // qualquer sobreposição lexical. O cálculo já foi executado pelo caminho local;
+        // este gate só precisa reconhecer o contrato de saída numérica.
+        val arithmeticPrompt = Regex(
+            "(?i)^\\s*(?:(?:calcule|calcular|quanto\\s+(?:é|e)|qual\\s+o\\s+resultado\\s+de)\\s+)?[0-9\\s.,()+\\-*/×÷xX%]+(?:\\s+de\\s+[0-9\\s.,()+\\-*/×÷xX%]+)?[?!.]*\\s*$"
+        ).matches(prompt)
+        val numericResponse = Regex("^\\s*-?[0-9]+(?:[.,][0-9]+)?%?\\s*$").matches(response)
+        if (arithmeticPrompt && numericResponse) return true
+
         val stop = setOf("como", "funciona", "sobre", "qual", "quais", "explique", "fale", "o", "que", "é", "e", "a", "de", "do", "da", "um", "uma")
         val questionTerms = tokens(prompt).filter { it !in stop }
         if (questionTerms.isEmpty()) return true
