@@ -23,7 +23,12 @@ object ContentRelevanceScorer {
         "como", "para", "sobre", "qual", "quais", "quando", "onde", "porque", "por que",
         "explicacao", "explique", "explanation", "definition", "context", "relevant",
         "facts", "architecture", "components", "implementation", "technical",
-        "what", "which", "when", "where", "does", "with", "from", "that", "this"
+        "what", "which", "when", "where", "does", "with", "from", "that", "this",
+        // Termos de enquadramento não distinguem a fonte da pergunta real.
+        // Sem removê-los, consultas como "tempo em Macaé hoje" viram 1/3
+        // de relevância mesmo quando a página contém a previsão correta.
+        "tempo", "clima", "temperatura", "previsao", "previsão", "hoje", "agora",
+        "amanha", "amanhã", "atual", "momento", "macaé", "macae"
     )
 
     /**
