@@ -12,7 +12,9 @@ data class ConversationCandidate(
     val topic: String? = null,
     val source: String,
     val evidence: List<String> = emptyList(),
-    val text: String
+    val text: String,
+    /** Preserva a prova de que o WebResearchAgent foi realmente executado até a promoção final. */
+    val researchAttempted: Boolean = false
 ) {
     init {
         require(requestId.isNotBlank()) { "requestId é obrigatório" }
