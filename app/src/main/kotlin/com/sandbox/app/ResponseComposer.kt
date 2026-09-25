@@ -103,8 +103,8 @@ class ResponseComposer(
             Regex("(?i)\\b(tempo|clima|temperatura|previsão|previsao|cotação|cotacao|preço|preco|data|horário|horario)\\b").containsMatchIn(prompt)
         val concrete = related.filter(::hasConcreteFact)
         val selected = when {
-            factual && concrete.isNotEmpty() -> concrete.take(4)
-            related.isNotEmpty() -> related.take(4)
+            factual && concrete.isNotEmpty() -> concrete.take(2)
+            related.isNotEmpty() -> related.take(if (factual) 2 else 4)
             concrete.isNotEmpty() -> concrete.take(2)
             // Nunca use a primeira sentença como fallback: páginas podem começar
             // com menus, contexto editorial ou conteúdo fora do tema. Sem evidência
@@ -113,7 +113,7 @@ class ResponseComposer(
             else -> emptyList()
         }
         return if (selected.isEmpty()) "Não encontrei informação suficientemente relacionada ao tema para responder com segurança."
-        else selected.joinToString(" ").take(1600)
+        else selected.joinToString(" ").take(if (factual) 700 else 1600)
     }
 
     private fun isBoilerplate(sentence: String): Boolean {
