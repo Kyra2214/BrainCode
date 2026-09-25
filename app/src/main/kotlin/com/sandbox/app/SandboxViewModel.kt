@@ -82,9 +82,7 @@ data class ChatMessage(
     val promptActionId: String? = null,
     val contentType: GeneratedContentType = GeneratedContentType.TEXT,
     val researchSources: List<ResearchSourceUi> = emptyList(),
-    val promptReasoning: PromptReasoningUi? = null,
-    val validationWarning: String? = null,
-    val validationPassed: Boolean? = null
+    val promptReasoning: PromptReasoningUi? = null
 )
 
 enum class SessionStatus { IDLE, RUNNING, AWAITING_APPROVAL, DONE, FAILED, BLOCKED }
@@ -183,6 +181,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     var chatRunning by mutableStateOf(false); private set
     var brainUiStage by mutableStateOf(BrainUiStage.IDLE); private set
     private var chatJob: Job? = null
+    /** Diagnóstico interno do último ciclo; nunca é persistido/renderizado na mensagem humana. */
+    private var lastChatValidationPassed: Boolean = false
 
     private val apiKeyStore = ApiKeyStore(application)
     val apiProviders: List<ApiProvider> = runCatching { ApiKeyCatalogLoader.load(application) }.getOrElse { emptyList() }
@@ -322,7 +322,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         activeThreadEvents.forEach { event ->
             when (event) {
                 is ThreadEvent.User -> chatMessages.add(ChatMessage(ChatRole.USER, event.text))
-                is ThreadEvent.Agent -> chatMessages.add(ChatMessage(ChatRole.ASSISTANT, event.text, contentType = event.contentType, validationWarning = event.validationWarning, validationPassed = event.validationPassed))
+                is ThreadEvent.Agent -> chatMessages.add(ChatMessage(ChatRole.ASSISTANT, event.text, contentType = event.contentType))
                 is ThreadEvent.System -> chatMessages.add(ChatMessage(ChatRole.ERROR, event.text))
                 else -> Unit
             }
@@ -427,7 +427,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
 
     private fun eventToJson(event: ThreadEvent): JSONObject = when (event) {
         is ThreadEvent.User -> JSONObject().put("type", "user").put("text", event.text)
-        is ThreadEvent.Agent -> JSONObject().put("type", "agent").put("text", event.text).put("validationWarning", event.validationWarning ?: JSONObject.NULL).put("validationPassed", event.validationPassed ?: JSONObject.NULL).put("promptReasoning", event.promptReasoning?.toJson() ?: JSONObject.NULL)
+        is ThreadEvent.Agent -> JSONObject().put("type", "agent").put("text", event.text).put("promptReasoning", event.promptReasoning?.toJson() ?: JSONObject.NULL)
         is ThreadEvent.System -> JSONObject().put("type", "system").put("text", event.text)
         is ThreadEvent.Report -> JSONObject().put("type", "report").put("title", event.title).put("body", event.body)
         is ThreadEvent.Approval -> JSONObject().put("type", "approval").put("id", event.id)
@@ -509,7 +509,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
 
     private fun eventFromJson(item: JSONObject): ThreadEvent? = when (item.optString("type")) {
         "user" -> ThreadEvent.User(item.optString("text"))
-        "agent" -> ThreadEvent.Agent(item.optString("text"), promptReasoning = item.optJSONObject("promptReasoning")?.toPromptReasoningUi(), validationWarning = item.optString("validationWarning").takeIf { it.isNotBlank() && it != "null" }, validationPassed = item.opt("validationPassed")?.takeUnless { it == JSONObject.NULL }?.let { item.optBoolean("validationPassed") })
+        "agent" -> ThreadEvent.Agent(item.optString("text"), promptReasoning = item.optJSONObject("promptReasoning")?.toPromptReasoningUi())
         "system" -> ThreadEvent.System(item.optString("text"))
         "report" -> ThreadEvent.Report(item.optString("title"), item.optString("body"))
         "approval" -> ThreadEvent.Approval(item.optString("id"))
@@ -1024,7 +1024,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         val content = cycle.resposta ?: "Não foi possível gerar uma resposta para essa solicitação agora."
                         val capability = cycle.passos.lastOrNull { it.resultado != null }?.capacidade
                         val evidence = cycle.passos.flatMap { it.executionEvidence }
-                        ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability, evidence), researchSources = cycle.researchSources.map { it.toUiSource() }, promptReasoning = cycle.promptReasoning?.toUiReasoning(), validationWarning = postExecutionWarning(cycle), validationPassed = cycle.aprovado)
+                        lastChatValidationPassed = cycle.aprovado
+                        ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability, evidence), researchSources = cycle.researchSources.map { it.toUiSource() }, promptReasoning = cycle.promptReasoning?.toUiReasoning())
                     } else {
                         ChatMessage(ChatRole.ERROR, "Brain indisponível enquanto o sandbox não está pronto. Prepare o sandbox e envie novamente.")
                     }
@@ -1039,10 +1040,10 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 // produzida não significa que passou na verificação do Brain.
                 // Antes, qualquer resposta que não fosse erro técnico virava
                 // READY e escondia FAILED/REVISE no cabeçalho.
-                val cyclePassed = response.validationPassed == true
+                val cyclePassed = lastChatValidationPassed
                 brainUiStage = if (cyclePassed) BrainUiStage.READY else BrainUiStage.FAILED
             }
-            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content, response.promptActionId, response.contentType, response.researchSources, response.promptReasoning, response.validationWarning, response.validationPassed) else ThreadEvent.System(response.content))
+            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content, response.promptActionId, response.contentType, response.researchSources, response.promptReasoning) else ThreadEvent.System(response.content))
         }
     }
     /** Entrada única do composer Codex-style: texto livre ou comando operacional. */
@@ -1110,7 +1111,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         val content = cycle.resposta ?: "Não foi possível gerar uma resposta para essa solicitação agora."
                         val capability = cycle.passos.lastOrNull { it.resultado != null }?.capacidade
                         val evidence = cycle.passos.flatMap { it.executionEvidence }
-                        ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability, evidence), researchSources = cycle.researchSources.map { it.toUiSource() }, promptReasoning = cycle.promptReasoning?.toUiReasoning(), validationWarning = postExecutionWarning(cycle), validationPassed = cycle.aprovado)
+                        lastChatValidationPassed = cycle.aprovado
+                        ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability, evidence), researchSources = cycle.researchSources.map { it.toUiSource() }, promptReasoning = cycle.promptReasoning?.toUiReasoning())
                     } else {
                         ChatMessage(ChatRole.ERROR, "Brain indisponível enquanto o sandbox não está pronto. Prepare o sandbox e envie novamente.")
                     }
@@ -1118,7 +1120,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     .getOrElse { ChatMessage(ChatRole.ERROR, "Brain não conseguiu responder ao comando ${entrada.comando}: ${it.message ?: it.javaClass.simpleName}") }
             }
             chatMessages.add(response); chatRunning = false
-            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content, response.promptActionId, response.contentType, response.researchSources, response.promptReasoning, response.validationWarning, response.validationPassed) else ThreadEvent.System(response.content))
+            appendThreadEvent(if (response.role == ChatRole.ASSISTANT) ThreadEvent.Agent(response.content, response.promptActionId, response.contentType, response.researchSources, response.promptReasoning) else ThreadEvent.System(response.content))
         }
     }
     private fun com.brain.research.ResearchResult.toUiSource() = ResearchSourceUi(title, source, url, relevantContent.take(240))
