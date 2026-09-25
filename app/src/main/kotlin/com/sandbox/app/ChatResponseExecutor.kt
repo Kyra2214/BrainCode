@@ -167,7 +167,7 @@ class ChatResponseExecutor(
         val provenance = provenance(capability).toMutableList()
         if (researchResult != null) provenance += "research:auto-fallback-after-local-miss"
         if (researchResult != null || suppliedResearch.isNotBlank()) provenance += "source:dependency:network.research"
-        val candidate = ConversationCandidate(requestId, prompt, status = status, source = if (researchResult != null) "web-research" else "local", evidence = evidence.distinct(), text = finalText)
+        val candidate = ConversationCandidate(requestId, prompt, status = status, source = if (researchResult != null) "web-research" else "local", evidence = evidence.distinct(), text = finalText, researchAttempted = researchResult != null)
         val promoted = secretaryGate.accept(candidate) ?: run {
             metrics.recordSecretary("form", accepted = false)
             return ActionExecution(
