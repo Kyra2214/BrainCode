@@ -78,7 +78,6 @@ class ChatResponseExecutor(
         }
         val localCalculation = LocalArithmeticCalculator.calculate(prompt)
         val shouldRecover = suppliedResearch.isBlank() && localCalculation == null && !isClarification && !noWebRestriction && localMiss && researchFallback != null
-        structuredRecall?.structure?.let { evidence += "chat:llm:interpreter" }
         var researchResult: ResearchRunResult? = null
 
         if (localMiss && shouldRecover && maxRecoveryAttempts == 1) {
@@ -103,7 +102,6 @@ class ChatResponseExecutor(
                 status = ConversationStatus.ANSWER_READY
             }
             localMiss && shouldRecover -> {
-                // A rota de recuperação foi consumida. A falha honesta também passa pelo gate.
                 finalText = "Não encontrei fontes confiáveis suficientes para responder a essa pergunta agora."
                 evidence += "chat:conversation:synthesis"
                 status = ConversationStatus.ANSWER_READY
@@ -123,44 +121,23 @@ class ChatResponseExecutor(
             }
         }
 
-        val requestId = request.actionId
         if (outputReviewer != null) {
             val review = outputReviewer.conferir(prompt, finalText)
             metrics.recordLlmCall("reviewer", "standard", review.respondeAoPedido && review.completo)
             evidence += "chat:llm:reviewer"
             if (!review.respondeAoPedido || !review.completo) {
                 metrics.recordSecretary("content", accepted = false)
-                return ActionExecution(
-                    false,
-                    error = "QC da LLM rejeitou a resposta: ${review.observacoes.joinToString("; ")}",
-                    evidence = evidence + "chat:gate:content:rejected",
-                    provenance = provenance(capability)
-                )
+                return ActionExecution(false, error = "QC da LLM rejeitou a resposta: ${review.observacoes.joinToString("; ")}", evidence = evidence + "chat:gate:content:rejected", provenance = provenance(capability))
             }
         }
+        val requestId = request.actionId
         evidence += "chat:request:$requestId"
-        val conversation = ConversationResult(
-            finalText,
-            status,
-            evidence,
-            requestId = requestId,
-            prompt = prompt,
-            researchAttempted = researchResult != null
-        )
-        val evaluation = secretaryGate.evaluate(
-            conversation,
-            recoveryAvailable = researchFallback != null && !noWebRestriction && !isClarification
-        )
+        val conversation = ConversationResult(finalText, status, evidence, requestId = requestId, prompt = prompt, researchAttempted = researchResult != null)
+        val evaluation = secretaryGate.evaluate(conversation, recoveryAvailable = researchFallback != null && !noWebRestriction && !isClarification)
         if (evaluation.decision != SecretaryDecision.ACCEPT) {
             metrics.recordSecretary("content", accepted = false)
-            return ActionExecution(
-                false,
-                error = "Secretário bloqueou a saída: ${evaluation.reason}",
-                evidence = evidence + "chat:secretary:block",
-                provenance = provenance(capability)
-            )
+            return ActionExecution(false, error = "Secretário bloqueou a saída: ${evaluation.reason}", evidence = evidence + "chat:secretary:block", provenance = provenance(capability))
         }
-
         metrics.recordSecretary("content", accepted = true)
         evidence += "chat:secretary:accept"
         if (researchResult?.answer?.isNotBlank() == true) {
@@ -172,26 +149,12 @@ class ChatResponseExecutor(
         val candidate = ConversationCandidate(requestId, prompt, status = status, source = if (researchResult != null) "web-research" else "local", evidence = evidence.distinct(), text = finalText, researchAttempted = researchResult != null)
         val promoted = secretaryGate.accept(candidate) ?: run {
             metrics.recordSecretary("form", accepted = false)
-            return ActionExecution(
-                false,
-                error = "Secretário rejeitou o candidato na promoção final",
-                evidence = evidence + "chat:secretary:block",
-                provenance = provenance(capability)
-            )
+            return ActionExecution(false, error = "Secretário rejeitou o candidato na promoção final", evidence = evidence + "chat:secretary:block", provenance = provenance(capability))
         }
         metrics.recordSecretary("form", accepted = true)
-        return ActionExecution(
-            true,
-            result = promoted.text,
-            evidence = evidence.distinct(),
-            provenance = provenance.distinct(),
-            researchSources = researchResult?.sources.orEmpty(),
-            userResponse = promoted.copy(conversationId = request.parameters["conversationId"])
-        )
+        return ActionExecution(true, result = promoted.text, evidence = evidence.distinct(), provenance = provenance.distinct(), researchSources = researchResult?.sources.orEmpty(), userResponse = promoted.copy(conversationId = request.parameters["conversationId"]))
     }
 
-    private fun knowledgeCycleMemory(cycle: KnowledgeLearningCycle): com.brain.memory.KnowledgeMemory =
-        cycle.memoryForIntegration()
-
+    private fun knowledgeCycleMemory(cycle: KnowledgeLearningCycle): com.brain.memory.KnowledgeMemory = cycle.memoryForIntegration()
     private fun provenance(capability: CapabilityDefinition) = listOf("app:ChatResponseExecutor", "capability:${capability.id}")
 }
