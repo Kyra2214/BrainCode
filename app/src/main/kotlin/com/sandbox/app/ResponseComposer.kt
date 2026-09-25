@@ -26,10 +26,15 @@ class ResponseComposer(
         val lower = prompt.lowercase(Locale.ROOT)
         val evidence = mutableListOf("chat:local-only", "chat:read-only")
         val engineResponse = if (localLookupCompleted) precomputedConversation else conversationEngine?.respond(prompt, context)
+        val localCalculation = LocalArithmeticCalculator.calculate(prompt)
         val text = when {
             clarification -> {
                 evidence += "chat:clarification-question"
                 "Preciso de um esclarecimento antes de continuar: $prompt"
+            }
+            localCalculation != null -> {
+                evidence += "chat:calculation:local"
+                localCalculation
             }
             asksTime(lower) -> {
                 evidence += "chat:clock:${clock.instant()}"

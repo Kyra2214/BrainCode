@@ -230,7 +230,9 @@ class BrainInputInterpreter(
 
     private fun isCalculation(text: String): Boolean =
         Regex("(?i)\\b(calcul(e|a)|quanto é|quanto e|qual o resultado)\\b").containsMatchIn(text) ||
-            Regex("(?i)\\d+(?:[.,]\\d+)?\\s*(?:v|a)\\s*[x×*]\\s*\\d+(?:[.,]\\d+)?\\s*(?:v|a)?\\b").containsMatchIn(text)
+            Regex("(?i)\\d+(?:[.,]\\d+)?\\s*(?:v|a)\\s*[x×*]\\s*\\d+(?:[.,]\\d+)?\\s*(?:v|a)?\\b").containsMatchIn(text) ||
+            Regex("^[0-9\\s.,()+\\-*/×÷xX]+[?!.]*$").matches(text.trim()) &&
+                text.any { it.isDigit() } && text.any { it in "+-*/×÷xX" }
 
     private fun isNavigation(text: String): Boolean =
         Regex("(?i)\\b(ab(r|ra)|abra|abrir|mostre|mostrar|liste|listar)\\b.*\\b(catálogo|catalogo|capacidades|comandos)\\b").containsMatchIn(text)

@@ -772,7 +772,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 val webResearchExecutor = WebResearchExecutor(provider = webResearchProvider)
                 val automaticConversationResearch = com.brain.research.WebResearchAgent(
                     com.brain.research.WebProviderSet(
-                        search = listOf(com.brain.research.LegacySearchProviderAdapter(webResearchProvider))
+                        search = listOf(com.brain.research.LegacySearchProviderAdapter(webResearchProvider)),
+                        fetch = listOf(HttpPageFetchProvider())
                     )
                 )
                 val conversationKnowledgeCycle = com.brain.memory.KnowledgeLearningCycle()
@@ -1020,7 +1021,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         }
                         withContext(Dispatchers.Main.immediate) { publishCycleStages(cycle) }
                         val promptActionId = cycle.passos.firstOrNull { it.capacidade == "prompt.library.write" }?.actionId
-                        val content = cycle.resposta ?: "Plano concluído: ${cycle.aprovado}"
+                        val content = cycle.resposta ?: "Não foi possível gerar uma resposta para essa solicitação agora."
                         val capability = cycle.passos.lastOrNull { it.resultado != null }?.capacidade
                         val evidence = cycle.passos.flatMap { it.executionEvidence }
                         ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability, evidence), researchSources = cycle.researchSources.map { it.toUiSource() }, promptReasoning = cycle.promptReasoning?.toUiReasoning(), validationWarning = postExecutionWarning(cycle), validationPassed = cycle.aprovado)
@@ -1106,7 +1107,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                             intent = intent
                         )
                         val promptActionId = cycle.passos.firstOrNull { it.capacidade == "prompt.library.write" }?.actionId
-                        val content = cycle.resposta ?: "Plano concluído: ${cycle.aprovado}"
+                        val content = cycle.resposta ?: "Não foi possível gerar uma resposta para essa solicitação agora."
                         val capability = cycle.passos.lastOrNull { it.resultado != null }?.capacidade
                         val evidence = cycle.passos.flatMap { it.executionEvidence }
                         ChatMessage(ChatRole.ASSISTANT, content, promptActionId = promptActionId, contentType = detectGeneratedContentType(content, capability, evidence), researchSources = cycle.researchSources.map { it.toUiSource() }, promptReasoning = cycle.promptReasoning?.toUiReasoning(), validationWarning = postExecutionWarning(cycle), validationPassed = cycle.aprovado)

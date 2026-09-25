@@ -240,7 +240,6 @@ private fun ThreadTopBar(viewModel: SandboxViewModel, searchOpen: Boolean, onTog
             val phaseColor = if (viewModel.phase is SandboxPhase.Blocked || viewModel.brainUiStage in setOf(BrainUiStage.BLOCKED, BrainUiStage.FAILED)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
             Column(horizontalAlignment = Alignment.End) {
                 Surface(color = MaterialTheme.colorScheme.surfaceVariant, contentColor = phaseColor, shape = MaterialTheme.shapes.small) { Text(phaseLabel(viewModel.phase), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)) }
-                Text(brainStageLabel(viewModel.brainUiStage), style = MaterialTheme.typography.labelSmall, color = phaseColor)
             }
             IconButton(onClick = onSearch) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, contentDescription = if (searchOpen) "Fechar busca" else "Buscar") }
             TextButton(onClick = onOpenTerminal) { Text("Terminal") }
@@ -320,17 +319,12 @@ private fun ThreadEventCard(event: ThreadEvent, viewModel: SandboxViewModel) {
         is ThreadEvent.User -> Row(modifier = Modifier.fillMaxWidth().combinedClickable(onClickLabel = "Citar mensagem", onLongClickLabel = "Citar mensagem", onClick = { viewModel.quoteEvent(event) }, onLongClick = { viewModel.quoteEvent(event) }), horizontalArrangement = Arrangement.End) { Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) { Text(event.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) } }
         is ThreadEvent.Agent -> Column(modifier = Modifier.fillMaxWidth().combinedClickable(onClickLabel = "Citar resposta", onLongClickLabel = "Citar resposta", onClick = { viewModel.quoteEvent(event) }, onLongClick = { viewModel.quoteEvent(event) }), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             GeneratedContentCard(event = event, onCopy = ::copy)
-            if (event.researchSources.isNotEmpty()) ResearchSourcesCard(event.researchSources)
-            event.promptReasoning?.let { PromptReasoningCard(it) }
             event.promptActionId?.takeIf { event.contentType == GeneratedContentType.PROMPT }?.let { actionId ->
                 var feedbackDado by remember(actionId) { mutableStateOf<Boolean?>(null) }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(onClick = { feedbackDado = true; viewModel.recordPromptFeedback(actionId, true) }, enabled = feedbackDado == null, modifier = Modifier.semantics { contentDescription = "Avaliar prompt como útil" }) { Text(if (feedbackDado == true) "👍 Obrigado" else "👍") }
                     TextButton(onClick = { feedbackDado = false; viewModel.recordPromptFeedback(actionId, false) }, enabled = feedbackDado == null, modifier = Modifier.semantics { contentDescription = "Avaliar prompt como não útil" }) { Text(if (feedbackDado == false) "👎 Obrigado" else "👎") }
                 }
-            }
-            event.validationWarning?.let { warning ->
-                Card { Text(warning, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(10.dp)) }
             }
         }
         is ThreadEvent.System -> Card { Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text(event.text, color = if (event.text.contains("bloqueado", true)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant); event.progress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }; if (viewModel.phase is SandboxPhase.Blocked) OutlinedButton(onClick = { viewModel.prepareSandbox() }) { Text("Tentar de novo") } } }

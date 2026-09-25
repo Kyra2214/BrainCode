@@ -76,7 +76,8 @@ class ChatResponseExecutor(
         val noWebRestriction = request.parameters.values.any { value ->
             value.contains("NO_WEB", ignoreCase = true) || value.contains("no web", ignoreCase = true)
         }
-        val shouldRecover = suppliedResearch.isBlank() && !isClarification && !noWebRestriction && localMiss && researchFallback != null
+        val localCalculation = LocalArithmeticCalculator.calculate(prompt)
+        val shouldRecover = suppliedResearch.isBlank() && localCalculation == null && !isClarification && !noWebRestriction && localMiss && researchFallback != null
         structuredRecall?.structure?.let { evidence += "chat:llm:interpreter" }
         var researchResult: ResearchRunResult? = null
 

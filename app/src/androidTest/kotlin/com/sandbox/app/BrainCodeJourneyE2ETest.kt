@@ -145,9 +145,7 @@ class BrainCodeJourneyE2ETest {
         composeRule.onNodeWithText("Aprovar e retomar", substring = true, useUnmergedTree = true).performClick()
         composeRule.waitUntil(timeoutMillis = 120_000) {
             composeRule.onAllNodesWithText("Resultado", substring = true, useUnmergedTree = true)
-                .fetchSemanticsNodes().isNotEmpty() ||
-                composeRule.onAllNodesWithText("Plano concluído", substring = true, useUnmergedTree = true)
-                    .fetchSemanticsNodes().isNotEmpty()
+                .fetchSemanticsNodes().isNotEmpty()
         }
     }
 }

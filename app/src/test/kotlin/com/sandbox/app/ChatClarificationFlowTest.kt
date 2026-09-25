@@ -37,7 +37,7 @@ class ChatClarificationFlowTest {
             val cycle = controller.executeObjective(objective, "chat-flow", intent = intent)
 
             // Mesmo mapeamento do SandboxViewModel.sendChatMessage.
-            val content = cycle.resposta ?: "Plano concluído: ${cycle.aprovado}"
+            val content = cycle.resposta ?: "Não foi possível gerar uma resposta para essa solicitação agora."
             val type = detectGeneratedContentType(
                 content,
                 cycle.passos.lastOrNull { it.resultado != null }?.capacidade,

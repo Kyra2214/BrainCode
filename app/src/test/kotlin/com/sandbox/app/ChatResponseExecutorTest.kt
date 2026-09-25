@@ -62,6 +62,18 @@ class ChatResponseExecutorTest {
     }
 
     @Test
+    fun `canario 7 vezes 5 responde 35 localmente sem WebSearch`() {
+        var calls = 0
+        val research = WebResearchAgent(WebProviderSet(search = listOf(SearchProvider { calls++; error("não deveria pesquisar") })))
+        val result = ChatResponseExecutor(researchFallback = research).execute(request("7×5"), capability, decision)
+
+        assertTrue(result.success)
+        assertEquals("35", result.result)
+        assertEquals(0, calls)
+        assertTrue(result.evidence.contains("chat:calculation:local"))
+    }
+
+    @Test
     fun `organiza contexto local sem criar nem executar`() {
         val executor = ChatResponseExecutor(
             clock = Clock.fixed(Instant.parse("2026-09-20T18:30:00Z"), ZoneId.of("UTC")),

@@ -67,6 +67,16 @@ class IntentEnvelopeTest {
     }
 
     @Test
+    fun `operacoes aritmeticas nuas entram na porta de calculo local`() {
+        listOf("7×5", "12+8", "100/4", "25-7", "10÷2").forEach { prompt ->
+            val envelope = interpreter.interpret(prompt)
+            assertEquals(prompt, IntentCategory.CALCULATION, envelope.intent)
+            assertEquals(prompt, Route.CAPABILITY, envelope.route)
+            assertEquals(prompt, "chat.respond", envelope.targetCapability)
+        }
+    }
+
+    @Test
     fun `router resolve target capability somente quando registry a fornece`() {
         val definition = CapabilityDefinition(
             id = "sandbox.info",

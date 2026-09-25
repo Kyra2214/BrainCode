@@ -73,4 +73,13 @@ class TextConversationContractsTest {
         )
         assertEquals(SecretaryDecision.ACCEPT, result.decision)
     }
+
+    @Test
+    fun `estados internos nunca atravessam a fronteira humana`() {
+        listOf("Plano concluído: true", "PASS", "readiness=READY", "critique=PASS", "evidence=chat:request:x", "trace=r1", "provider=duckduckgo", "pipeline concluído").forEach { text ->
+            val result = gate.evaluate(ConversationResult(text, ConversationStatus.ANSWER_READY), recoveryAvailable = false)
+            assertEquals(text, SecretaryDecision.BLOCK, result.decision)
+            assertEquals(text, BlockReason.FALLBACK_RESPONSE, result.reason)
+        }
+    }
 }

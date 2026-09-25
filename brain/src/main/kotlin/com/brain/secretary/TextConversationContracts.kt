@@ -31,7 +31,9 @@ data class SecretaryEvaluation(val decision: SecretaryDecision, val reason: Bloc
 class DeterministicSecretaryGate {
     private val prohibitedFallbacks = listOf(
         "não reconheci uma resposta local confiável", "pode reformular", "não sei",
-        "evidence found", "researchresult", "webresearch indisponível", "exception:"
+        "evidence found", "researchresult", "webresearch indisponível", "exception:",
+        "plano concluído", "pass", "readiness", "critique", "evidence", "trace", "provider", "pipeline",
+        "verification", "verificação", "secretário bloqueou", "secretário rejeitou"
     )
 
     fun evaluate(result: ConversationResult, recoveryAvailable: Boolean): SecretaryEvaluation {
