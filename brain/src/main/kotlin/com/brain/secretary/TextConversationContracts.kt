@@ -59,7 +59,7 @@ class DeterministicSecretaryGate {
                 it == "chat:context:read-only" ||
                 it == "chat:research-context-included"
         } && (!recoveryAvailable || result.researchAttempted)
-        if (result.prompt.isNotBlank() && !evidenceBackedException && !isSemanticallyRelated(result.prompt, text))
+        val webResearchBacked = result.researchAttempted && result.evidence.any { it == "chat:websearch:evidence" }\n        if (result.prompt.isNotBlank() && !evidenceBackedException && !webResearchBacked && !isSemanticallyRelated(result.prompt, text))
             return SecretaryEvaluation(SecretaryDecision.BLOCK, BlockReason.INCOMPLETE_RESPONSE)
         return SecretaryEvaluation(SecretaryDecision.ACCEPT)
     }
