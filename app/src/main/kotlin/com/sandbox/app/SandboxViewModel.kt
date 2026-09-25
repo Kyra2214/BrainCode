@@ -973,16 +973,6 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     private fun hasApiKeyInCatalog(): Boolean =
         apiProviders.any { provider -> apiKeyStore.get(provider.id)?.trim()?.isNotEmpty() == true }
 
-    private fun postExecutionWarning(cycle: ResultadoCiclo): String? {
-        val gate = cycle.posExecucao ?: return null
-        if (cycle.aprovado) return null
-        val findings = gate.critique.findings.map { "${it.code}: ${it.message}" }
-        val details = (gate.issues + findings).ifEmpty {
-            listOf("verification=${gate.verification.status}", "critique=${gate.critique.status}", "readiness=${gate.readiness.status}")
-        }.distinct()
-        return "Atenção: a resposta não passou na verificação pós-execução. ${details.joinToString("; ")}"
-    }
-
     /** Regra estrutural: a conversa Android entra no Brain; nenhum executor local é chamado pelo chat. */
     fun sendChatMessage() {
         val prompt = chatInput.trim(); if (prompt.isEmpty() || chatRunning) return
