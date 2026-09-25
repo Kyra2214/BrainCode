@@ -20,8 +20,54 @@ object ResearchQueryRewriter {
  */
 object ResearchAnswerSynthesizer {
     fun synthesize(query: String, sources: List<ResearchResult>): String {
-        val useful = sources.asSequence()
-            .map { it.relevantContent.trim().replace(Regex("\\s+"), " ") }
+        val normalizedQuery = query.lowercase(Locale.ROOT)
+        val factual = Regex("(?i)\\b(tempo|clima|temperatura|previsão|previsao|cotação|cotacao|preço|preco|data|horário|horario|placar)\\b")
+            .containsMatchIn(normalizedQuery)
+
+        val topicTerms = Regex("[\\p{L}\\p{N}]{4,}")
+            .findAll(normalizedQuery)
+            .map { it.value }
+            .filterNot { it in setOf("como", "funciona", "sobre", "explique", "fale", "qual", "quais", "hoje", "agora") }
+            .toSet()
+
+        val sentences = sources.asSequence()
+            .flatMap { source ->
+                source.relevantContent
+                    .replace(Regex("<[^>]+>"), " ")
+                    .replace(Regex("https?://\\S+"), " ")
+                    .replace(Regex("\\s+"), " ")
+                    .split(Regex("(?<=[.!?])\\s+|\\n+"))
+                    .asSequence()
+            }
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !isBoilerplate(it) }
+            .filter { sentence ->
+                topicTerms.isEmpty() || topicTerms.any { term ->
+                    sentence.lowercase(Locale.ROOT).contains(term)
+                }
+            }
+            .distinct()
+            .toList()
+
+        val selected = sentences.take(if (factual) 2 else 4)
+        if (selected.isEmpty()) {
+            return "Não encontrei informação suficientemente relacionada ao tema para responder com segurança."
+        }
+
+        return selected.joinToString(" ").take(if (factual) 700 else 1600)
+    }
+
+    private fun isBoilerplate(sentence: String): Boolean {
+        val normalized = sentence.lowercase(Locale.ROOT).replace(Regex("\\s+"), " ").trim()
+        if (normalized.length < 3) return true
+        val uiPattern = Regex(
+            "(?i)\\b(cookie|cookies|privacidade|privacy|termos de uso|terms of use|aceitar|accept|recusar|reject|login|log in|sign in|sign up|inscreva-se|menu|navigation|navegação|idioma|language|home|subscribe|assine|advertise|anuncie|javascript)\\b"
+        )
+        val navigationLike = normalized.count { it == '|' || it == '›' || it == '·' } >= 2 ||
+            (normalized.split(Regex("[,|]")).size >= 5 && normalized.length < 180)
+        return uiPattern.containsMatchIn(normalized) || navigationLike
+    }
+}
             .filter { it.isNotBlank() }
             .map { it.take(360) }
             .distinct()
