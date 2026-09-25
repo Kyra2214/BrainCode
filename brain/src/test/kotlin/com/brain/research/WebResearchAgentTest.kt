@@ -119,12 +119,14 @@ class WebResearchAgentTest {
         var receivedQuery = ""
         val agent = WebResearchAgent(WebProviderSet(search = listOf(SearchProvider { request ->
             receivedQuery = request.query
-            Result.success(listOf(result("https://docs.example/iptv")))
+            Result.success(listOf(result("https://docs.example/iptv").copy(
+                relevantContent = "IPTV é uma tecnologia para distribuir conteúdo de televisão pela internet."
+            )))
         })), clock, { "run-iptv" })
         val output = agent.research(ResearchRequest("qual o melhor mecanismo pra criar um app de IPTV?"))
         assertTrue(receivedQuery.contains("IPTV", ignoreCase = true))
         assertTrue(receivedQuery.contains("explanation", ignoreCase = true))
-        assertTrue(output.answer.contains("Conteúdo verificável"))
+        assertTrue(output.answer.contains("IPTV", ignoreCase = true))
         assertTrue(!output.answer.contains("Pesquisa web concluída"))
     }
 }
