@@ -1215,8 +1215,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             com.sandbox.agent.StatusPasso.REPROVADO -> BrainUiStage.FAILED
             com.sandbox.agent.StatusPasso.APROVADO -> BrainUiStage.EXECUTANDO
         }
-        val message = "${passo.passoId}: ${passo.status.name}${passo.motivo?.let { " — $it" } ?: ""}"
-        chatMessages.add(ChatMessage(ChatRole.STEP, message))
+        // Estado de execução é observabilidade interna. Nunca publique no feed conversacional.
     }
     private fun publishCycleStages(cycle: ResultadoCiclo) {
         val post = cycle.posExecucao ?: run {
@@ -1224,9 +1223,9 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             return
         }
         fun stage(stage: BrainUiStage, text: String) {
+            // Stage/verification/critic/revision/readiness são somente observabilidade interna.
+            // O diagnóstico completo continua em diagnosticsReport; a conversa recebe apenas User/Assistant.
             brainUiStage = stage
-            chatMessages.add(ChatMessage(ChatRole.STEP, text))
-            appendThreadEvent(ThreadEvent.System(text))
         }
         stage(BrainUiStage.VERIFICANDO, "VERIFICANDO — ${post.verification.status.name}")
         stage(BrainUiStage.CRITICANDO, "CRITICANDO — ${post.critique.status.name}")
