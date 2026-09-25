@@ -57,4 +57,15 @@ class ResponseComposerTest {
         assertFalse(result.text.contains("login", ignoreCase = true))
         assertFalse(result.text.contains("English", ignoreCase = true))
     }
+    @Test
+    fun `pesquisa sem trecho relacionado nao escolhe primeira frase da pagina`() {
+        val raw = "Bem-vindo ao portal. Menu | Login | Assine. " +
+            "A Rússia tem vários fusos horários e uma longa história."
+
+        val result = ResponseComposer(clock).compose("Quem é o atual presidente do Brasil?", research = raw)
+
+        assertTrue(result.text.contains("Não encontrei informação suficientemente relacionada"))
+        assertFalse(result.text.startsWith("Bem-vindo"))
+    }
+
 }
