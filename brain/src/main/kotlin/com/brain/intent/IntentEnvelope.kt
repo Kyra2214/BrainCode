@@ -7,6 +7,7 @@ import com.brain.capability.CapabilityRegistry
 import com.brain.text.IntentNegation
 import com.brain.text.TriggerLexicon
 import com.brain.text.InformationalQuestionClassifier
+import com.brain.research.ResearchIntentClassifier
 import java.util.Locale
 
 /** Categorias observáveis da intenção antes de qualquer planejamento ou execução. */
@@ -104,12 +105,18 @@ class BrainInputInterpreter(
         val weather = isWeather(normalized)
         val calculation = isCalculation(normalized)
         val navigation = isNavigation(normalized)
+        val brazilData = isBrazilData(normalized)
+        val brazilEconomy = isBrazilEconomy(normalized)
+        val brazilGeography = isBrazilGeography(normalized)
+        val currency = isCurrencyConversion(normalized)
         val research = !weather && !calculation && !navigation &&
             IntentNegation.hasAllowedOccurrence(normalized, TriggerLexicon.VERBOS_PESQUISA)
-        val codeExecution = !weather && !calculation && !navigation && !research &&
+        val domainSearch = !weather && !calculation && !navigation && !brazilData && !brazilEconomy && !brazilGeography && !currency && !research &&
+            ResearchIntentClassifier.requiresWebSearch(normalized)
+        val codeExecution = !weather && !calculation && !navigation && !brazilData && !brazilEconomy && !brazilGeography && !currency && !research && !domainSearch &&
             IntentNegation.hasAllowedOccurrence(normalized, TriggerLexicon.EXECUTION_TERMS) &&
             TriggerLexicon.matches(normalized, listOf("código", "codigo", "script", "programa", "função", "funcao"))
-        val information = !weather && !calculation && !navigation && !research && !codeExecution &&
+        val information = !weather && !calculation && !navigation && !brazilData && !brazilEconomy && !brazilGeography && !currency && !research && !domainSearch && !codeExecution &&
             isInformationalQuestion(normalized)
         val ambiguous = normalized.matches(Regex("(?i)^(faça|faca|execute|rode|fa\u00e7a|fazer) isso[.!? ]*$"))
 
@@ -149,12 +156,44 @@ class BrainInputInterpreter(
             weather -> {
                 intent = IntentCategory.WEATHER
                 action = "GET_CURRENT_WEATHER"
-                target = "network.research"
+                target = "weather"
                 extractLocation(normalized)?.let { entities["location"] = it }
                 extractDate(normalized)?.let { entities["date"] = it }
                 requiresLiveData = true
                 confidence = 1.0
                 rationale = "padrão dedicado de clima/tempo real"
+            }
+            brazilData -> {
+                intent = IntentCategory.RESEARCH
+                action = "LOOKUP_BRAZIL_DATA"
+                target = "br.dados"
+                requiresLiveData = true
+                confidence = 1.0
+                rationale = "consulta determinística de cadastro/dado brasileiro estruturado"
+            }
+            brazilEconomy -> {
+                intent = IntentCategory.RESEARCH
+                action = "LOOKUP_OFFICIAL_ECONOMIC_DATA"
+                target = "br.economia"
+                requiresLiveData = true
+                confidence = 1.0
+                rationale = "consulta de série econômica oficial do Banco Central"
+            }
+            brazilGeography -> {
+                intent = IntentCategory.RESEARCH
+                action = "LOOKUP_IBGE_LOCALITY"
+                target = "br.geografia"
+                requiresLiveData = true
+                confidence = 1.0
+                rationale = "consulta determinística de localidade do IBGE"
+            }
+            currency -> {
+                intent = IntentCategory.RESEARCH
+                action = "GET_EXCHANGE_RATE"
+                target = "cambio"
+                requiresLiveData = true
+                confidence = 1.0
+                rationale = "consulta determinística de conversão/taxa de câmbio"
             }
             calculation -> {
                 intent = IntentCategory.CALCULATION
@@ -172,13 +211,13 @@ class BrainInputInterpreter(
                 confidence = 1.0
                 rationale = "padrão dedicado de navegação do catálogo"
             }
-            research -> {
+            research || domainSearch -> {
                 intent = IntentCategory.RESEARCH
                 action = "RESEARCH"
                 target = "network.research"
                 requiresLiveData = true
                 confidence = 0.85
-                rationale = "verbo explícito de pesquisa permitido pelo léxico"
+                rationale = if (research) "verbo explícito de pesquisa permitido pelo léxico" else "pergunta técnica, acadêmica ou factual direcionada por heurística local"
             }
             codeExecution -> {
                 intent = IntentCategory.CODE_EXECUTION
@@ -236,6 +275,22 @@ class BrainInputInterpreter(
 
     private fun isNavigation(text: String): Boolean =
         Regex("(?i)\\b(ab(r|ra)|abra|abrir|mostre|mostrar|liste|listar)\\b.*\\b(catálogo|catalogo|capacidades|comandos)\\b").containsMatchIn(text)
+
+    private fun isBrazilData(text: String): Boolean =
+        Regex("(?i)\\b(cep|cnpj|ddd|isbn|ncm|fipe|feriado(s)?)\\b").containsMatchIn(text) ||
+            Regex("(?i)\\bbanco\\b.*\\b(?:código|codigo|número|numero)?\\s*\\d{3}\\b").containsMatchIn(text)
+
+    private fun isBrazilEconomy(text: String): Boolean =
+        Regex("(?i)\\b(selic|ptax|taxa(s)? de juros|cdi|ipca|igp-m)\\b").containsMatchIn(text) ||
+            Regex("(?i)\\b(cotação|cotacao|valor|preço|preco)\\b.*\\b(dólar|dolar)\\b").containsMatchIn(text)
+
+    private fun isBrazilGeography(text: String): Boolean =
+        Regex("(?i)\\b(municípios|municipios|estados|regiões|regioes)\\b.*\\b(ibge|brasil|uf|estado|região|regiao)?\\b").containsMatchIn(text) &&
+            Regex("(?i)\\b(lista|listar|quais|quantos|mostre|consult|municípios|municipios|estados|regiões|regioes)\\b").containsMatchIn(text)
+
+    private fun isCurrencyConversion(text: String): Boolean =
+        Regex("(?i)\\b(câmbio|cambio|converter|converta|convert(a|er)|em dólar|em dolar|para dólar|para dolar|para usd|para eur)\\b").containsMatchIn(text) ||
+            Regex("(?i)\\b\\d+(?:[.,]\\d+)?\\s*(?:brl|usd|eur)\\b.*\\b(?:brl|usd|eur)\\b").containsMatchIn(text)
 
     private fun isInformationalQuestion(text: String): Boolean =
         InformationalQuestionClassifier.isRecoverable(text)

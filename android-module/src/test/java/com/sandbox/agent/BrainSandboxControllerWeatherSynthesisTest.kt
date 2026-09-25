@@ -1,5 +1,11 @@
 package com.sandbox.agent
 
+import com.brain.capability.CapabilityAvailability
+import com.brain.capability.CapabilityCategory
+import com.brain.capability.CapabilityDefinition
+import com.brain.capability.CapabilityProvenance
+import com.brain.capability.CapabilityProvider
+import com.brain.execution.RiskClass
 import com.brain.gateway.ActionExecution
 import com.brain.gateway.ActionExecutor
 import com.brain.secretary.UserResponse
@@ -13,59 +19,58 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Regressão: uma pergunta classificada como WEATHER (ou RESEARCH) resolve
- * envelope.route=CAPABILITY com targetCapability="network.research" (ver
- * BrainInputInterpreter). O WebResearchExecutor real nunca preenche
- * `userResponse` (de propósito — só chat.respond/ChatResponseExecutor pode
- * liberar texto ao usuário). Antes da correção, fastPathPlan gerava um plano
- * de UM passo só (o "network.research"), então cycle.resposta ficava null
- * mesmo com a pesquisa concluída com sucesso, e a UI caía no fallback
- * "Plano concluído: true" — ver relato do usuário sobre "tempo em Macaé RJ".
- */
+/** Regressão: clima usa `weather` e entrega a resposta do provider dedicado sem etapa de síntese. */
 class BrainSandboxControllerWeatherSynthesisTest {
     @Test
-    fun `pergunta de clima encadeia pesquisa e resposta, e cycle resposta nao fica nula`() {
+    fun `pergunta de clima executa capability weather e entrega resposta deterministica`() {
         val root = Files.createTempDirectory("weather-synthesis-").toFile()
         try {
-            var chatRecebeuContextoDaPesquisa = false
-            val fakeResearch = ActionExecutor { _, _, _ ->
+            var weatherCalls = 0
+            var researchCalls = 0
+            val fakeWeather = ActionExecutor { request, _, _ ->
+                weatherCalls++
                 ActionExecution(
                     success = true,
-                    internalPayload = "Macaé, RJ: 28°C, poucas nuvens, sem previsão de chuva.",
-                    evidence = listOf("web-research:source=climatempo.com.br")
-                )
-            }
-            val fakeChat = ActionExecutor { request, _, _ ->
-                if (request.parameters.values.any { it.contains("28°C") }) chatRecebeuContextoDaPesquisa = true
-                ActionExecution(
-                    success = true,
+                    result = "Agora em Macaé - Rio de Janeiro: 28°C, parcialmente nublado.",
+                    evidence = listOf("api:open-meteo", "url:https://api.open-meteo.com/v1/forecast"),
                     userResponse = UserResponse(
-                        text = "Em Macaé está fazendo 28°C, com poucas nuvens.",
-                        evidence = listOf("chat:conversation:synthesis"),
+                        text = "Agora em Macaé - Rio de Janeiro: 28°C, parcialmente nublado.",
+                        evidence = listOf("api:open-meteo"),
                         requestId = request.actionId
                     )
                 )
             }
-
+            val fakeResearch = ActionExecutor { _, _, _ -> researchCalls++; ActionExecution(success = true, result = "não deveria consultar") }
+            val weatherDefinition = CapabilityDefinition(
+                id = "weather", name = "Clima", description = "Clima determinístico via Open-Meteo",
+                category = CapabilityCategory.API, ownerId = "test-weather", origin = "test-weather",
+                providedCapabilities = setOf("weather"), risk = RiskClass.LOW,
+                availability = CapabilityAvailability.AVAILABLE,
+                provenance = listOf(CapabilityProvenance("test-weather", "unit-test"))
+            )
+            val weatherProvider = object : CapabilityProvider {
+                override val providerId = "test-weather"
+                override fun capabilities() = sequenceOf(weatherDefinition)
+            }
             val runtime = ManagedSandboxRuntime(TestLauncher(root), FileExecutionLogRepository(File(root, "logs")), sessionId = "session-weather")
             val controller = BrainSandboxController(
                 runtime = runtime,
                 rootfsDir = root,
+                capabilityProviders = listOf(weatherProvider),
                 capabilityExecutors = mapOf(
-                    "sandbox.info" to fakeResearch,
-                    "network.research" to fakeResearch,
-                    "chat.respond" to fakeChat
+                    "weather" to fakeWeather,
+                    "network.research" to fakeResearch
                 )
             )
 
             val cycle = controller.executeObjective("Qual o tempo em Macaé RJ", "run-weather")
 
-            assertTrue("ciclo deveria aprovar pesquisar + responder", cycle.aprovado)
-            assertEquals(listOf("pesquisar", "responder"), cycle.passos.map { it.passoId })
-            assertNotNull("cycle.resposta não pode ficar null com a pesquisa concluída", cycle.resposta)
-            assertEquals("Em Macaé está fazendo 28°C, com poucas nuvens.", cycle.resposta)
-            assertTrue("o passo 'responder' deveria receber o texto da pesquisa como contexto", chatRecebeuContextoDaPesquisa)
+            assertTrue("ciclo deveria aprovar a consulta meteorológica", cycle.aprovado)
+            assertEquals(listOf("weather"), cycle.passos.map { it.capacidade })
+            assertNotNull("resposta meteorológica não pode ficar nula", cycle.resposta)
+            assertEquals("Agora em Macaé - Rio de Janeiro: 28°C, parcialmente nublado.", cycle.resposta)
+            assertEquals(1, weatherCalls)
+            assertEquals(0, researchCalls)
         } finally {
             root.deleteRecursively()
         }

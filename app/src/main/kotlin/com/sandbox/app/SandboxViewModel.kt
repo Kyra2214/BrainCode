@@ -766,16 +766,30 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     promptLibrary = promptLibrary,
                     improver = promptImprover
                 )
-                val webResearchProvider = com.brain.research.CompositeWebResearchProvider(
+                val duckDuckGoFallback = com.brain.research.CompositeWebResearchProvider(
                     listOf(DuckDuckGoWebResearchProvider(), WikipediaWebResearchProvider())
                 )
-                val webResearchExecutor = WebResearchExecutor(provider = webResearchProvider)
+                val routedSearch = ResearchSearchRoutingProvider(
+                    brave = BraveSearchWebResearchProvider(apiKey = { apiKeyStore.get(BRAVE_SEARCH_KEY_ID) }),
+                    duckDuckGo = com.brain.research.LegacySearchProviderAdapter(duckDuckGoFallback),
+                    wikidata = WikidataSearchProvider(),
+                    stackExchange = StackExchangeSearchProvider(),
+                    openAlex = OpenAlexSearchProvider()
+                )
+                val webResearchProvider = com.brain.research.WebResearchProvider { query, maxResults ->
+                    routedSearch.search(com.brain.research.ResearchRequest(
+                        query = query,
+                        constraints = com.brain.research.ResearchConstraints(maxSources = maxResults.coerceIn(1, 50))
+                    ))
+                }
                 val automaticConversationResearch = com.brain.research.WebResearchAgent(
                     com.brain.research.WebProviderSet(
-                        search = listOf(com.brain.research.LegacySearchProviderAdapter(webResearchProvider)),
-                        fetch = listOf(HttpPageFetchProvider())
+                        search = listOf(routedSearch),
+                        fetch = listOf(HttpPageFetchProvider(), MicrolinkFetchProvider())
                     )
                 )
+                val webResearchExecutor = WebResearchExecutor(provider = webResearchProvider, researchAgent = automaticConversationResearch)
+                val publicDataCapabilities = PublicDataCapabilityProvider()
                 val conversationKnowledgeCycle = com.brain.memory.KnowledgeLearningCycle()
                 val chatResponseExecutor = ChatResponseExecutor(
                     contextProvider = {
@@ -800,7 +814,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     authorizedAccountIds = apiProviders.map { "android:${it.id}" }.toSet(),
                     promptLibrary = promptLibrary,
                     capabilityProviders = listOf(
-                        PluginCatalogCapabilityProvider(statusOf = { id -> statusCache[id]?.state })
+                        PluginCatalogCapabilityProvider(statusOf = { id -> statusCache[id]?.state }),
+                        publicDataCapabilities
                     ),
                     capabilityExecutors = mapOf<String, com.brain.gateway.ActionExecutor>(
                         "workspace.generate" to codeGenerationExecutor,
@@ -808,6 +823,11 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         "prompt.library.write" to promptGenerationExecutor,
                         "sandbox.info" to webResearchExecutor,
                         "network.research" to webResearchExecutor,
+                        "br.dados" to BrasilApiExecutor(),
+                        "br.economia" to BcbExecutor(),
+                        "br.geografia" to IbgeExecutor(),
+                        "weather" to WeatherExecutor(),
+                        "cambio" to ExchangeRateExecutor(),
                         "chat.respond" to chatResponseExecutor
                     ) + if (BuildConfig.E2E_OFFLINE_AI) emptyMap() else mapOf<String, com.brain.gateway.ActionExecutor>(
                         // Executa as tarefas do roadmap da Porta 3 pelos especialistas (uma chamada de provider por tarefa).

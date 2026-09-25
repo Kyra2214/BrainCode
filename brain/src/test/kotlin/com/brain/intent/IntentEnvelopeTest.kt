@@ -18,9 +18,16 @@ class IntentEnvelopeTest {
     @Test
     fun `matriz de rotas da porta 1`() {
         val cases = listOf(
-            Case("Qual a temperatura de Rio das Ostras hoje?", Door.CHAT, IntentCategory.WEATHER, Route.CAPABILITY, "network.research"),
-            Case("Quanto está fazendo em Rio das Ostras agora?", Door.CHAT, IntentCategory.WEATHER, Route.CAPABILITY, "network.research"),
-            Case("Vai chover amanhã em Rio das Ostras?", Door.CHAT, IntentCategory.WEATHER, Route.CAPABILITY, "network.research"),
+            Case("Qual a temperatura de Rio das Ostras hoje?", Door.CHAT, IntentCategory.WEATHER, Route.CAPABILITY, "weather"),
+            Case("Quanto está fazendo em Rio das Ostras agora?", Door.CHAT, IntentCategory.WEATHER, Route.CAPABILITY, "weather"),
+            Case("Vai chover amanhã em Rio das Ostras?", Door.CHAT, IntentCategory.WEATHER, Route.CAPABILITY, "weather"),
+            Case("Quanto é o CEP 01310-100?", Door.CHAT, IntentCategory.RESEARCH, Route.CAPABILITY, "br.dados"),
+            Case("Qual o código do banco 341?", Door.CHAT, IntentCategory.RESEARCH, Route.CAPABILITY, "br.dados"),
+            Case("Quais os feriados de 2026?", Door.CHAT, IntentCategory.RESEARCH, Route.CAPABILITY, "br.dados"),
+            Case("Qual a taxa Selic atual?", Door.CHAT, IntentCategory.RESEARCH, Route.CAPABILITY, "br.economia"),
+            Case("Qual a cotação do dólar?", Door.CHAT, IntentCategory.RESEARCH, Route.CAPABILITY, "br.economia"),
+            Case("Quais municípios estão no IBGE do RJ?", Door.CHAT, IntentCategory.RESEARCH, Route.CAPABILITY, "br.geografia"),
+            Case("Converta 100 reais para dólar", Door.CHAT, IntentCategory.RESEARCH, Route.CAPABILITY, "cambio"),
             Case("Abra o catálogo de capacidades.", Door.CHAT, IntentCategory.NAVIGATION, Route.CAPABILITY, "sandbox.info"),
             Case("Calcule 220V × 10A.", Door.CHAT, IntentCategory.CALCULATION, Route.CAPABILITY, "chat.respond"),
             Case("Quanto é 15% de 800?", Door.CHAT, IntentCategory.CALCULATION, Route.CAPABILITY, "chat.respond"),
@@ -34,7 +41,10 @@ class IntentEnvelopeTest {
             Case("Execute esse código.", Door.CHAT, IntentCategory.CODE_EXECUTION, Route.CAPABILITY, "sandbox.code"),
             Case("Quero apenas conversar sobre como criar um aplicativo; não quero criar agora", Door.CHAT, IntentCategory.CONVERSATION, Route.CONVERSATION, null),
             Case("Pode começar a desenvolver o app de lista de compras", Door.CREATE, IntentCategory.CREATION, Route.CREATION, "brain.plan", CreatePhase.APPROVED),
-            Case("Tempo hoje em Rio das Ostras", Door.CHAT, IntentCategory.WEATHER, Route.CAPABILITY, "network.research")
+            Case("Tempo hoje em Rio das Ostras", Door.CHAT, IntentCategory.WEATHER, Route.CAPABILITY, "weather"),
+            Case("Como configurar CORS no Ktor", Door.CHAT, IntentCategory.RESEARCH, Route.CAPABILITY, "network.research"),
+            Case("Quando nasceu Ada Lovelace?", Door.CHAT, IntentCategory.RESEARCH, Route.CAPABILITY, "network.research"),
+            Case("Paper sobre Attention Is All You Need", Door.CHAT, IntentCategory.RESEARCH, Route.CAPABILITY, "network.research")
             ,Case("Qual o melhor mecanismo pra criar um app de IPTV?", Door.CHAT, IntentCategory.INFORMATION, Route.CONVERSATION, null)
             ,Case("Como funciona um app de IPTV?", Door.CHAT, IntentCategory.INFORMATION, Route.CONVERSATION, null)
             ,Case("Quais tecnologias posso usar para fazer um app de IPTV?", Door.CHAT, IntentCategory.INFORMATION, Route.CONVERSATION, null)
@@ -61,7 +71,7 @@ class IntentEnvelopeTest {
 
         assertEquals(IntentCategory.WEATHER, envelope.intent)
         assertEquals(Route.CAPABILITY, envelope.route)
-        assertEquals("network.research", envelope.targetCapability)
+        assertEquals("weather", envelope.targetCapability)
         assertEquals("rio das ostras", envelope.entities["location"])
         assertEquals("today", envelope.entities["date"])
     }

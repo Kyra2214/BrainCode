@@ -42,18 +42,9 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun ApiKeysScreen(viewModel: SandboxViewModel) {
     val context = LocalContext.current
-    if (viewModel.apiProviders.isEmpty()) {
-        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            Text(
-                "Catálogo de APIs indisponível (falha ao ler ai_api_catalog.json).",
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
-        return
-    }
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Text(
-            "Só entram aqui APIs com camada gratuita (grátis por tempo indeterminado, créditos promocionais ou free tier) — nada pago.",
+            "Chaves de modelos e serviços de pesquisa são armazenadas cifradas no Android Keystore. Consulte os termos e limites de cada API antes de usar.",
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
         )
@@ -61,6 +52,20 @@ fun ApiKeysScreen(viewModel: SandboxViewModel) {
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            item(key = "brave-search") {
+                BraveSearchKeyCard(
+                    keyValue = viewModel.apiKeyInput(BRAVE_SEARCH_KEY_ID),
+                    onKeyChange = { viewModel.updateApiKeyInput(BRAVE_SEARCH_KEY_ID, it) },
+                    hasStoredKey = viewModel.hasStoredApiKey(BRAVE_SEARCH_KEY_ID),
+                    onSave = { viewModel.saveApiKey(BRAVE_SEARCH_KEY_ID) },
+                    onOpenUrl = { url -> context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+                )
+            }
+            if (viewModel.apiProviders.isEmpty()) {
+                item(key = "catalog-warning") {
+                    Text("Catálogo de modelos indisponível (falha ao ler ai_api_catalog.json).", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
             items(viewModel.apiProviders, key = { it.id }) { provider ->
                 ApiProviderCard(
                     provider = provider,
@@ -73,6 +78,42 @@ fun ApiKeysScreen(viewModel: SandboxViewModel) {
                     onOpenUrl = { url -> context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun BraveSearchKeyCard(
+    keyValue: String,
+    onKeyChange: (String) -> Unit,
+    hasStoredKey: Boolean,
+    onSave: () -> Unit,
+    onOpenUrl: (String) -> Unit
+) {
+    var showKey by remember { mutableStateOf(false) }
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Brave Search", style = MaterialTheme.typography.titleMedium)
+            Text("Pesquisa web estruturada. Sem chave, o app usa DuckDuckGo como fallback. O uso do Brave pode exigir um plano ativo e está sujeito a quotas/limites próprios.", style = MaterialTheme.typography.bodySmall)
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { onOpenUrl("https://api-dashboard.search.brave.com/app/keys") }) { Text("Obter chave") }
+                TextButton(onClick = { onOpenUrl("https://api-dashboard.search.brave.com/documentation") }) { Text("Docs e limites") }
+            }
+            OutlinedTextField(
+                value = keyValue,
+                onValueChange = onKeyChange,
+                label = { Text("Chave Brave Search") },
+                singleLine = true,
+                visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { showKey = !showKey }) { Text(if (showKey) "Ocultar" else "Mostrar") }
+                Button(onClick = onSave, enabled = keyValue.isNotBlank() || hasStoredKey) {
+                    Text(if (keyValue.isBlank() && hasStoredKey) "Remover chave" else "Salvar chave")
+                }
+            }
+            Text(if (hasStoredKey) "Chave salva neste dispositivo." else "Chave opcional; DuckDuckGo continua habilitado sem ela.", style = MaterialTheme.typography.labelSmall)
         }
     }
 }

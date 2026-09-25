@@ -25,8 +25,8 @@ class WebResearchAgent(
         val failures = mutableListOf<FailedSource>()
         val found = mutableListOf<ResearchResult>()
         var providerId = "none"
-        providers.search.forEachIndexed { index, provider ->
-            if (found.size >= request.constraints.maxSources) return@forEachIndexed
+        for ((index, provider) in providers.search.withIndex()) {
+            if (found.size >= request.constraints.maxSources) break
             val outcome = runCatching {
                 provider.search(request.copy(query = safeQuery))
             }.getOrElse { Result.failure(it) }
@@ -40,6 +40,9 @@ class WebResearchAgent(
             }.onFailure { error ->
                 failures += FailedSource("search-$index", safeQuery, error.message ?: "falha de pesquisa")
             }
+            // Cada categoria e fallback é consultado apenas se a etapa anterior
+            // falhou, retornou vazio ou não produziu URL/conteúdo aceitável.
+            if (found.isNotEmpty()) break
         }
         if (found.isEmpty()) return failure(request, started, failures.lastOrNull()?.diagnostic ?: "nenhum provider retornou fonte", failures)
         val distinctDomains = found.mapNotNull { domain(it.url) }.toSet().size
