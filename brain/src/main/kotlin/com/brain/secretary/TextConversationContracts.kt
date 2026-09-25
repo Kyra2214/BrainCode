@@ -15,7 +15,9 @@ data class ConversationResult(
     val status: ConversationStatus,
     val evidence: List<String> = emptyList(),
     val requestId: String = "legacy-request",
-    val prompt: String = ""
+    val prompt: String = "",
+    /** True somente depois de uma execução real do WebResearchAgent. */
+    val researchAttempted: Boolean = false
 )
 
 data class SecretaryEvaluation(val decision: SecretaryDecision, val reason: BlockReason? = null) {
@@ -36,7 +38,9 @@ class DeterministicSecretaryGate {
         val text = result.text.trim()
         if (text.isBlank()) return SecretaryEvaluation(SecretaryDecision.BLOCK, BlockReason.EMPTY_RESPONSE)
         if (result.requestId.isBlank()) return SecretaryEvaluation(SecretaryDecision.BLOCK, BlockReason.NON_USER_FACING_RESPONSE)
-        if (result.status == ConversationStatus.LOCAL_KNOWLEDGE_MISS && recoveryAvailable)
+        if (recoveryAvailable && !result.researchAttempted && result.evidence.any { it == "chat:conversation:local-miss" })
+            return SecretaryEvaluation(SecretaryDecision.BLOCK, BlockReason.LOCAL_KNOWLEDGE_MISS)
+        if (result.status == ConversationStatus.LOCAL_KNOWLEDGE_MISS && recoveryAvailable && !result.researchAttempted)
             return SecretaryEvaluation(SecretaryDecision.BLOCK, BlockReason.LOCAL_KNOWLEDGE_MISS)
         if (prohibitedFallbacks.any { text.contains(it, ignoreCase = true) })
             return SecretaryEvaluation(SecretaryDecision.BLOCK, BlockReason.FALLBACK_RESPONSE)
@@ -46,11 +50,13 @@ class DeterministicSecretaryGate {
             return SecretaryEvaluation(SecretaryDecision.BLOCK, BlockReason.LOCAL_KNOWLEDGE_MISS)
         if (result.status != ConversationStatus.ANSWER_READY && result.status != ConversationStatus.ANSWERED_LOCAL)
             return SecretaryEvaluation(SecretaryDecision.BLOCK, BlockReason.NON_USER_FACING_RESPONSE)
-        val evidenceBackedException = result.evidence.any {
+        val researchExhaustedException = result.researchAttempted &&
+            text.contains("não encontrei fontes confiáveis", ignoreCase = true)
+        val evidenceBackedException = researchExhaustedException || result.evidence.any {
             it == "chat:conversation:local-miss" ||
                 it == "chat:context:read-only" ||
                 it == "chat:research-context-included"
-        }
+        } && (!recoveryAvailable || result.researchAttempted)
         if (result.prompt.isNotBlank() && !evidenceBackedException && !isSemanticallyRelated(result.prompt, text))
             return SecretaryEvaluation(SecretaryDecision.BLOCK, BlockReason.INCOMPLETE_RESPONSE)
         return SecretaryEvaluation(SecretaryDecision.ACCEPT)

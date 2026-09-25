@@ -42,4 +42,19 @@ class ResponseComposerTest {
         assertEquals(true, result.text.contains("app de notas"))
         assertTrue(result.evidence.contains("chat:context:read-only"))
     }
+
+    @Test
+    fun `sintese meteorologica descarta cookie menu e idioma e prioriza dado concreto`() {
+        val raw = "Aceitar cookies | Português | English | Login. Macaé Weather Forecast. " +
+            "Em Macaé, a temperatura é de 28°C e o céu está parcialmente nublado. " +
+            "Assine nossa newsletter."
+
+        val result = ResponseComposer(clock).compose("previsão do tempo em Macaé", research = raw)
+
+        assertTrue(result.text.contains("28°C"))
+        assertTrue(result.text.contains("nublado", ignoreCase = true))
+        assertFalse(result.text.contains("cookie", ignoreCase = true))
+        assertFalse(result.text.contains("login", ignoreCase = true))
+        assertFalse(result.text.contains("English", ignoreCase = true))
+    }
 }

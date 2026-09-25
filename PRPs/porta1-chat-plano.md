@@ -6,7 +6,7 @@ Implementar a entrada conversacional real da Porta 1 sem permitir criação de p
 
 ## Contratos
 
-`chat.respond` é uma capability local e somente leitura. O executor devolve resposta não vazia, evidências de origem local ou de dependência de pesquisa e proveniência explícita. O contexto da sessão é fornecido por leitura; o executor não altera memória, workspace ou sessão. O `PlanningAgent` materializa um `PlanningArtifact` persistente com ideia, requisitos, decisões, pendências, referências e assumptions.
+`chat.respond` é uma capability local e somente leitura. O executor devolve resposta não vazia, evidências de origem local ou de dependência de pesquisa e proveniência explícita. O contexto da sessão é fornecido por leitura; o executor não altera memória, workspace ou sessão. O `PlanningAgent` materializa um `PlanningArtifact` persistente com ideia, requisitos, decisões, pendências, referências e assumptions. Uma resposta de conhecimento ausente sem tentativa prévia de pesquisa, quando `researchFallback` está disponível e a Porta não restringe Web, é saída inválida: deve reprovar no `ChatResponseExecutorTest`/gate do Secretário, não basta ser não vazia e ter proveniência.
 
 O `DoorAwareSplitter` preserva a pesquisa autorizada como dependência e cria o passo conversacional depois dela. Restrições `NO_WEB`, `NO_PRODUCE` e `NO_EXECUTE` continuam sob autoridade da `DoorPolicy`. Quando o `RequirementGate` retornar `NEEDS_CLARIFICATION` na Porta 1, o controller cria um `ClarificationQuestion`, emite `ClarificationRequested` e executa um passo `chat.respond` com pergunta explícita.
 

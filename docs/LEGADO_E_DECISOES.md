@@ -325,3 +325,9 @@ registrar aqui só para decisão do dono:
 - Enquanto D7 não for decidido, nenhum `LICENSE` foi adicionado à raiz nesta fase — decisão
   de licenciamento de projeto não é algo para presumir. Validar a escolha final com
   advogado antes de qualquer distribuição pública do APK.
+
+## Correções do Secretário e do ciclo de chat — 24/09/2026
+
+A auditoria da Porta 1 identificou três problemas relacionados. Primeiro, `ResponseComposer.synthesizeResearch()` aceitava boilerplate de páginas web — cookies, menus, idiomas e login — quando esses trechos continham termos do tópico. A síntese agora rejeita padrões de navegação/UI, prioriza sentenças com dados concretos em perguntas factuais e retorna uma resposta neutra quando não há conteúdo limpo relacionado. Segundo, o relatório completo de verification/critique/revision/readiness/evidence era publicado como `ThreadEvent.Report` no mesmo feed das mensagens do chat. `SandboxViewModel.publishCycleStages()` agora mantém esse relatório em `diagnosticsReport`, reservado ao painel de diagnóstico; o feed conversacional conserva mensagens e steps de progresso.
+
+Por fim, o classificador informacional deixou de ser uma lista de permissões baseada no início e na forma textual da frase. Para um `localMiss`, a recuperação passou a depender de `researchFallback` disponível, ausência de `NO_WEB` e ausência de clarification; saudações e comandos explícitos continuam excluídos. `ConversationResult.researchAttempted` registra se o `WebResearchAgent` realmente foi executado. O `DeterministicSecretaryGate` bloqueia `chat:conversation:local-miss` sem essa tentativa quando a recuperação está disponível e somente libera uma resposta honesta após a rota de pesquisa ter sido consumida. Regressões foram adicionadas em `ResponseComposerTest`, `ChatResponseExecutorTest`, `InformationalQuestionClassifierTest` e `TextConversationContractsTest`. A solicitação de origem está preservada em `correcao-bugs-secretario-chat.md`.

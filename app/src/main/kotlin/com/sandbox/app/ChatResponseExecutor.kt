@@ -16,7 +16,6 @@ import com.brain.secretary.DeterministicSecretaryGate
 import com.brain.secretary.SecretaryDecision
 import com.brain.secretary.UserResponse
 import com.brain.secretary.ConversationCandidate
-import com.brain.text.InformationalQuestionClassifier
 import com.brain.conversation.ConversationMetrics
 import com.brain.conversation.ConversationKnowledgeFlow
 import com.brain.conversation.ConversationInterpreter
@@ -74,8 +73,10 @@ class ChatResponseExecutor(
             ConversationResponse(it.answer, "knowledge.learned", evidence = listOf("knowledge:validated", "knowledge:${it.provenance.name}"))
         } ?: conversationEngine?.respond(prompt, context)
         val localMiss = localResponse == null || localResponse.intent == "knowledge.unknown"
-        val informational = isInformationalQuestion(prompt)
-        val shouldRecover = suppliedResearch.isBlank() && !isClarification && localMiss && informational && researchFallback != null
+        val noWebRestriction = request.parameters.values.any { value ->
+            value.contains("NO_WEB", ignoreCase = true) || value.contains("no web", ignoreCase = true)
+        }
+        val shouldRecover = suppliedResearch.isBlank() && !isClarification && !noWebRestriction && localMiss && researchFallback != null
         structuredRecall?.structure?.let { evidence += "chat:llm:interpreter" }
         var researchResult: ResearchRunResult? = null
 
@@ -135,8 +136,18 @@ class ChatResponseExecutor(
             }
         }
         evidence += "chat:request:$requestId"
-        val conversation = ConversationResult(finalText, status, evidence, requestId = requestId, prompt = prompt)
-        val evaluation = secretaryGate.evaluate(conversation, recoveryAvailable = shouldRecover && researchResult == null)
+        val conversation = ConversationResult(
+            finalText,
+            status,
+            evidence,
+            requestId = requestId,
+            prompt = prompt,
+            researchAttempted = researchResult != null
+        )
+        val evaluation = secretaryGate.evaluate(
+            conversation,
+            recoveryAvailable = researchFallback != null && !noWebRestriction && !isClarification
+        )
         if (evaluation.decision != SecretaryDecision.ACCEPT) {
             metrics.recordSecretary("content", accepted = false)
             return ActionExecution(
@@ -175,9 +186,6 @@ class ChatResponseExecutor(
             userResponse = promoted.copy(conversationId = request.parameters["conversationId"])
         )
     }
-
-    private fun isInformationalQuestion(prompt: String): Boolean =
-        InformationalQuestionClassifier.isRecoverable(prompt)
 
     private fun knowledgeCycleMemory(cycle: KnowledgeLearningCycle): com.brain.memory.KnowledgeMemory =
         cycle.memoryForIntegration()

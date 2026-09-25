@@ -1258,7 +1258,9 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             appendLine("evidences=${(post.verification.evidenceIds + evidence).distinct().joinToString().ifBlank { "nenhuma" }}")
             appendLine("artefatos=${cycle.passos.count { it.resultado != null }} resultado(s), ${cycle.passos.sumOf { it.evidencias.size }} evidência(s) de execução")
         }
-        appendThreadEvent(ThreadEvent.Report("Resultado / evidências", report))
+        // O relatório completo pertence ao painel de diagnóstico. Não o publique
+        // no feed conversacional, onde só devem aparecer USER/ASSISTANT/STEP.
+        diagnosticsReport = report
         stage(if (post.aprovado) BrainUiStage.READY else BrainUiStage.FAILED, if (post.aprovado) "READY" else "FAILED")
     }
     fun clearChat() { chatMessages.clear() }

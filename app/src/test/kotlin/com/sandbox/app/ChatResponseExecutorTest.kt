@@ -165,6 +165,22 @@ class ChatResponseExecutorTest {
         assertTrue(result.evidence.contains("chat:secretary:accept"))
     }
 
+    @Test
+    fun `local miss fora do molde de pergunta tambem pesquisa`() {
+        var calls = 0
+        val research = WebResearchAgent(WebProviderSet(search = listOf(SearchProvider { request ->
+            calls++
+            assertTrue(request.query.contains("Android", ignoreCase = true))
+            Result.success(listOf(ResearchResult("q", "test", "Android", "https://developer.android.com", "Android é um sistema operacional móvel", java.time.Instant.now(), .9)))
+        })))
+        val result = ChatResponseExecutor(conversationEngine = engine(), researchFallback = research)
+            .execute(request("Tecnologia usada no Android moderno"), capability, decision)
+
+        assertTrue(result.success)
+        assertEquals(1, calls)
+        assertTrue(result.provenance.contains("research:auto-fallback-after-local-miss"))
+    }
+
     private fun engine(): NoInferenceConversationEngine = NoInferenceConversationEngine(assets = { path ->
         java.io.File("src/main/assets/$path").readText()
     })

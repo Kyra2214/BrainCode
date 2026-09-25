@@ -90,14 +90,38 @@ class ResponseComposer(
             .trim()
         val sentences = cleaned.split(Regex("(?<=[.!?])\\s+|\\n+"))
             .map { it.trim() }
-            .filter { it.isNotBlank() }
-        val related = sentences
-            .filter { topicTerms.isEmpty() || topicTerms.any { term -> it.lowercase(Locale.ROOT).contains(term) } }
-            .take(4)
-        val selected = related.ifEmpty { sentences.take(4) }
+            .filter { it.isNotBlank() && !isBoilerplate(it) }
+        val related = sentences.filter { sentence ->
+            topicTerms.isEmpty() || topicTerms.any { term -> sentence.lowercase(Locale.ROOT).contains(term) }
+        }
+        val factual = looksLikeFactualQuestion(prompt.lowercase(Locale.ROOT)) ||
+            Regex("(?i)\\b(tempo|clima|temperatura|previsão|previsao|cotação|cotacao|preço|preco|data|horário|horario)\\b").containsMatchIn(prompt)
+        val concrete = related.filter(::hasConcreteFact)
+        val selected = when {
+            factual && concrete.isNotEmpty() -> concrete.take(4)
+            related.isNotEmpty() -> related.take(4)
+            concrete.isNotEmpty() -> concrete.take(2)
+            // Pesquisa já autorizada pode trazer um resumo sem repetir o termo
+            // literal do prompt; mantenha no máximo uma sentença limpa, nunca o
+            // conjunto bruto de menus/boilerplate.
+            else -> sentences.take(1)
+        }
         return if (selected.isEmpty()) "Encontrei fontes, mas não há conteúdo suficientemente relacionado ao tema para responder com segurança."
         else selected.joinToString(" ").take(1600)
     }
+
+    private fun isBoilerplate(sentence: String): Boolean {
+        val normalized = sentence.lowercase(Locale.ROOT).replace(Regex("\\s+"), " ").trim()
+        if (normalized.length < 3) return true
+        val uiPattern = Regex("(?i)\\b(cookie|cookies|privacidade|privacy|termos de uso|terms of use|aceitar|accept|recusar|reject|login|log in|sign in|sign up|inscreva-se|menu|navigation|navegação|idioma|language|home|subscribe|assine|advertise|anuncie|javascript)\\b")
+        val navigationLike = normalized.count { it == '|' || it == '›' || it == '·' } >= 2 ||
+            (normalized.split(Regex("[,|]")).size >= 5 && normalized.length < 180)
+        return uiPattern.containsMatchIn(normalized) || navigationLike
+    }
+
+    private fun hasConcreteFact(sentence: String): Boolean =
+        Regex("(?i)(\\d+(?:[.,]\\d+)?\\s*(?:°|graus|c|f|km/h|mm|%|mb|gb|anos?|dias?|horas?)?|\\b(?:hoje|amanhã|ontem|segunda|terça|quarta|quinta|sexta|sábado|domingo)\\b|\\b20\\d{2}\\b)")
+            .containsMatchIn(sentence)
     private fun contextHasContent(context: ConversationContext): Boolean =
         context.idea != null || context.requirements.isNotEmpty() || context.decisions.isNotEmpty() || context.pending.isNotEmpty()
 
