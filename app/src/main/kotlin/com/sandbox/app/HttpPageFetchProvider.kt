@@ -74,24 +74,84 @@ class HttpPageFetchProvider(
 }
 
 /**
- * Extrai texto legível de um HTML bruto: remove `<script>`/`<style>`/`<noscript>`
- * inteiros (não só as tags — o *conteúdo* deles não é texto de página),
- * depois as demais tags, decodifica entidades e colapsa espaços em branco.
+ * Extrai texto legível de um HTML bruto.
  *
  * Extração leve por regex, na mesma linha de `DuckDuckGoWebResearchProvider`:
  * evita depender de um parser HTML completo (custo de RAM/APK em Android).
- * Não é um extrator de "conteúdo principal" (não remove nav/rodapé/menus) —
- * é suficiente para o downstream (`ResponseComposer.synthesizeResearch`, que
- * já filtra frases por termos do tópico) encontrar o dado pedido em meio ao
- * texto da página, o que o snippet da SERP nunca poderia conter.
+ *
+ * Duas falhas foram observadas em produção com esta abordagem simplista e
+ * ambas são corrigidas aqui:
+ *
+ * 1) Navegação, menus, TOC de Wikipédia, rodapé etc. eram incluídos junto do
+ *    conteúdo principal — regex não distinguia "artigo" de "chrome da página".
+ *    Corrige-se removendo blocos inteiros de tags estruturais conhecidas
+ *    (`nav`, `header`, `footer`, `aside`, `form`) e de qualquer elemento cujo
+ *    `id`/`class` indique explicitamente ser navegação/menu/TOC/propaganda/etc.
+ *
+ * 2) Ao remover tags sem inserir nenhum separador de frase, itens de menu
+ *    adjacentes (ex.: `<li>Clima</li><li>Notícias</li>`) viravam uma única
+ *    "frase" gigante sem pontuação — o que fazia `ResponseComposer.
+ *    synthesizeResearch` (que filtra por frase) tratar a página inteira como
+ *    uma frase só, incapaz de aplicar seu próprio filtro de boilerplate.
+ *    Corrige-se inserindo um ponto final ao fechar tags de bloco (`p`, `li`,
+ *    `div`, `tr`, `h1`-`h6`, `br` etc.) antes de descartar as tags, e dando
+ *    preferência ao texto dentro de `<p>` quando houver parágrafos
+ *    suficientes — a heurística mais confiável para "isto é o artigo, não o
+ *    menu" sem um parser de árvore DOM completo.
+ *
+ * Continua sem tentar ser um extrator perfeito de "conteúdo principal": o
+ * downstream (`ResponseComposer.synthesizeResearch`) ainda filtra frases por
+ * termos do tópico e por boilerplate residual. Isto só garante que ele
+ * receba frases de verdade para filtrar, em vez de um blob único.
  */
 internal object ReadablePageTextExtractor {
-    private val blocosSemTexto = Regex("(?is)<(script|style|noscript)[^>]*>.*?</\\1>")
+    private val blocosSemTexto = Regex("(?is)<(script|style|noscript|template)[^>]*>.*?</\\1>")
+
+    /** Tags cujo conteúdo inteiro é "chrome" da página, nunca conteúdo do artigo. */
+    private val tagsEstruturais = listOf("nav", "header", "footer", "aside", "form", "button", "select")
+    private val blocosEstruturais = tagsEstruturais.map { tag ->
+        Regex("(?is)<$tag\\b[^>]*>.*?</$tag>")
+    }
+
+    /** Elementos de qualquer tag cujo id/class denuncia navegação/menu/propaganda/etc. */
+    private val palavrasRuido = listOf(
+        "nav", "menu", "sidebar", "footer", "header", "cookie", "banner",
+        "breadcrumb", "toc", "table-of-contents", "widget", "advert", "\\bads\\b",
+        "subscribe", "newsletter", "social-share", "share-buttons", "login",
+        "signup", "infobox", "navbox", "catlinks", "printfooter", "editsection",
+        "portal", "mw-portlet", "vector-menu", "site-header", "site-footer"
+    ).joinToString("|")
+    private val blocoComIdOuClasseDeRuido = Regex(
+        "(?is)<([a-zA-Z0-9]+)\\b(?=[^>]*\\b(?:id|class)\\s*=\\s*\"[^\"]*(?:$palavrasRuido)[^\"]*\")[^>]*>.*?</\\1>"
+    )
+
+    /** Fechamentos de tags de bloco viram fim de frase antes de as tags serem descartadas. */
+    private val fechamentosDeBloco = Regex(
+        "(?is)</(p|li|div|tr|td|th|h1|h2|h3|h4|h5|h6|section|article|blockquote)\\s*>|<br\\s*/?>"
+    )
+
+    private val paragrafos = Regex("(?is)<p\\b[^>]*>(.*?)</p>")
     private const val MAX_CHARS = 20_000
+    private const val MIN_CHARS_PARA_USAR_PARAGRAFOS = 200
 
     fun extract(html: String): String {
-        val semBlocosOpacos = blocosSemTexto.replace(html, " ")
-        val texto = HtmlTextDecoder.decode(semBlocosOpacos)
-        return texto.replace(Regex("\\s+"), " ").trim().take(MAX_CHARS)
+        var semRuido = blocosSemTexto.replace(html, " ")
+        blocosEstruturais.forEach { semRuido = it.replace(semRuido, " ") }
+        // Aplicado repetidamente: remoção de blocos aninhados (ex.: div de ruído dentro de outra)
+        // não é resolvida numa única passada por um regex não-recursivo.
+        repeat(3) { semRuido = blocoComIdOuClasseDeRuido.replace(semRuido, " ") }
+
+        val textoDosParagrafos = paragrafos.findAll(semRuido)
+            .joinToString(" ") { HtmlTextDecoder.decode(it.groupValues[1]) }
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+        val texto = if (textoDosParagrafos.length >= MIN_CHARS_PARA_USAR_PARAGRAFOS) {
+            textoDosParagrafos
+        } else {
+            val comFimDeFrase = fechamentosDeBloco.replace(semRuido) { ". " }
+            HtmlTextDecoder.decode(comFimDeFrase).replace(Regex("\\s+"), " ").trim()
+        }
+        return texto.take(MAX_CHARS)
     }
 }

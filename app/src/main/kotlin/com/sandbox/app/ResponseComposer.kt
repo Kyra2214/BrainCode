@@ -122,7 +122,29 @@ class ResponseComposer(
         val uiPattern = Regex("(?i)\\b(cookie|cookies|privacidade|privacy|termos de uso|terms of use|aceitar|accept|recusar|reject|login|log in|sign in|sign up|inscreva-se|menu|navigation|navegação|idioma|language|home|subscribe|assine|advertise|anuncie|javascript)\\b")
         val navigationLike = normalized.count { it == '|' || it == '›' || it == '·' } >= 2 ||
             (normalized.split(Regex("[,|]")).size >= 5 && normalized.length < 180)
-        return uiPattern.containsMatchIn(normalized) || navigationLike
+        return uiPattern.containsMatchIn(normalized) || navigationLike || looksLikeMenuGlob(sentence)
+    }
+
+    /**
+     * Rede de segurança para quando a extração de HTML falha em separar frases
+     * (ex.: itens de menu concatenados viram uma única "frase" sem pontuação,
+     * como "Previsão do Tempo Clima Notícias Agroclima Mapas Voltar Agora
+     * Hoje..."). Sem verbo, sem conectivos, e quase todo token capitalizado —
+     * características de rótulos de UI concatenados, não de prosa real.
+     */
+    private fun looksLikeMenuGlob(sentence: String): Boolean {
+        val tokens = sentence.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+        if (tokens.size < 8) return false
+        val palavrasFuncionais = setOf(
+            "de", "da", "do", "das", "dos", "e", "ou", "que", "para", "com", "em", "no", "na",
+            "nos", "nas", "um", "uma", "uns", "umas", "os", "as", "é", "foi", "são", "está",
+            "the", "and", "or", "of", "in", "on", "is", "are", "was", "to", "a", "an"
+        )
+        val comConectivo = tokens.count { it.lowercase(Locale.ROOT).trim(',', '.', ';') in palavrasFuncionais }
+        val capitalizados = tokens.count { it.isNotEmpty() && it[0].isUpperCase() }
+        val proporcaoCapitalizada = capitalizados.toDouble() / tokens.size
+        val proporcaoConectivos = comConectivo.toDouble() / tokens.size
+        return proporcaoCapitalizada >= 0.6 && proporcaoConectivos <= 0.05
     }
 
     private fun hasConcreteFact(sentence: String): Boolean =
