@@ -28,7 +28,7 @@ object ContentRelevanceScorer {
         // Sem removê-los, consultas como "tempo em Macaé hoje" viram 1/3
         // de relevância mesmo quando a página contém a previsão correta.
         "tempo", "clima", "temperatura", "previsao", "previsão", "hoje", "agora",
-        "amanha", "amanhã", "atual", "momento", "macaé", "macae"
+        "amanha", "amanhã", "atual" , "momento"
     )
 
     /**
