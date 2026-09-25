@@ -95,7 +95,7 @@ class ChatResponseExecutor(
         val status: ConversationStatus
         when {
             researchResult?.answer?.isNotBlank() == true -> {
-                val composed = composer.compose(prompt, research = researchResult.answer, context = context, localLookupCompleted = true)
+                val researchContext = researchResult.sources\n                    .map { it.relevantContent.trim() }\n                    .filter { it.isNotBlank() }\n                    .joinToString("\n")\n                    .take(12_000)\n                val composed = composer.compose(prompt, research = researchContext, context = context, localLookupCompleted = true)
                 finalText = composed.text
                 evidence += "chat:conversation:synthesis"
                 status = ConversationStatus.ANSWER_READY
