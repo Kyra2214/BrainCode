@@ -84,9 +84,7 @@ sealed interface ThreadEvent {
         val promptActionId: String? = null,
         val contentType: GeneratedContentType = detectGeneratedContentType(text),
         val researchSources: List<ResearchSourceUi> = emptyList(),
-        val promptReasoning: PromptReasoningUi? = null,
-        val validationWarning: String? = null,
-        val validationPassed: Boolean? = null
+        val promptReasoning: PromptReasoningUi? = null
     ) : ThreadEvent
     data class Terminal(val result: SandboxExecutionResult, val execution: com.sandbox.runtime.ExecutionLog?) : ThreadEvent
     data class Approval(val id: String) : ThreadEvent
