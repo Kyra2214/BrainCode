@@ -106,12 +106,13 @@ class ResponseComposer(
             factual && concrete.isNotEmpty() -> concrete.take(4)
             related.isNotEmpty() -> related.take(4)
             concrete.isNotEmpty() -> concrete.take(2)
-            // Pesquisa já autorizada pode trazer um resumo sem repetir o termo
-            // literal do prompt; mantenha no máximo uma sentença limpa, nunca o
-            // conjunto bruto de menus/boilerplate.
-            else -> sentences.take(1)
+            // Nunca use a primeira sentença como fallback: páginas podem começar
+            // com menus, contexto editorial ou conteúdo fora do tema. Sem evidência
+            // relacionada, a resposta deve permanecer inconclusiva para o gate tratar
+            // a pesquisa como insuficiente, em vez de inventar uma resposta por posição.
+            else -> emptyList()
         }
-        return if (selected.isEmpty()) "Encontrei fontes, mas não há conteúdo suficientemente relacionado ao tema para responder com segurança."
+        return if (selected.isEmpty()) "Não encontrei informação suficientemente relacionada ao tema para responder com segurança."
         else selected.joinToString(" ").take(1600)
     }
 
