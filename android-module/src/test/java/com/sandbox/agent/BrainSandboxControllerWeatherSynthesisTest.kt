@@ -65,7 +65,10 @@ class BrainSandboxControllerWeatherSynthesisTest {
 
             val cycle = controller.executeObjective("Qual o tempo em Macaé RJ", "run-weather")
 
-            assertTrue("ciclo deveria aprovar a consulta meteorológica", cycle.aprovado)
+            assertTrue(
+                "ciclo deveria aprovar a consulta meteorológica: passos=${cycle.passos}, resposta=${cycle.resposta}",
+                cycle.aprovado
+            )
             assertEquals(listOf("weather"), cycle.passos.map { it.capacidade })
             assertNotNull("resposta meteorológica não pode ficar nula", cycle.resposta)
             assertEquals("Agora em Macaé - Rio de Janeiro: 28°C, parcialmente nublado.", cycle.resposta)
