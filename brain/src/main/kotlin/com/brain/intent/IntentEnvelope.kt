@@ -102,12 +102,15 @@ class BrainInputInterpreter(
         require(raw.isNotBlank()) { "texto não pode ser vazio" }
         val normalized = raw.lowercase(Locale.ROOT)
         val orderIntent = designatedIntent ?: secretary.classify(raw)
-        val weather = isWeather(normalized)
         val brazilData = isBrazilData(normalized)
         val brazilEconomy = isBrazilEconomy(normalized)
         val brazilGeography = isBrazilGeography(normalized)
         val currency = isCurrencyConversion(normalized)
         val specificLiveData = brazilData || brazilEconomy || brazilGeography || currency
+        // O léxico de tempo real também contém termos genéricos como "cotação",
+        // "preço" e "valor atual". Dados estruturados/economia têm precedência
+        // para evitar que consultas como "taxa Selic" virem WEATHER.
+        val weather = !specificLiveData && isWeather(normalized)
         val calculation = isCalculation(normalized) && !specificLiveData
         val navigation = isNavigation(normalized)
         val research = !weather && !calculation && !navigation &&
