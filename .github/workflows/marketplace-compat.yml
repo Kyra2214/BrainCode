@@ -61,7 +61,7 @@ jobs:
 
       - name: Upload Ed25519 instrumentation reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: BrainCode-marketplace-compat-api${{ matrix.api-level }}-${{ github.sha }}
           path: |
