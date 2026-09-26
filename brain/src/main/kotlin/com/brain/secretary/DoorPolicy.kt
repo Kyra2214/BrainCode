@@ -61,10 +61,12 @@ object DoorPolicy {
 
     private const val SPECIALIST_EXECUTE = com.brain.capability.SpecialistCapabilities.EXECUTE_CAPABILITY
 
-    private val CHAT_CAPABILITIES = setOf("brain.analyze", "chat.respond", "sandbox.diagnose", "network.research", "sandbox.info", "sandbox.health")
-    private val PROMPT_CAPABILITIES = setOf("brain.analyze", "chat.respond", "sandbox.diagnose", "network.research", "prompt.library.write", "prompt.library.generate", "sandbox.info")
+    private val PUBLIC_DATA_CAPABILITIES = setOf("weather", "br.dados", "br.economia", "br.geografia", "cambio")
+
+    private val CHAT_CAPABILITIES = setOf("brain.analyze", "chat.respond", "sandbox.diagnose", "network.research", "sandbox.info", "sandbox.health") + PUBLIC_DATA_CAPABILITIES
+    private val PROMPT_CAPABILITIES = setOf("brain.analyze", "chat.respond", "sandbox.diagnose", "network.research", "prompt.library.write", "prompt.library.generate", "sandbox.info") + PUBLIC_DATA_CAPABILITIES
     private val CREATE_BASE_CAPABILITIES = setOf(
         "brain.analyze", "chat.respond", "sandbox.diagnose", "network.research", "sandbox.info", "sandbox.health",
         "brain.requirements", "brain.plan"
-    )
+    ) + PUBLIC_DATA_CAPABILITIES
 }

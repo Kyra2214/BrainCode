@@ -4,13 +4,44 @@ import java.util.Locale
 
 /** Transforma perguntas conversacionais em consultas orientadas à tarefa, sem LLM. */
 object ResearchQueryRewriter {
+
+    // Trechos de "conversa" que atrapalham a busca e não fazem parte do tema em si.
+    private val FILLERS = listOf(
+        "quero fazer", "quero criar", "quero saber sobre", "quero saber",
+        "quero entender como", "quero entender", "quero aprender sobre",
+        "me explique sobre", "me explique", "me explica sobre", "me explica",
+        "explique sobre", "explique", "explica sobre", "explica",
+        "fale sobre", "fala sobre", "gostaria de saber sobre", "gostaria de saber",
+        "preciso saber sobre", "preciso saber", "pode me explicar", "pode explicar",
+        "oque preciso pra fazer", "o que preciso para fazer", "o que preciso pra fazer",
+        "não quero produzir agora", "nao quero produzir agora",
+        "não quero produzir", "nao quero produzir",
+        "só quero saber sobre", "so quero saber sobre",
+        "apenas quero saber sobre", "por favor"
+    )
+
     fun rewrite(query: String): String {
-        val normalized = query.lowercase(Locale.ROOT).trim()
+        val cleaned = stripFillers(query)
+        val normalized = cleaned.lowercase(Locale.ROOT).trim()
         return when {
             normalized.contains("como funciona") || normalized.startsWith("como ") ->
-                "$query architecture components implementation and technical explanation"
-            else -> "$query explanation definition context and relevant facts"
+                "$cleaned arquitetura, componentes e funcionamento técnico"
+            else ->
+                "$cleaned explicação, definição e contexto"
         }
+    }
+
+    /** Remove frases de "conversa" (verbos + intenção) mantendo o assunto real. */
+    private fun stripFillers(query: String): String {
+        var result = query
+        for (filler in FILLERS) {
+            result = result.replace(Regex("(?i)\\b${Regex.escape(filler)}\\b"), " ")
+        }
+        return result
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .trim(',', '.', ';', '!', '?')
+            .ifBlank { query.trim() } // nunca deixa a busca vazia
     }
 }
 

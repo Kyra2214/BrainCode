@@ -22,7 +22,7 @@ class DuckDuckGoWebResearchProvider(
         val sanitizada = QuerySanitizer.sanitizar(query)
         require(sanitizada.isNotBlank()) { "consulta vazia após sanitização" }
         val encoded = URLEncoder.encode(sanitizada, "UTF-8")
-        val connection = (URL("https://html.duckduckgo.com/html/?q=$encoded").openConnection() as HttpURLConnection).apply {
+        val connection = (URL("https://html.duckduckgo.com/html/?q=$encoded&kl=br-pt").openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = timeoutMs
             readTimeout = timeoutMs
