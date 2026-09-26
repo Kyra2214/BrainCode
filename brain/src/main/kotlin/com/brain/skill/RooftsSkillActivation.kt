@@ -36,7 +36,8 @@ object RooftsSkillActivationPlanner {
         objective: String,
         skills: List<RooftsSkill>,
         max: Int = RooftsSkillSelector.MAX_SKILLS,
-        permissionApproval: (Set<String>) -> Boolean = { it.isEmpty() }
+        permissionApproval: (Set<String>) -> Boolean = { it.isEmpty() },
+        historicalSuccessRate: (String) -> Double = { 0.5 }
     ): RooftsSkillActivationPlan {
         val selected = RooftsSkillSelector.select(objective, skills, max)
         return RooftsSkillActivationPlan(
@@ -47,7 +48,7 @@ object RooftsSkillActivationPlanner {
                 RooftsSkillActivation(
                     runId = runId,
                     skillId = skill.id,
-                    confidence = confidence(objective, skill),
+                    confidence = confidence(objective, skill, historicalSuccessRate("skill:${skill.id}")),
                     reason = if (skill.triggers.isEmpty()) "description/default selector" else "declared trigger or selector signal",
                     resourcesRequested = skill.resources,
                     permissionsRequested = permissions,
@@ -61,11 +62,13 @@ object RooftsSkillActivationPlanner {
         )
     }
 
-    private fun confidence(objective: String, skill: RooftsSkill): Int {
+    internal fun confidence(objective: String, skill: RooftsSkill, historicalSuccessRate: Double = 0.5): Int {
         val trigger = skill.triggers.any { objective.contains(it, ignoreCase = true) }
         val description = skill.description.split(Regex("\\s+")).count { word ->
             word.length >= 4 && objective.contains(word.trim('.', ',', ':'), ignoreCase = true)
         }
-        return (if (trigger) 80 else 50) + minOf(description * 5, 20)
+        val lexical = (if (trigger) 80 else 50) + minOf(description * 5, 20)
+        val historical = historicalSuccessRate.coerceIn(0.0, 1.0)
+        return (lexical + ((historical - 0.5) * 20.0).toInt()).coerceIn(0, 100)
     }
 }

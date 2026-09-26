@@ -14,6 +14,7 @@
 // existe mais como arquivo separado.
 plugins {
     id("org.jetbrains.kotlin.jvm")
+    jacoco
 }
 
 java {
@@ -40,4 +41,16 @@ dependencies {
     // módulo JVM correspondente.
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
+}
+
+tasks.test {
+    finalizedBy(tasks.jacocoTestReport)
+}
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
 }

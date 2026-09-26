@@ -56,4 +56,24 @@ class RooftsSkillActivationTest {
         assertEquals(1, summary.passed)
         assertEquals(1.0, summary.score, 0.0)
     }
+
+    @Test
+    fun `confianca incorpora historico da estrategia da skill`() {
+        val skill = RooftsSkill(
+            id = "safe-review",
+            description = "Review code changes.",
+            body = "body",
+            triggers = setOf("review")
+        )
+
+        val semHistorico = RooftsSkillActivationPlanner.plan("run-3", "review this code", listOf(skill))
+        val comHistorico = RooftsSkillActivationPlanner.plan(
+            "run-4",
+            "review this code",
+            listOf(skill),
+            historicalSuccessRate = { strategy -> if (strategy == "skill:safe-review") 1.0 else 0.5 }
+        )
+
+        assertTrue(comHistorico.activations.single().confidence > semHistorico.activations.single().confidence)
+    }
 }

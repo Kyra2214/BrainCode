@@ -308,7 +308,10 @@ class CicloExecucaoPlano(
                 sucesso = sucesso,
                 tentativas = tentativas,
                 elapsedMs = System.currentTimeMillis() - startedAt,
-                erro = gatewayExecution?.error
+                erro = gatewayExecution?.error,
+                skillIds = gatewayExecution?.evidence.orEmpty()
+                    .mapNotNull { evidence -> evidence.substringAfter("skill-activation:", "").substringBefore(":").takeIf { it.isNotBlank() } }
+                    .toSet()
             )
             if (!sucesso) {
                 // Diagnóstico/reparo é best-effort: uma falha do próprio doutor (ex.: I/O do EventStore)
@@ -441,7 +444,8 @@ class CicloExecucaoPlano(
         sucesso: Boolean,
         tentativas: Int,
         elapsedMs: Long,
-        erro: String?
+        erro: String?,
+        skillIds: Set<String> = emptySet()
     ) {
         val target = memory ?: return
         val resultado = when {
@@ -449,19 +453,22 @@ class CicloExecucaoPlano(
             tentativas > 1 -> ResultadoExperiencia.CORRIGIDO_APOS_FALHA
             else -> ResultadoExperiencia.SUCESSO
         }
-        val experiencia = Experiencia(
-            id = "$runId:$stepId",
-            tarefaId = stepId,
-            problema = objetivo,
-            estrategiaUsada = estrategia,
-            promptUsado = null,
-            resultado = resultado,
-            custoEstimado = 0.0,
-            tempoTotalMs = elapsedMs,
-            erros = erro?.let { listOf(safeError(it)) } ?: emptyList(),
-            registradoEm = java.time.Instant.now()
-        )
-        runCatching { await { target.registrar(experiencia) } }
+        val strategies = skillIds.map { "skill:$it" }.ifEmpty { listOf(estrategia) }
+        strategies.forEachIndexed { index, strategy ->
+            val experiencia = Experiencia(
+                id = "$runId:$stepId:$index",
+                tarefaId = stepId,
+                problema = objetivo,
+                estrategiaUsada = strategy,
+                promptUsado = null,
+                resultado = resultado,
+                custoEstimado = 0.0,
+                tempoTotalMs = elapsedMs,
+                erros = erro?.let { listOf(safeError(it)) } ?: emptyList(),
+                registradoEm = java.time.Instant.now()
+            )
+            runCatching { await { target.registrar(experiencia) } }
+        }
     }
 
     private fun safeError(error: String?): String = error.orEmpty()

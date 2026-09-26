@@ -42,6 +42,7 @@ import com.brain.secretary.SecretaryState
 import com.brain.prompt.InMemoryPromptLibrary
 import com.brain.prompt.PromptLibraryLoader
 import com.brain.memory.FileKnowledgeMemory
+import com.brain.memory.FileExperienceMemory
 import com.brain.memory.KnowledgeLearningCycle
 import com.brain.events.FileEventStore
 import com.sandbox.sandbox.Project
@@ -53,6 +54,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runBlocking
 import com.brain.research.ResearchResult
 import org.json.JSONArray
 import org.json.JSONObject
@@ -755,7 +757,14 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     gateway = brainApiGateway,
                     workspace = preparedPlatform.workspace,
                     activeProjectName = { workspaceProjectName },
-                    rooftsSkillCatalog = runCatching { RooftsSkillLoader.loadCatalog(getApplication()) }.getOrNull()
+                    rooftsSkillCatalog = runCatching {
+                        val experienceMemoryFile = File(dir, "brain/memory.jsonl")
+                        RooftsSkillLoader.loadCatalog(getApplication()) { strategy ->
+                            runBlocking(Dispatchers.IO) {
+                                FileExperienceMemory(experienceMemoryFile).taxaSucessoPorEstrategia(strategy)
+                            }
+                        }
+                    }.getOrNull()
                 )
                 val promptImprover: PromptImprover = if (BuildConfig.E2E_OFFLINE_AI) {
                     PromptImprover { promptAtual, _ -> promptAtual }

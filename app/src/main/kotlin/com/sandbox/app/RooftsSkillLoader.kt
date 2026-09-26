@@ -20,7 +20,8 @@ data class RooftsSkillSelection(
 
 class RooftsSkillCatalog internal constructor(
     private val context: Context,
-    private val metadata: List<RooftsSkill>
+    private val metadata: List<RooftsSkill>,
+    private val historicalSuccessRate: (String) -> Double = { 0.5 }
 ) {
     fun metadata(): List<RooftsSkill> = metadata
 
@@ -29,7 +30,13 @@ class RooftsSkillCatalog internal constructor(
         activate("skill-selection", objective, max).skills
 
     fun activate(runId: String, objective: String, max: Int = RooftsSkillSelector.MAX_SKILLS): RooftsSkillSelection {
-        val plan = RooftsSkillActivationPlanner.plan(runId, objective, metadata, max)
+        val plan = RooftsSkillActivationPlanner.plan(
+            runId,
+            objective,
+            metadata,
+            max,
+            historicalSuccessRate = historicalSuccessRate
+        )
         val skills = plan.approvedSkillIds.mapNotNull { id -> metadata.firstOrNull { it.id == id } }
             .map { skill -> RooftsSkillLoader.loadBody(context, skill) ?: skill }
         return RooftsSkillSelection(skills, plan)
@@ -79,7 +86,7 @@ object RooftsSkillLoader {
     }
 
     /** Descoberta leve: retém frontmatter, hash e origem, mas não retém o corpo Markdown. */
-    fun loadCatalog(context: Context): RooftsSkillCatalog {
+    fun loadCatalog(context: Context, historicalSuccessRate: (String) -> Double = { 0.5 }): RooftsSkillCatalog {
         val appContext = context.applicationContext ?: context
         val overlay = loadOverlay(appContext)
         val pastas = appContext.assets.list(BASE_PATH)?.toList().orEmpty()
@@ -87,7 +94,7 @@ object RooftsSkillLoader {
             runCatching { lerSkill(appContext, pasta, includeBody = false) }.getOrNull()
         }.map { skill -> mergeOverlay(skill, overlay[skill.id]) }
             .sortedBy { it.id }
-        return RooftsSkillCatalog(appContext, metadata)
+        return RooftsSkillCatalog(appContext, metadata, historicalSuccessRate)
     }
 
     internal fun loadBody(context: Context, skill: RooftsSkill): RooftsSkill? {

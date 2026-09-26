@@ -1,8 +1,6 @@
 package com.brain.memory
 
 import com.brain.skill.SkillManifest
-import com.brain.skill.SkillRecord
-import com.brain.skill.SkillRegistry
 
 /** Evidência bruta; sua presença não implica verdade nem validação. */
 data class KnowledgeEvidence(
@@ -39,9 +37,9 @@ data class SkillCandidate(
 
 /**
  * Compilador de conhecimento: evidence → candidate → Critic → validated
- * knowledge. A promoção de um procedimento para Skill exige uma segunda
- * chamada explícita de validação; nenhum método deste componente promove
- * automaticamente um candidato.
+ * knowledge. A promoção de um procedimento para Skill pertence ao
+ * SkillValidator, que executa o candidato em sandbox, roda testes e passa
+ * pelo critic da própria Skill antes de registrar.
  */
 class KnowledgeCompiler(
     private val cycle: KnowledgeLearningCycle,
@@ -76,7 +74,4 @@ class KnowledgeCompiler(
         return SkillCandidate(compilation.entry.id, manifest, listOf(compilation.evidence.evidenceId))
     }
 
-    /** Validação final explícita; só aqui o candidato entra no SkillRegistry. */
-    fun validateSkill(candidate: SkillCandidate, registry: SkillRegistry, content: String? = null): SkillRecord =
-        registry.register(candidate.manifest, content)
 }

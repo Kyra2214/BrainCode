@@ -2,6 +2,8 @@ package com.brain.memory
 
 import com.brain.skill.SkillManifest
 import com.brain.skill.SkillRegistry
+import com.brain.skill.SkillValidationEvidence
+import com.brain.skill.SkillValidator
 import com.brain.skill.TrustLevel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -63,7 +65,14 @@ class KnowledgeCompilerTest {
 
         assertNotNull(candidate)
         assertTrue(registry.get("procedure.example") == null)
-        val record = compiler.validateSkill(candidate!!, registry)
+        val validator = SkillValidator(
+            sandbox = { manifest, _ ->
+                SkillValidationEvidence(manifest.id, sandboxPassed = true, testsPassed = true, criticPassed = false, evidence = listOf("sandbox:ok", "tests:ok"))
+            },
+            critic = { true }
+        )
+        val validation = validator.validate(candidate!!)
+        val record = validator.promote(candidate, validation, registry)
 
         assertEquals("procedure.example", record.manifest.id)
         assertTrue(registry.isUsable("procedure.example"))
