@@ -89,7 +89,7 @@ jobs:
 
       - name: Upload debug APK
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: BrainCode-debug-apk-${{ github.sha }}
           path: app/build/outputs/apk/debug/*.apk
@@ -98,7 +98,7 @@ jobs:
 
       - name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: BrainCode-test-reports-${{ github.sha }}
           path: |
@@ -152,7 +152,7 @@ jobs:
 
       - name: Upload Semgrep report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: BrainCode-semgrep-report-${{ github.sha }}
           path: semgrep-report.json
