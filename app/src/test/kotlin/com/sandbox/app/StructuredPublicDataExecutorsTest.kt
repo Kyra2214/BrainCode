@@ -98,6 +98,44 @@ class StructuredPublicDataExecutorsTest {
         assertTrue(http.urls[1].contains("api.open-meteo.com/v1/forecast"))
     }
 
+    @Test fun `Open-Meteo nao envia a sigla da UF dentro do name do geocoding`() {
+        // Regressão: "Macaé RJ" mandado como name= literal não bate no geocoding real do
+        // Open-Meteo (o campo name só aceita o nome do lugar). A UF deve virar filtro de
+        // admin1, nunca parte do texto buscado.
+        val http = FakeHttp(
+            response(200, """{"results":[{"name":"Macaé","admin1":"Rio de Janeiro","latitude":-22.37,"longitude":-41.78,"country_code":"BR"}]}"""),
+            response(200, """{"current":{"temperature_2m":28.0,"apparent_temperature":29.1,"relative_humidity_2m":72,"precipitation":0.0,"weather_code":2,"wind_speed_10m":11.2},"current_units":{"temperature_2m":"°C","apparent_temperature":"°C","relative_humidity_2m":"%","precipitation":"mm","wind_speed_10m":"km/h"}}""")
+        )
+        val execution = WeatherExecutor(http).execute(request("weather", "qual a previsão do tempo hoje em Macaé RJ"), capability("weather"), allow)
+        assertTrue(execution.success)
+        val geocodingUrl = http.urls[0]
+        assertFalse("UF não pode ir dentro do name= do geocoding: $geocodingUrl", geocodingUrl.contains("Maca%C3%A9+RJ") || geocodingUrl.contains("Maca%C3%A9%20RJ"))
+        assertTrue(geocodingUrl.contains("name=Maca"))
+    }
+
+    @Test fun `Open-Meteo desempata homonimos pela UF quando ha varios resultados`() {
+        val http = FakeHttp(
+            response(200, """{"results":[
+                {"name":"Rio das Ostras","admin1":"Rio Grande do Sul","latitude":-1.0,"longitude":-1.0,"country_code":"BR"},
+                {"name":"Rio das Ostras","admin1":"Rio de Janeiro","latitude":-22.53,"longitude":-41.95,"country_code":"BR"}
+            ]}"""),
+            response(200, """{"current":{"temperature_2m":30.0,"apparent_temperature":31.0,"relative_humidity_2m":70,"precipitation":0.0,"weather_code":0,"wind_speed_10m":9.0},"current_units":{"temperature_2m":"°C","apparent_temperature":"°C","relative_humidity_2m":"%","precipitation":"mm","wind_speed_10m":"km/h"}}""")
+        )
+        val execution = WeatherExecutor(http).execute(request("weather", "tempo em Rio das Ostras RJ agora"), capability("weather"), allow)
+        assertTrue(execution.success)
+        assertTrue(execution.userResponse!!.text.contains("Rio das Ostras - Rio de Janeiro"))
+    }
+
+    @Test fun `local sem preposicao em ou de ainda e reconhecido`() {
+        val http = FakeHttp(
+            response(200, """{"results":[{"name":"Rio das Ostras","admin1":"Rio de Janeiro","latitude":-22.53,"longitude":-41.95,"country_code":"BR"}]}"""),
+            response(200, """{"current":{"temperature_2m":27.0,"apparent_temperature":28.0,"relative_humidity_2m":80,"precipitation":0.0,"weather_code":1,"wind_speed_10m":10.0},"current_units":{"temperature_2m":"°C","apparent_temperature":"°C","relative_humidity_2m":"%","precipitation":"mm","wind_speed_10m":"km/h"}}""")
+        )
+        val execution = WeatherExecutor(http).execute(request("weather", "qual a previsão do tempo hoje rio das ostras"), capability("weather"), allow)
+        assertTrue(execution.success)
+        assertTrue(http.urls[0].contains("name=rio"))
+    }
+
     @Test fun `cambio tenta Frankfurter e usa fallback de taxa se necessario`() {
         val http = FakeHttp(response(429, "busy"))
         val fallback = FakeHttp(response(200, """{"date":"2026-09-25","brl":{"usd":0.193}}"""))

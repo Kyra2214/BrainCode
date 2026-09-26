@@ -242,17 +242,42 @@ class BcbExecutor(http: ApiHttpClient = UrlConnectionApiHttpClient()) : Determin
     }.getOrElse { explicitFailure(capability, "BCB: ${it.message ?: "falha sem detalhe"}") }
 }
 
+/** Siglas de UF -> nome do estado como o admin1 do Open-Meteo devolve, usadas só para desempate de homônimos. */
+private val brazilianUfNames = mapOf(
+    "AC" to "Acre", "AL" to "Alagoas", "AP" to "Amapá", "AM" to "Amazonas", "BA" to "Bahia",
+    "CE" to "Ceará", "DF" to "Distrito Federal", "ES" to "Espírito Santo", "GO" to "Goiás",
+    "MA" to "Maranhão", "MT" to "Mato Grosso", "MS" to "Mato Grosso do Sul", "MG" to "Minas Gerais",
+    "PA" to "Pará", "PB" to "Paraíba", "PR" to "Paraná", "PE" to "Pernambuco", "PI" to "Piauí",
+    "RJ" to "Rio de Janeiro", "RN" to "Rio Grande do Norte", "RS" to "Rio Grande do Sul",
+    "RO" to "Rondônia", "RR" to "Roraima", "SC" to "Santa Catarina", "SP" to "São Paulo",
+    "SE" to "Sergipe", "TO" to "Tocantins"
+)
+
 /** Geocodifica a cidade e só então consulta a previsão atual, ambas as APIs Open-Meteo. */
 class WeatherExecutor(http: ApiHttpClient = UrlConnectionApiHttpClient()) : DeterministicApiExecutor(http, "open-meteo") {
     override fun execute(request: ActionRequest, capability: CapabilityDefinition, decision: PolicyDecision): ActionExecution = runCatching {
         val query = requiredQuery(request)
-        val location = Regex("(?i)\\b(?:em|de)\\s+(.+?)(?=\\s+(?:hoje|agora|amanhã|amanha|neste momento)\\b|[?!.;,]|$)").find(query)?.groupValues?.get(1)?.trim()
+        val rawLocation = Regex("(?i)\\b(?:em|de)\\s+(.+?)(?=\\s+(?:hoje|agora|amanhã|amanha|neste momento)\\b|[?!.;,]|$)").find(query)?.groupValues?.get(1)?.trim()
             ?: Regex("(?i)(?:tempo|clima)\\s+(?:em|de)\\s+(.+?)(?=[?!.;,]|$)").find(query)?.groupValues?.get(1)?.trim()
+            // "tempo hoje rio das ostras": sem "em"/"de", a cidade vem direto depois do marcador de tempo.
+            ?: Regex("(?i)(?:tempo|clima)\\s+(?:hoje|agora|amanhã|amanha|neste momento)\\s+(.+?)(?=[?!.;,]|$)").find(query)?.groupValues?.get(1)?.trim()
             ?: error("informe a cidade para consultar o clima")
-        val geoUrl = "https://geocoding-api.open-meteo.com/v1/search?name=${location.encodeQuery()}&count=1&language=pt&format=json&countryCode=BR"
+        // O campo "name" do geocoding do Open-Meteo é só o nome do lugar: "Macaé RJ" não bate com nada,
+        // então a sigla da UF (se houver) é separada e usada apenas para desempatar entre resultados
+        // homônimos via "admin1", nunca enviada dentro da própria busca por nome.
+        val tokens = rawLocation.trim().split(Regex("\\s+"))
+        val ufHint = tokens.lastOrNull()?.uppercase(Locale.ROOT)?.takeIf { tokens.size > 1 && it in brazilianUfNames }
+        val location = if (ufHint != null) tokens.dropLast(1).joinToString(" ") else rawLocation
+        val geoUrl = "https://geocoding-api.open-meteo.com/v1/search?name=${location.encodeQuery()}&count=5&language=pt&format=json&countryCode=BR"
         val geoRoot = JSONObject(json(http.get(geoUrl), "Open-Meteo geocoding"))
         val places = geoRoot.optJSONArray("results") ?: error("cidade não encontrada no Open-Meteo")
-        val place = places.optJSONObject(0) ?: error("cidade não encontrada no Brasil")
+        if (places.length() == 0) error("cidade não encontrada no Brasil")
+        val place = ufHint?.let { hint ->
+            val stateName = brazilianUfNames.getValue(hint)
+            (0 until places.length()).firstNotNullOfOrNull { i ->
+                places.optJSONObject(i)?.takeIf { it.optString("admin1").equals(stateName, ignoreCase = true) }
+            }
+        } ?: places.optJSONObject(0) ?: error("cidade não encontrada no Brasil")
         val lat = place.optDouble("latitude", Double.NaN); val lon = place.optDouble("longitude", Double.NaN)
         if (!lat.isFinite() || !lon.isFinite()) error("Open-Meteo retornou coordenadas inválidas")
         val placeName = listOf(place.optString("name"), place.optString("admin1")).filter { it.isNotBlank() }.distinct().joinToString(" - ")
