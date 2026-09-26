@@ -13,6 +13,7 @@ import com.brain.policy.PolicyDecision
 import com.brain.secretary.UserResponse
 import java.net.URL
 import java.time.Instant
+import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -116,8 +117,32 @@ class BrasilApiExecutor(
         val url = "https://brasilapi.com.br/api/feriados/v1/$year" + (uf?.let { "?uf=$it" } ?: "")
         val array = JSONArray(json(http.get(url), "BrasilAPI feriados"))
         if (array.length() == 0) error("nenhum feriado retornado para $year")
-        val items = (0 until array.length()).mapNotNull { i -> array.optJSONObject(i)?.let { "${it.optString("date")}: ${it.optString("name")}".trim() } }
-        return success(request, capability, "Feriados nacionais de $year: ${items.joinToString("; ")}", url, array.toString())
+        val todos = (0 until array.length()).mapNotNull { i -> array.optJSONObject(i) }
+        // A BrasilAPI marca tudo como type=national, inclusive datas móveis/comemorativas que NÃO são
+        // feriado nacional federal obrigatório (Carnaval, Páscoa, Corpus Christi).
+        val nacionais = todos.filter { isFeriadoNacionalOficial(it.optString("name")) }
+        if (nacionais.isEmpty()) error("BrasilAPI não retornou feriados nacionais oficiais para $year")
+        val items = nacionais.map { "${it.optString("date")}: ${it.optString("name")}".trim() }
+        val descartados = todos.filterNot { isFeriadoNacionalOficial(it.optString("name")) }.map { it.optString("name") }
+        val nota = if (descartados.isNotEmpty()) " (a API também retornou datas não oficiais — ${descartados.joinToString(", ")} — não incluídas por não serem feriado nacional federal)" else ""
+        return success(request, capability, "Feriados nacionais de $year: ${items.joinToString("; ")}.$nota", url, array.toString())
+    }
+
+    /** Lista fechada dos feriados nacionais federais oficiais do Brasil. */
+    private fun isFeriadoNacionalOficial(nome: String): Boolean {
+        val normalizado = nome.lowercase(Locale.ROOT)
+            .replace(Regex("[áàâã]"), "a").replace(Regex("[éê]"), "e")
+            .replace(Regex("[íî]"), "i").replace(Regex("[óôõ]"), "o").replace(Regex("[úû]"), "u")
+            .replace("ç", "c")
+        val oficiais = listOf(
+            "confraternizacao universal", "confraternizacao mundial", "ano novo",
+            "sexta-feira santa", "sexta feira santa", "paixao de cristo",
+            "tiradentes", "dia do trabalho", "dia mundial do trabalho",
+            "independencia do brasil", "independencia", "nossa senhora aparecida",
+            "finados", "proclamacao da republica",
+            "dia nacional de zumbi e da consciencia negra", "consciencia negra", "natal"
+        )
+        return oficiais.any { normalizado.contains(it) }
     }
 
     private fun lookupDdd(query: String, request: ActionRequest, capability: CapabilityDefinition): ActionExecution {
