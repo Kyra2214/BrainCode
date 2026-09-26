@@ -29,7 +29,7 @@ dependencies {
     // org.json é o que o ApiCatalogLoader (e outros loaders) já usavam no
     // BraimCode original. No Android ele vem embutido no SDK; aqui, como
     // módulo JVM puro, precisa ser declarado explicitamente.
-    implementation("org.json:json:20240303")
+    implementation("org.json:json:20260814")
 
     // PromptOutcomeTracker usa runBlocking para ligar o callback síncrono
     // do ciclo de execução à API suspend da PromptLibrary.
