@@ -103,12 +103,13 @@ class BrainInputInterpreter(
         val normalized = raw.lowercase(Locale.ROOT)
         val orderIntent = designatedIntent ?: secretary.classify(raw)
         val weather = isWeather(normalized)
-        val calculation = isCalculation(normalized)
-        val navigation = isNavigation(normalized)
         val brazilData = isBrazilData(normalized)
         val brazilEconomy = isBrazilEconomy(normalized)
         val brazilGeography = isBrazilGeography(normalized)
         val currency = isCurrencyConversion(normalized)
+        val specificLiveData = brazilData || brazilEconomy || brazilGeography || currency
+        val calculation = isCalculation(normalized) && !specificLiveData
+        val navigation = isNavigation(normalized)
         val research = !weather && !calculation && !navigation &&
             IntentNegation.hasAllowedOccurrence(normalized, TriggerLexicon.VERBOS_PESQUISA)
         val domainSearch = !weather && !calculation && !navigation && !brazilData && !brazilEconomy && !brazilGeography && !currency && !research &&
