@@ -291,7 +291,8 @@ class BrainInputInterpreter(
 
     private fun isCurrencyConversion(text: String): Boolean =
         Regex("(?i)\\b(câmbio|cambio|converter|converta|convert(a|er)|em dólar|em dolar|para dólar|para dolar|para usd|para eur)\\b").containsMatchIn(text) ||
-            Regex("(?i)\\b\\d+(?:[.,]\\d+)?\\s*(?:brl|usd|eur)\\b.*\\b(?:brl|usd|eur)\\b").containsMatchIn(text)
+            Regex("(?i)\\b\\d+(?:[.,]\\d+)?\\s*(?:brl|usd|eur)\\b.*\\b(?:brl|usd|eur)\\b").containsMatchIn(text) ||
+            Regex("(?i)\\b\\d+(?:[.,]\\d+)?\\s*(reais?|d[óo]lar(es)?|euros?)\\b.*\\b(reais?|d[óo]lar(es)?|euros?|usd|eur|brl)\\b").containsMatchIn(text)
 
     private fun isInformationalQuestion(text: String): Boolean =
         InformationalQuestionClassifier.isRecoverable(text)

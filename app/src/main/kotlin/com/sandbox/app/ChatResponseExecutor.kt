@@ -97,7 +97,7 @@ class ChatResponseExecutor(
                 // ResearchRunResult.answer é a única resposta autorizada da pesquisa.
                 // sources/evidence/citations permanecem evidência interna; não são uma segunda
                 // fonte de texto para o Composer.
-                finalText = researchResult.answer.trim().take(700)
+                finalText = trimToSentenceBoundary(researchResult.answer.trim(), maxChars = 1600)
                 evidence += "chat:conversation:synthesis"
                 status = ConversationStatus.ANSWER_READY
             }
@@ -156,5 +156,12 @@ class ChatResponseExecutor(
     }
 
     private fun knowledgeCycleMemory(cycle: KnowledgeLearningCycle): com.brain.memory.KnowledgeMemory = cycle.memoryForIntegration()
+    /** Corta no fim da última frase completa que caiba no limite, em vez de truncar no meio. */
+    private fun trimToSentenceBoundary(text: String, maxChars: Int): String {
+        if (text.length <= maxChars) return text
+        val cortado = text.take(maxChars)
+        val ultimoPonto = listOf('.', '!', '?').mapNotNull { c -> cortado.lastIndexOf(c).takeIf { it > 0 } }.maxOrNull()
+        return if (ultimoPonto != null && ultimoPonto > maxChars / 2) cortado.substring(0, ultimoPonto + 1) else "$cortado…"
+    }
     private fun provenance(capability: CapabilityDefinition) = listOf("app:ChatResponseExecutor", "capability:${capability.id}")
 }

@@ -582,7 +582,7 @@ class BrainSandboxController(
         // pesquisa concluída com sucesso, e a UI caía no fallback "Plano concluído: true".
         // O Context Builder de CicloExecucaoPlano.executar já propaga o resultado da
         // dependência como parâmetro extra (mesmo mecanismo usado por DoorAwareSplitter).
-        if (envelope.route == Route.CAPABILITY && capability == "network.research") {
+        if (envelope.route == Route.CAPABILITY && capability in INTERNAL_ONLY_CAPABILITIES) {
             val pesquisar = PassoPlano(
                 id = "pesquisar",
                 capacidade = capability,
@@ -901,6 +901,8 @@ class BrainSandboxController(
     }
 
     private companion object {
+        /** Capabilities cujo executor só devolve payload interno e precisam de chat.respond. */
+        val INTERNAL_ONLY_CAPABILITIES = setOf("network.research", "sandbox.info")
         const val MAX_EXECUTION_ATTEMPTS = 3
         const val MAX_TECHNICAL_RETRIES = 2
         const val TECHNICAL_RETRY_BACKOFF_MS = 50L

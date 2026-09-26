@@ -96,6 +96,11 @@ object ResearchAnswerSynthesizer {
         )
         val navigationLike = normalized.count { it == '|' || it == '›' || it == '·' } >= 2 ||
             (normalized.split(Regex("[,|]")).size >= 5 && normalized.length < 180)
-        return uiPattern.containsMatchIn(normalized) || navigationLike
+        // Sumário/links de markdown (ex.: "[O que é Python?](#o-que-e-python)") não têm conteúdo, só navegação.
+        val markdownTocLike = Regex("\\[[^\\]]{1,80}\\]\\(#[^)]+\\)").containsMatchIn(sentence) ||
+            normalized.startsWith("#") || normalized.startsWith("table of contents")
+        // Bio pessoal de autor de blog não responde à pergunta do usuário.
+        val authorBioLike = Regex("(?i)\\b(faço parte d[oa]|sou (um|uma)|meu nome é|trabalho como|atuo como|scuba team)\\b").containsMatchIn(normalized)
+        return uiPattern.containsMatchIn(normalized) || navigationLike || markdownTocLike || authorBioLike
     }
 }

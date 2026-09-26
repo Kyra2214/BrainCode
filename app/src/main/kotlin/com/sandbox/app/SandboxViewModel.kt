@@ -1013,7 +1013,10 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                         }
                         withContext(Dispatchers.Main.immediate) { publishCycleStages(cycle) }
                         val promptActionId = cycle.passos.firstOrNull { it.capacidade == "prompt.library.write" }?.actionId
-                        val content = cycle.resposta ?: "Não foi possível gerar uma resposta para essa solicitação agora."
+                        val content = cycle.resposta ?: run {
+                            val motivo = cycle.passos.lastOrNull { it.motivo != null }?.motivo
+                            if (!motivo.isNullOrBlank()) "Não foi possível responder agora: $motivo" else "Não foi possível gerar uma resposta para essa solicitação agora."
+                        }
                         val capability = cycle.passos.lastOrNull { it.resultado != null }?.capacidade
                         val evidence = cycle.passos.flatMap { it.executionEvidence }
                         lastChatValidationPassed = cycle.aprovado
@@ -1100,7 +1103,10 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                             intent = intent
                         )
                         val promptActionId = cycle.passos.firstOrNull { it.capacidade == "prompt.library.write" }?.actionId
-                        val content = cycle.resposta ?: "Não foi possível gerar uma resposta para essa solicitação agora."
+                        val content = cycle.resposta ?: run {
+                            val motivo = cycle.passos.lastOrNull { it.motivo != null }?.motivo
+                            if (!motivo.isNullOrBlank()) "Não foi possível responder agora: $motivo" else "Não foi possível gerar uma resposta para essa solicitação agora."
+                        }
                         val capability = cycle.passos.lastOrNull { it.resultado != null }?.capacidade
                         val evidence = cycle.passos.flatMap { it.executionEvidence }
                         lastChatValidationPassed = cycle.aprovado
