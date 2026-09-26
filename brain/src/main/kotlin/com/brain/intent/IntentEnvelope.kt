@@ -115,11 +115,13 @@ class BrainInputInterpreter(
         val navigation = isNavigation(normalized)
         val research = !weather && !calculation && !navigation &&
             IntentNegation.hasAllowedOccurrence(normalized, TriggerLexicon.VERBOS_PESQUISA)
-        val domainSearch = !weather && !calculation && !navigation && !brazilData && !brazilEconomy && !brazilGeography && !currency && !research &&
-            ResearchIntentClassifier.requiresWebSearch(normalized)
-        val codeExecution = !weather && !calculation && !navigation && !brazilData && !brazilEconomy && !brazilGeography && !currency && !research && !domainSearch &&
+        val codeExecution = !weather && !calculation && !navigation && !brazilData && !brazilEconomy && !brazilGeography && !currency && !research &&
             IntentNegation.hasAllowedOccurrence(normalized, TriggerLexicon.EXECUTION_TERMS) &&
             TriggerLexicon.matches(normalized, listOf("código", "codigo", "script", "programa", "função", "funcao"))
+        // "código" também é um termo técnico de pesquisa; uma ordem explícita
+        // de execução deve vencer a heurística de pesquisa na classificação.
+        val domainSearch = !weather && !calculation && !navigation && !brazilData && !brazilEconomy && !brazilGeography && !currency && !research && !codeExecution &&
+            ResearchIntentClassifier.requiresWebSearch(normalized)
         val information = !weather && !calculation && !navigation && !brazilData && !brazilEconomy && !brazilGeography && !currency && !research && !domainSearch && !codeExecution &&
             isInformationalQuestion(normalized)
         val ambiguous = normalized.matches(Regex("(?i)^(faça|faca|execute|rode|fa\u00e7a|fazer) isso[.!? ]*$"))
