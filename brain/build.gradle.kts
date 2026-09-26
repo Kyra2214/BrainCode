@@ -33,7 +33,7 @@ dependencies {
 
     // PromptOutcomeTracker usa runBlocking para ligar o callback síncrono
     // do ciclo de execução à API suspend da PromptLibrary.
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
 
     // Alguns testes do módulo usam kotlin.test.*. Declarar kotlin-test aqui
     // evita que um teste introduza uma API de teste sem a dependência do
