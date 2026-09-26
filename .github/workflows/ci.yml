@@ -125,3 +125,36 @@ jobs:
           python-version: '3.x'
       - name: Run release readiness preflight
         run: ./scripts/validate-release-readiness.sh
+
+  security-scans:
+    name: Local secret and SAST scans
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan repository with gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Semgrep CLI
+        run: python3 -m pip install --user semgrep
+
+      - name: Run Semgrep SAST
+        continue-on-error: true
+        run: |
+          "$HOME/.local/bin/semgrep" scan --config auto --json --output semgrep-report.json --error
+
+      - name: Upload Semgrep report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BrainCode-semgrep-report-${{ github.sha }}
+          path: semgrep-report.json
+          if-no-files-found: ignore
+          retention-days: 14

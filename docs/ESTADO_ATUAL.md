@@ -135,14 +135,14 @@ O resultado aprovado passa pelo `ResearchKnowledgePromoter` e pelo `KnowledgeLea
 
 Foi criado o contrato soberano `ResearchRequest`, `ResearchRunResult`, `ResearchCitation`, `ResearchEvidence`, `FailedSource`, `ResearchExecutionMetadata` e `WebProviderSet`. `WebResearchAgent` aplica sanitização, política de rede, allow/block domains, HTTPS, fallback entre SearchProviders, source diversity, citações, evidence, quality/confidence e user-facing fallback sem vazar erro técnico. `WebResearchExecutor` usa esse harness por meio de `LegacySearchProviderAdapter`, portanto o provider existente continua conectado ao Dispatcher/ActionGateway sem criar uma segunda capability.
 
-Foram adicionadas interfaces desacopladas `SearchProvider`, `FetchProvider`, `BrowserProvider` e `ExtractionProvider`. Elas deixam Firecrawl opcional e permitem cache/local providers no futuro. `ResearchSecurityPolicy` detecta prompt injection em conteúdo web e mantém o conteúdo como dado, nunca como Policy ou instrução do Brain. `AgentRegistry` registra os especialistas por contrato, categoria, capability, provenance e licença.
+Foram adicionadas interfaces desacopladas `SearchProvider`, `FetchProvider`, `BrowserProvider` e `ExtractionProvider`. Elas deixam Firecrawl opcional e permitem cache/local providers no futuro. `ResearchSecurityPolicy` detecta prompt injection em conteúdo web e mantém o conteúdo como dado, nunca como Policy ou instrução do Brain. Especialistas são registrados no `CapabilityRegistry` universal por contrato, categoria, capability, provenance e licença; o antigo `AgentRegistry` paralelo foi removido por estar órfão.
 
 SearchClaw foi usado como referência de harness de pesquisa, plano, quality gate, citações, memória e compactação; firecrawl/web-agent como referência de abstração de ferramentas, skills, schemas e subagentes. Nenhum servidor, CLI/TUI ou runtime externo foi incorporado. SearchClaw e Firecrawl são MIT; o componente no-inference permanece AGPL-3.0 com notice preservado em `app/src/main/assets/no_inference/LICENSE`. O coding agent `cos` segue excluído.
 
 ### Evidências da frente de research
 
 - `WebResearchAgentTest` cobre agregação de fontes, citações, evidence, quality, falha parcial, offline e prompt injection.
-- `AgentRegistryTest` comprova resolução por capability/contrato e provenance externo.
+- Testes de `CapabilityRegistry`/`CapabilityDiscovery` comprovam resolução por capability/contrato e provenance externo.
 - `:brain:test` passou para os novos contratos e testes focados; build Android/E2E fica para o gate remoto após o commit desta frente.
 
 ### Proveniência, licença e exclusões
