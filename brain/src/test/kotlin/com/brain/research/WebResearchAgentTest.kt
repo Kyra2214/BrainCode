@@ -115,7 +115,7 @@ class WebResearchAgentTest {
     }
 
     @Test
-    fun `pergunta IPTV usa reescrita generica e sintese baseada na fonte`() {
+    fun `pergunta IPTV usa reescrita em portugues e sintese baseada na fonte`() {
         var receivedQuery = ""
         val agent = WebResearchAgent(WebProviderSet(search = listOf(SearchProvider { request ->
             receivedQuery = request.query
@@ -125,7 +125,7 @@ class WebResearchAgentTest {
         })), clock, { "run-iptv" })
         val output = agent.research(ResearchRequest("qual o melhor mecanismo pra criar um app de IPTV?"))
         assertTrue(receivedQuery.contains("IPTV", ignoreCase = true))
-        assertTrue(receivedQuery.contains("explanation", ignoreCase = true))
+        assertTrue(receivedQuery.contains("explicação", ignoreCase = true))
         assertTrue(output.answer.contains("IPTV", ignoreCase = true))
         assertTrue(!output.answer.contains("Pesquisa web concluída"))
     }
