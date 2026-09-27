@@ -24,7 +24,7 @@ class LfmLocalBrainTest {
         val gateway = FakeGateway("""{"door":"CHAT","confidence":0.91}""")
         val result = LfmIntentAdvisor(gateway).revisarClassificacao(
             "Como está o tempo?",
-            OrderIntent(Door.CHAT)
+            OrderIntent("teste", Door.CHAT, com.brain.secretary.CreatePhase.CHAT)
         )
         assertEquals(Door.CHAT, result.door)
         assertEquals(0.91, result.confidence, 0.0)
