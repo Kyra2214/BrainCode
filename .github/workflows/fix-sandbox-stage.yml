@@ -1,0 +1,38 @@
+name: fix-sandbox-stage-arity
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix SandboxViewModel stage arity
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/kotlin/com/sandbox/app/SandboxViewModel.kt')
+          s = p.read_text()
+          old = 'stage(if (post.aprovado) BrainUiStage.READY else BrainUiStage.FAILED, if (post.aprovado) "READY" else "FAILED")'
+          new = 'stage(if (post.aprovado) BrainUiStage.READY else BrainUiStage.FAILED)'
+          if old not in s:
+              raise SystemExit('target call not found; refusing unrelated modification')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          git diff --check
+          git diff -- app/src/main/kotlin/com/sandbox/app/SandboxViewModel.kt
+      - name: Commit fix
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/kotlin/com/sandbox/app/SandboxViewModel.kt
+          git commit -m 'fix: correct SandboxViewModel stage call arity'
+          git push
