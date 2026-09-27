@@ -35,7 +35,7 @@ class LfmLocalBrainTest {
     fun localIntentAdvisor_rejects_unknown_door() {
         val gateway = FakeGateway("""{"door":"EXECUTE_CODE","confidence":0.99}""")
         val result = runCatching {
-            LfmIntentAdvisor(gateway).revisarClassificacao("execute isso", OrderIntent(Door.CHAT))
+            LfmIntentAdvisor(gateway).revisarClassificacao("execute isso", OrderIntent("execute isso", Door.CHAT, com.brain.secretary.CreatePhase.CHAT))
         }
         assertTrue(result.isFailure)
     }
