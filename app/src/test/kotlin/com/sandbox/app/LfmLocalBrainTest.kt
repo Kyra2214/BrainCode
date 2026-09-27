@@ -156,4 +156,24 @@ class LfmLocalBrainTest {
         }
     }
 
+    @Test
+    fun advisorRouting_uses_cloud_only_when_account_is_configured() {
+        val local = object : IntentAdvisor {
+            override fun revisarClassificacao(prompt: String, classificacaoTentativa: OrderIntent): OrderIntentSugerido =
+                OrderIntentSugerido(Door.CHAT, 0.95)
+        }
+        val localOnly = object : IntentAdvisor {
+            override fun revisarClassificacao(prompt: String, classificacaoTentativa: OrderIntent): OrderIntentSugerido =
+                OrderIntentSugerido(Door.CHAT, 0.0, "local-fallback")
+        }
+        val cloud = object : IntentAdvisor {
+            override fun revisarClassificacao(prompt: String, classificacaoTentativa: OrderIntent): OrderIntentSugerido =
+                OrderIntentSugerido(Door.PROMPT, 0.99)
+        }
+        val noAccount = IntentAdvisorRouting.select(local, localOnly, cloud, false)
+        val withAccount = IntentAdvisorRouting.select(local, localOnly, cloud, true)
+        assertEquals(localOnly, noAccount)
+        assertTrue(withAccount is HybridIntentAdvisor)
+    }
+
 }
