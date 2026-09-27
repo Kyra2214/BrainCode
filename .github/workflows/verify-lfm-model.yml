@@ -37,8 +37,4 @@ jobs:
           set -euo pipefail
           chmod +x ./gradlew
           ./gradlew --write-verification-metadata sha256 :app:dependencies --no-daemon --stacktrace
-          awk '
-            /<component group="dev[.]ffmpegkit-maintained" name="llama-android" version="0[.]1[.]1">/ { emit=1 }
-            emit { print }
-            emit && /<\\/component>/ { exit }
-          ' gradle/verification-metadata.xml
+          sed -n '/<component group="dev.ffmpegkit-maintained" name="llama-android" version="0.1.1">/,/<\\/component>/p' gradle/verification-metadata.xml
