@@ -40,7 +40,6 @@ enum class LfmModelState {
 
 class LfmModelManager(private val context: Context) {
     private val modelFile = File(context.filesDir, "brain/models/${LfmModelSpec.FILE_NAME}")
-    private val stateFile = File(modelFile.parentFile, "${modelFile.name}.state")
     private val lock = Any()
     private val _state = kotlinx.coroutines.flow.MutableStateFlow(LfmModelState.NOT_INSTALLED)
     val state: kotlinx.coroutines.flow.StateFlow<LfmModelState> = _state
@@ -52,7 +51,8 @@ class LfmModelManager(private val context: Context) {
      * only; the cryptographic SHA is the source of truth.
      */
     fun refreshState(forceVerify: Boolean = false): LfmModelState = synchronized(lock) {
-        if (!forceVerify && (_state.value == LfmModelState.LOADING || _state.value == LfmModelState.LOADED)) {
+        if (!forceVerify && (_state.value == LfmModelState.READY ||
+            _state.value == LfmModelState.LOADING || _state.value == LfmModelState.LOADED)) {
             return@synchronized _state.value
         }
         if (!modelFile.isFile) {
@@ -66,7 +66,6 @@ class LfmModelManager(private val context: Context) {
             writeVerifiedMetadata()
             _state.value = if (wasLoaded) LfmModelState.LOADED else LfmModelState.READY
         } else {
-            stateFile.delete()
             _state.value = LfmModelState.CORRUPTED
         }
         return@synchronized _state.value
@@ -89,7 +88,7 @@ class LfmModelManager(private val context: Context) {
     }
 
     internal fun markLoadFailed() = synchronized(lock) {
-        _state.value = if (modelFile.isFile) LfmModelState.UNAVAILABLE else LfmModelState.UNAVAILABLE
+        _state.value = LfmModelState.UNAVAILABLE
     }
 
     fun ensureDownloaded(onProgress: (Long, Long) -> Unit = { _, _ -> }): File {
@@ -165,9 +164,7 @@ class LfmModelManager(private val context: Context) {
         check(moved) { "não foi possível finalizar o arquivo do modelo" }
     }
 
-    private fun writeVerifiedMetadata() {
-        stateFile.writeText(modelFile.length().toString() + ":" + modelFile.lastModified() + ":" + LfmModelSpec.SHA256)
-    }
+
 
     private fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -210,19 +207,19 @@ class LocalLlmBrainApiGateway(
      * callers must observe native-load failure instead of treating a verified file as loaded.
      */
     fun preload(timeoutMs: Long = 15_000L): Result<Unit> = runCatching {
-        if (modelManager.isLoaded() && model != null) return@runCatching Unit
-        check(modelManager.isReady()) { "modelo LFM local ainda não está disponível" }
-        modelManager.markLoading()
-        try {
-            runBlocking {
-                withTimeout(timeoutMs) {
-                    mutex.withLock { loadModelIfNeeded() }
+        runBlocking {
+            mutex.withLock {
+                if (modelManager.isLoaded() && model != null) return@withLock
+                check(modelManager.isReady()) { "modelo LFM local ainda não está disponível" }
+                modelManager.markLoading()
+                try {
+                    withTimeout(timeoutMs) { loadModelIfNeeded() }
+                    modelManager.markLoaded()
+                } catch (error: Throwable) {
+                    modelManager.markLoadFailed()
+                    throw error
                 }
             }
-            modelManager.markLoaded()
-        } catch (error: Throwable) {
-            modelManager.markLoadFailed()
-            throw error
         }
     }
 
