@@ -51,14 +51,12 @@ class BrainCodeApplication : Application() {
         val local = localGateway ?: return
         val cloud = cloudIntentGateway ?: CloudIntentBrainApiGateway(this).also { cloudIntentGateway = it }
         val accounts = cloud.authorizedAccounts()
-        IntentAdvisorRegistry.current = if (accounts.isEmpty()) {
-            LocalOnlyIntentAdvisor(local)
-        } else {
-            com.brain.conversation.HybridIntentAdvisor(
-                local = LfmIntentAdvisor(local),
-                cloud = com.brain.conversation.LlmIntentAdvisor(cloud, accounts = accounts)
-            )
-        }
+        IntentAdvisorRegistry.current = IntentAdvisorRouting.select(
+            local = LfmIntentAdvisor(local),
+            localOnly = LocalOnlyIntentAdvisor(local),
+            cloud = com.brain.conversation.LlmIntentAdvisor(cloud, accounts = accounts),
+            hasCloudAccount = accounts.isNotEmpty()
+        )
     }
 
     private suspend fun provisionLfmAfterRoofts() {
