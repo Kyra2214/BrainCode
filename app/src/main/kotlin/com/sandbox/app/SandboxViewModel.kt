@@ -516,13 +516,20 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         "report" -> ThreadEvent.Report(item.optString("title"), item.optString("body"))
         "approval" -> ThreadEvent.Approval(item.optString("id"))
         "terminal" -> ThreadEvent.System(item.optString("text"))
-        "diff" -> ThreadEvent.Diff((0 until item.optJSONArray("files").length()).map { index ->
-            val file = item.optJSONArray("files").getJSONObject(index)
-            DiffFile(file.optString("path"), (0 until file.optJSONArray("lines").length()).map { lineIndex ->
-                val value = file.optJSONArray("lines").getString(lineIndex)
-                DiffLine(value.firstOrNull() ?: ' ', value.drop(1))
+        "diff" -> {
+            val files = item.optJSONArray("files") ?: return@when null
+            ThreadEvent.Diff((0 until files.length()).mapNotNull { index ->
+                val file = files.optJSONObject(index) ?: return@mapNotNull null
+                val lines = file.optJSONArray("lines") ?: JSONArray()
+                DiffFile(
+                    file.optString("path"),
+                    (0 until lines.length()).mapNotNull { lineIndex ->
+                        val value = lines.optString(lineIndex)
+                        value.takeIf { it.isNotEmpty() }?.let { DiffLine(it.first(), it.drop(1)) }
+                    }
+                )
             })
-        })
+        }
         else -> null
     }
 
@@ -1451,7 +1458,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     fun pluginStatus(id: String): InstalledComponent? = statusCache[id]
     private fun refreshStatusCache() { val p = platform ?: run { statusCache = emptyMap(); brainController?.refreshCapabilities(); return }; viewModelScope.launch(Dispatchers.IO) { val snapshot = p.plugins.components().mapNotNull { c -> p.plugins.status(c.id)?.let { c.id to it } }.toMap(); withContext(Dispatchers.Main) { statusCache = snapshot; brainController?.refreshCapabilities() } } }
     fun installComponent(id: String) { val p = platform ?: run { lastPluginError = "Prepare o sandbox antes de instalar componentes."; return }; if (id in installingComponentIds) return; lastPluginError = null; installingComponentIds = installingComponentIds + id; viewModelScope.launch { var result: Result<InstalledComponent>? = null; try { result = withContext(Dispatchers.IO) { runCatching { p.plugins.install(id) } }; result.onFailure { lastPluginError = it.message ?: "Falha ao instalar $id" }; result.getOrNull()?.let { if (it.state == InstallationState.FAILED) lastPluginError = it.error ?: "Falha ao instalar $id" } } finally { installingComponentIds = installingComponentIds - id; val finished = result; finished?.getOrNull()?.let { statusCache = statusCache + (id to it) }; brainController?.refreshCapabilities(); refreshPluginAudit(); pluginListVersion++ } } }
-    fun removeComponent(id: String) { val p = platform ?: run { lastPluginError = "Prepare o sandbox antes de remover componentes."; return }; if (id in installingComponentIds) return; lastPluginError = null; installingComponentIds = installingComponentIds + id; viewModelScope.launch { var result: Result<InstalledComponent?>? = null; try { result = withContext(Dispatchers.IO) { runCatching { p.plugins.remove(id) } }; result.onFailure { lastPluginError = it.message ?: "Falha ao remover $id" }; result.getOrNull()?.let { if (it.state == InstallationState.FAILED) lastPluginError = it.error ?: "Falha ao remover $id" } } finally { installingComponentIds = installingComponentIds - id; val finished = result; finished?.getOrNull()?.let { installed -> statusCache = if (installed != null) statusCache + (id to installed) else statusCache - id }; brainController?.refreshCapabilities(); refreshPluginAudit(); pluginListVersion++ } } }
+    fun removeComponent(id: String) { val p = platform ?: run { lastPluginError = "Prepare o sandbox antes de remover componentes."; return }; if (id in installingComponentIds) return; lastPluginError = null; installingComponentIds = installingComponentIds + id; viewModelScope.launch { var result: Result<InstalledComponent?>? = null; try { result = withContext(Dispatchers.IO) { runCatching { p.plugins.remove(id) } }; result.onFailure { lastPluginError = it.message ?: "Falha ao remover $id" }; result.getOrNull()?.let { if (it.state == InstallationState.FAILED) lastPluginError = it.error ?: "Falha ao remover $id" } } finally { installingComponentIds = installingComponentIds - id; val finished = result; if (finished?.isSuccess == true) { val installed = finished.getOrNull(); statusCache = if (installed != null) statusCache + (id to installed) else statusCache - id }; brainController?.refreshCapabilities(); refreshPluginAudit(); pluginListVersion++ } } }
     fun clearPluginError() { lastPluginError = null }
     fun refreshPluginAudit() { val p = platform ?: return; viewModelScope.launch(Dispatchers.IO) { val snapshots = p.plugins.snapshots(); val history = p.plugins.history(); withContext(Dispatchers.Main) { pluginSnapshots = snapshots; pluginHistory = history } } }
     fun rollbackPlugins(version: Long) { val p = platform ?: return; viewModelScope.launch { runCatching { withContext(Dispatchers.IO) { p.plugins.rollback(version) } }.onFailure { lastPluginError = it.message ?: "Falha ao restaurar snapshot v$version" }; refreshStatusCache(); refreshPluginAudit(); pluginListVersion++ } }
