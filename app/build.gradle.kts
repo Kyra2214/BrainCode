@@ -74,6 +74,7 @@ android {
 dependencies {
     implementation(project(":android-module"))
     implementation(project(":brain"))
+    implementation("dev.ffmpegkit-maintained:llama-android:0.1.1")
 
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-compose:1.9.0")
