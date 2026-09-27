@@ -32,9 +32,13 @@ jobs:
           test "$actual" = "$EXPECTED_SHA256"
           rm -f model.gguf
 
-      - name: Verify dependency metadata policy
+      - name: Bootstrap llama-android verification checksum
         run: |
           set -euo pipefail
-          test -f gradle/verification-metadata.xml
-          grep -q 'dev.ffmpegkit-maintained' gradle/verification-metadata.xml
-          grep -q 'llama-android-0.1.1' gradle/verification-metadata.xml
+          chmod +x ./gradlew
+          ./gradlew --write-verification-metadata sha256 :app:dependencies --no-daemon --stacktrace
+          awk '
+            /<component group="dev[.]ffmpegkit-maintained" name="llama-android" version="0[.]1[.]1">/ { emit=1 }
+            emit { print }
+            emit && /<\\/component>/ { exit }
+          ' gradle/verification-metadata.xml
