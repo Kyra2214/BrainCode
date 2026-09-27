@@ -3,7 +3,7 @@ package com.sandbox.app
 import com.brain.capability.CapabilityRegistry
 import com.brain.execution.RiskClass
 import com.brain.gateway.ActionRequest
-import com.brain.gateway.PolicyContext
+import com.brain.policy.PolicyContext
 import com.brain.policy.ApprovalRequired
 import com.brain.policy.Decision
 import com.brain.policy.PolicyDecision
