@@ -242,20 +242,45 @@ class BcbExecutor(http: ApiHttpClient = UrlConnectionApiHttpClient()) : Determin
     }.getOrElse { explicitFailure(capability, "BCB: ${it.message ?: "falha sem detalhe"}") }
 }
 
-/** Geocodifica a cidade e só então consulta a previsão atual, ambas as APIs Open-Meteo. */
+/** Geocodifica a cidade e consulta condições atuais ou a previsão diária solicitada. */
 class WeatherExecutor(http: ApiHttpClient = UrlConnectionApiHttpClient()) : DeterministicApiExecutor(http, "open-meteo") {
     override fun execute(request: ActionRequest, capability: CapabilityDefinition, decision: PolicyDecision): ActionExecution = runCatching {
         val query = requiredQuery(request)
         val location = Regex("(?i)\\b(?:em|de)\\s+(.+?)(?=\\s+(?:hoje|agora|amanhã|amanha|neste momento)\\b|[?!.;,]|$)").find(query)?.groupValues?.get(1)?.trim()
-            ?: Regex("(?i)(?:tempo|clima)\\s+(?:em|de)\\s+(.+?)(?=[?!.;,]|$)").find(query)?.groupValues?.get(1)?.trim()
+            ?: Regex("(?i)(?:tempo|clima)\\s+(?:em|de)\\s+(.+?)(?=\\s+(?:hoje|agora|amanhã|amanha|neste momento)\\b|[?!.;,]|$)").find(query)?.groupValues?.get(1)?.trim()
             ?: error("informe a cidade para consultar o clima")
+        val dayToken = Regex("(?i)\\b(amanhã|amanha|hoje|agora|neste momento)\\b").find(query)?.groupValues?.get(1)?.lowercase()
+        val tomorrow = dayToken == "amanhã" || dayToken == "amanha"
+
         val geoUrl = "https://geocoding-api.open-meteo.com/v1/search?name=${location.encodeQuery()}&count=1&language=pt&format=json&countryCode=BR"
         val geoRoot = JSONObject(json(http.get(geoUrl), "Open-Meteo geocoding"))
         val places = geoRoot.optJSONArray("results") ?: error("cidade não encontrada no Open-Meteo")
         val place = places.optJSONObject(0) ?: error("cidade não encontrada no Brasil")
-        val lat = place.optDouble("latitude", Double.NaN); val lon = place.optDouble("longitude", Double.NaN)
+        val lat = place.optDouble("latitude", Double.NaN)
+        val lon = place.optDouble("longitude", Double.NaN)
         if (!lat.isFinite() || !lon.isFinite()) error("Open-Meteo retornou coordenadas inválidas")
         val placeName = listOf(place.optString("name"), place.optString("admin1")).filter { it.isNotBlank() }.distinct().joinToString(" - ")
+
+        if (tomorrow) {
+            val weatherUrl = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&timezone=auto&forecast_days=2"
+            val root = JSONObject(json(http.get(weatherUrl), "Open-Meteo forecast"))
+            val daily = root.optJSONObject("daily") ?: error("Open-Meteo não retornou previsão diária")
+            val times = daily.optJSONArray("time") ?: error("Open-Meteo não retornou datas")
+            if (times.length() < 2) error("Open-Meteo não retornou previsão para amanhã")
+            val max = daily.optJSONArray("temperature_2m_max")?.optDouble(1, Double.NaN) ?: Double.NaN
+            val min = daily.optJSONArray("temperature_2m_min")?.optDouble(1, Double.NaN) ?: Double.NaN
+            val rain = daily.optJSONArray("precipitation_probability_max")?.optInt(1, -1) ?: -1
+            val code = daily.optJSONArray("weather_code")?.optInt(1, -1) ?: -1
+            if (!max.isFinite() || !min.isFinite()) error("temperaturas de amanhã indisponíveis")
+            val result = buildString {
+                append("Amanhã em $placeName: mínima ${formatTemperature(min)}, máxima ${formatTemperature(max)}")
+                if (rain >= 0) append(", probabilidade máxima de chuva ${rain}%")
+                weatherDescription(code)?.let { append(", $it") }
+                append(".")
+            }
+            return@runCatching success(request, capability, result, weatherUrl, daily.toString())
+        }
+
         val weatherUrl = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m&timezone=auto&forecast_days=1"
         val root = JSONObject(json(http.get(weatherUrl), "Open-Meteo forecast"))
         val current = root.optJSONObject("current") ?: error("Open-Meteo não retornou condições atuais")
@@ -272,6 +297,9 @@ class WeatherExecutor(http: ApiHttpClient = UrlConnectionApiHttpClient()) : Dete
         success(request, capability, result, weatherUrl, current.toString())
     }.getOrElse { explicitFailure(capability, "Clima indisponível: ${it.message ?: "falha sem detalhe"}") }
 
+    private fun formatTemperature(value: Double): String =
+        java.text.DecimalFormat("0.0", java.text.DecimalFormatSymbols(Locale.US)).format(value) + "°C"
+
     private fun weatherDescription(code: Int): String? = when (code) {
         0 -> "céu limpo"; 1 -> "predominantemente limpo"; 2 -> "parcialmente nublado"; 3 -> "nublado";
         45, 48 -> "nevoeiro"; 51, 53, 55 -> "garoa"; 56, 57 -> "garoa congelante";
@@ -279,7 +307,6 @@ class WeatherExecutor(http: ApiHttpClient = UrlConnectionApiHttpClient()) : Dete
         80, 81, 82 -> "pancadas de chuva"; 85, 86 -> "pancadas de neve"; 95, 96, 99 -> "trovoada"; else -> null
     }
 }
-
 /** Câmbio Frankfurter first; fallback static currency-api only on HTTP/parse/no-data failure. */
 class ExchangeRateExecutor(
     http: ApiHttpClient = UrlConnectionApiHttpClient(),
