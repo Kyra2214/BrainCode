@@ -8,8 +8,6 @@ import com.brain.conversation.HybridIntentAdvisor
 import com.brain.conversation.IntentAdvisorRegistry
 import com.brain.conversation.NoOpConversationInterpreter
 import com.brain.conversation.NoOpIntentAdvisor
-import com.brain.memory.FileKnowledgeMemory
-import com.brain.memory.KnowledgeLearningCycle
 import com.sandbox.android.AndroidSandboxFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -47,7 +45,7 @@ class BrainCodeApplication : Application() {
         // A LFM model is not bundled in the APK. Provision it automatically only after
         // the Roofts/rootfs installation has completed, so first-run network work follows
         // the same bootstrap order as the sandbox resources. Failure is non-fatal: the
-        // Secretary continues with deterministic/cloud paths and the model can retry later.
+        // Secretary continues with deterministic paths and the model can retry later.
         scope.launch { provisionLfmAfterRoofts() }
     }
 
