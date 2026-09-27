@@ -113,4 +113,27 @@ class LfmLocalBrainTest {
         assertFalse(snapshot.llmFailuresByHop.isEmpty())
     }
 
+    @Test
+    fun localOnlyAdvisor_falls_back_deterministically_without_cloud() {
+        val gateway = FakeGateway("""{"door":"EXECUTE_CODE","confidence":0.99}""")
+        val result = LocalOnlyIntentAdvisor(gateway).revisarClassificacao(
+            "execute isso",
+            OrderIntent("execute isso", Door.CHAT, com.brain.secretary.CreatePhase.CHAT)
+        )
+        assertEquals(Door.CHAT, result.door)
+        assertEquals(0.0, result.confidence, 0.0)
+        assertEquals("local-fallback", result.rationale)
+    }
+
+    @Test
+    fun localEntityInterpreter_does_not_trigger_on_generic_preposition() {
+        val gateway = FakeGateway("""{"entities":{"cidade":"Macaé"}}""")
+        val result = LfmEntityInterpreter(gateway).extrairEstrutura(
+            "fale de uma coisa interessante para mim",
+            ConversationContext("test")
+        )
+        assertTrue(result.entities.isEmpty())
+        assertTrue(gateway.pipelines.isEmpty())
+    }
+
 }
