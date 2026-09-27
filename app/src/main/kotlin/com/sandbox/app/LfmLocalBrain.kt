@@ -244,8 +244,8 @@ internal class LfmNativeInferenceRunner(
 ) : AutoCloseable {
     init { require(timeoutMs > 0L) }
 
-    fun <T> run(block: () -> T): T {
-        val future = executor.submit(Callable { block() })
+    fun <T> run(block: suspend () -> T): T {
+        val future = executor.submit(Callable { runBlocking { block() } })
         return try {
             future.get(timeoutMs, TimeUnit.MILLISECONDS)
         } catch (error: TimeoutException) {
@@ -270,7 +270,7 @@ class LocalLlmBrainApiGateway(
     private var model: LlamaModel? = null
     private var loadedSha256: String? = null
 
-    private fun loadModelIfNeeded(): LlamaModel = model ?: Llama.loadModel(
+    private suspend fun loadModelIfNeeded(): LlamaModel = model ?: Llama.loadModel(
         modelManager.modelFile().absolutePath,
         LlamaConfig(
             contextSize = 1024,
@@ -291,8 +291,9 @@ class LocalLlmBrainApiGateway(
         runBlocking {
             mutex.withLock {
                 if (modelManager.isLoaded() && model != null && loadedSha256 == modelManager.verifiedSha256() && !modelManager.artifactChangedSinceVerification()) return@withLock
-                if (model != null) {
-                    Llama.releaseModel(model)
+                val currentModel = model
+                if (currentModel != null) {
+                    Llama.releaseModel(currentModel)
                     model = null
                     loadedSha256 = null
                 }
@@ -374,7 +375,7 @@ class LfmIntentAdvisor(private val gateway: BrainApiGateway) : IntentAdvisor {
 class LocalOnlyIntentAdvisor(private val gateway: BrainApiGateway) : IntentAdvisor {
     override fun revisarClassificacao(prompt: String, classificacaoTentativa: OrderIntent): OrderIntentSugerido =
         runCatching { LfmIntentAdvisor(gateway).revisarClassificacao(prompt, classificacaoTentativa) }
-            .getOrElse { OrderIntentSugerido(classificacaoTentativa.door, 0.0, "local-fallback") }
+            .getOrElse { OrderIntentSugerido(door = classificacaoTentativa.door, confidence = 0.0, rationale = "local-fallback") }
 }
 
 /** Entity-only local interpreter. Intent/query remain deterministic and entities must be literal spans. */
