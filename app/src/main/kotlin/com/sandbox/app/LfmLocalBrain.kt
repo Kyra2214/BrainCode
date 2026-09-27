@@ -98,24 +98,31 @@ class LfmModelManager(private val context: Context) {
     }
 
     internal fun markLoadFailed() = synchronized(lock) {
-        _state.value = LfmModelState.UNAVAILABLE
+        _state.value = LfmModelState.LOAD_FAILED
     }
 
     fun ensureDownloaded(onProgress: (Long, Long) -> Unit = { _, _ -> }): File {
         downloadLock.lock()
         try {
             synchronized(lock) {
-            if (refreshState() == LfmModelState.READY) return modelFile
-            modelFile.parentFile?.mkdirs()
+                if (_state.value == LfmModelState.LOADED || _state.value == LfmModelState.LOADING) {
+                    throw IllegalStateException("não é permitido substituir o GGUF enquanto o modelo nativo está carregado")
+                }
+                if (refreshState() == LfmModelState.READY) return modelFile
+                modelFile.parentFile?.mkdirs()
+            }
+
             val partial = File(modelFile.parentFile, "${modelFile.name}.part")
-            _state.value = LfmModelState.DOWNLOADING
+            synchronized(lock) { _state.value = LfmModelState.DOWNLOADING }
             val connection = (URL(LfmModelSpec.URL).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 15_000
                 readTimeout = 30_000
                 instanceFollowRedirects = true
             }
             try {
-                check(connection.responseCode in 200..299) { "download do LFM falhou: HTTP ${connection.responseCode}" }
+                check(connection.responseCode in 200..299) {
+                    "download do LFM falhou: HTTP ${connection.responseCode}"
+                }
                 val total = connection.contentLengthLong
                 var done = 0L
                 connection.inputStream.use { input ->
@@ -131,7 +138,7 @@ class LfmModelManager(private val context: Context) {
                         output.fd.sync()
                     }
                 }
-                _state.value = LfmModelState.VERIFYING
+                synchronized(lock) { _state.value = LfmModelState.VERIFYING }
                 check(sha256(partial) == LfmModelSpec.SHA256) {
                     "SHA-256 do modelo LFM não confere"
                 }
@@ -144,7 +151,9 @@ class LfmModelManager(private val context: Context) {
                 }
                 return modelFile
             } catch (error: Throwable) {
-                _state.value = if (modelFile.isFile) LfmModelState.CORRUPTED else LfmModelState.UNAVAILABLE
+                synchronized(lock) {
+                    _state.value = if (modelFile.isFile) LfmModelState.CORRUPTED else LfmModelState.UNAVAILABLE
+                }
                 throw error
             } finally {
                 connection.disconnect()
@@ -206,6 +215,7 @@ class LocalLlmBrainApiGateway(
 ) : BrainApiGateway {
     private val mutex = Mutex()
     private var model: LlamaModel? = null
+    private var loadedSha256: String? = null
 
     private fun loadModelIfNeeded(): LlamaModel = model ?: Llama.loadModel(
         modelManager.modelFile().absolutePath,
@@ -227,11 +237,18 @@ class LocalLlmBrainApiGateway(
     fun preload(timeoutMs: Long = 15_000L): Result<Unit> = runCatching {
         runBlocking {
             mutex.withLock {
-                if (modelManager.isLoaded() && model != null) return@withLock
+                if (modelManager.isLoaded() && model != null && loadedSha256 == modelManager.verifiedSha256() && !modelManager.artifactChangedSinceVerification()) return@withLock
+                if (model != null) {
+                    Llama.releaseModel(model)
+                    model = null
+                    loadedSha256 = null
+                }
                 check(modelManager.isReady()) { "modelo LFM local ainda não está disponível" }
+                check(modelManager.verifiedSha256() == LfmModelSpec.SHA256) { "modelo LFM local não possui artefato verificado" }
                 modelManager.markLoading()
                 try {
                     withTimeout(timeoutMs) { loadModelIfNeeded() }
+                    loadedSha256 = modelManager.verifiedSha256()
                     modelManager.markLoaded()
                 } catch (error: Throwable) {
                     modelManager.markLoadFailed()
@@ -247,7 +264,10 @@ class LocalLlmBrainApiGateway(
         if (!modelManager.isLoaded()) {
             preload(10_000L).getOrThrow()
         }
-        check(modelManager.isLoaded()) { "modelo LFM local ainda não foi carregado" }
+        if (modelManager.artifactChangedSinceVerification() || loadedSha256 != modelManager.verifiedSha256()) {
+            preload(10_000L).getOrThrow()
+        }
+        check(modelManager.isLoaded() && loadedSha256 == modelManager.verifiedSha256()) { "modelo LFM local não está sincronizado com o GGUF verificado" }
         val result = runBlocking {
             withTimeout(timeoutMs) {
                 mutex.withLock {
@@ -267,6 +287,7 @@ class LocalLlmBrainApiGateway(
     fun close() = runCatching {
         model?.let(Llama::releaseModel)
         model = null
+        loadedSha256 = null
     }
 }
 
@@ -314,9 +335,9 @@ class LfmEntityInterpreter(private val gateway: BrainApiGateway) : ConversationI
 
     private companion object {
         val ENTITY_CUES = setOf(
-            " em ", " no ", " na ", " de ", " para ", " sobre ",
             "cidade", "estado", "país", "nome", "empresa", "data",
-            "dia", "hora", "local", "endereço", "endereco"
+            "endereço", "endereco", "bairro", "rua", "avenida", "cep",
+            "telefone", "email"
         )
     }
 }
