@@ -22,6 +22,9 @@ class BrainCodeApplication : Application() {
     private var localGateway: LocalLlmBrainApiGateway? = null
     private var cloudIntentGateway: CloudIntentBrainApiGateway? = null
 
+    /** Camada 2 (llm) para as portas CHAT/PROMPT: LFM local, gratuito, sem rede. Null até `onCreate`/E2E fake. */
+    val localLlmGateway: LocalLlmBrainApiGateway? get() = localGateway
+
     override fun onCreate() {
         super.onCreate()
         if (BuildConfig.E2E_FAKE_ROOTFS) {

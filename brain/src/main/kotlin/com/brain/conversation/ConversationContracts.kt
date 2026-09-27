@@ -53,6 +53,16 @@ data class EstruturaExtraida(
     }
 }
 
+/**
+ * Camada 2 (llm) do fallback local→llm→web→api das portas CHAT/PROMPT: gera um RASCUNHO
+ * de resposta quando a camada local (1) não resolveu. A LLM aqui é implementadora, nunca
+ * autora final — o rascunho só chega ao usuário se passar pelo [OutputReviewer] (revisor).
+ * Sem essa aprovação, o orquestrador segue para a camada 3 (web).
+ */
+fun interface ConversationDrafter {
+    fun rascunhar(prompt: String, context: ConversationContext): String
+}
+
 /** QC da saída bruta do agente; não toma decisão de aprovação. */
 fun interface OutputReviewer {
     fun conferir(promptOriginal: String, saidaDoAgente: String): RevisaoAchados
@@ -81,6 +91,11 @@ object NoOpConversationInterpreter : ConversationInterpreter {
         val normalized = prompt.trim().lowercase().replace(Regex("\\s+"), " ")
         return EstruturaExtraida(intent = "UNCLASSIFIED", normalizedQuery = normalized)
     }
+}
+
+/** Implementação neutra: sem IA configurada, a camada llm não produz rascunho (segue para web). */
+object NoOpConversationDrafter : ConversationDrafter {
+    override fun rascunhar(prompt: String, context: ConversationContext): String = ""
 }
 
 /** Implementação neutra que não inventa achados de qualidade. */

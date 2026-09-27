@@ -20,6 +20,7 @@ import com.brain.conversation.ConversationInterpreterRegistry
 import com.brain.conversation.ConversationMetrics
 import com.brain.conversation.ConversationKnowledgeFlow
 import com.brain.conversation.ConversationInterpreter
+import com.brain.conversation.ConversationDrafter
 import com.brain.conversation.OutputReviewer
 import java.time.Clock
 
@@ -36,6 +37,8 @@ class ChatResponseExecutor(
     private val knowledgeCycle: KnowledgeLearningCycle? = null,
     private val knowledgePromoter: ResearchKnowledgePromoter? = null,
     private val structuredInterpreter: ConversationInterpreter? = null,
+    /** Camada 2 (llm) do fallback local→llm→web→api. Só é consultada quando a camada 1 (local) erra. */
+    private val drafter: ConversationDrafter? = null,
     private val outputReviewer: OutputReviewer? = null,
     private val secretaryGate: DeterministicSecretaryGate = DeterministicSecretaryGate(),
     val metrics: ConversationMetrics = ConversationMetrics(),
@@ -73,7 +76,38 @@ class ChatResponseExecutor(
         val localMiss = localResponse == null || localResponse.intent == "knowledge.unknown"
         val noWebRestriction = request.parameters.values.any { value -> value.contains("NO_WEB", ignoreCase = true) || value.contains("no web", ignoreCase = true) }
         val localCalculation = LocalArithmeticCalculator.calculate(prompt)
-        val shouldRecover = suppliedResearch.isBlank() && localCalculation == null && !isClarification && !noWebRestriction && localMiss && researchFallback != null
+
+        // Camada 2 (llm): só entra quando a camada 1 (local) não resolveu. O rascunho da LLM
+        // nunca vira resposta por conta própria: primeiro passa pelo Secretário determinístico
+        // (secretaryGate, o mesmo gate usado no fim do ciclo — nenhuma chamada de api entra aqui)
+        // e, se um outputReviewer LLM também estiver configurado (camada api, opcional), por ele
+        // também. Reprovado em qualquer um, o ciclo segue normalmente para a camada 3 (web).
+        var llmDraftText: String? = null
+        if (localMiss && localCalculation == null && !isClarification && drafter != null) {
+            val draft = runCatching { drafter.rascunhar(prompt, com.brain.conversation.ConversationContext(requestId = request.actionId)) }
+                .getOrNull()?.takeIf { it.isNotBlank() }
+            if (draft != null) {
+                evidence += "chat:llm:implementer"
+                val draftEvidence = evidence + "chat:llm:implementer"
+                val gateCheck = secretaryGate.evaluate(
+                    ConversationResult(draft, ConversationStatus.ANSWER_READY, draftEvidence, request.actionId, prompt, researchAttempted = false),
+                    recoveryAvailable = false
+                )
+                val reviewOk = if (outputReviewer != null) {
+                    val review = outputReviewer.conferir(prompt, draft)
+                    metrics.recordLlmCall("implementer", "standard", review.respondeAoPedido && review.completo)
+                    review.respondeAoPedido && review.completo
+                } else true
+                if (gateCheck.decision == SecretaryDecision.ACCEPT && reviewOk) {
+                    llmDraftText = draft
+                    evidence += "chat:llm:implementer:accepted"
+                } else {
+                    evidence += "chat:llm:implementer:rejected"
+                }
+            }
+        }
+
+        val shouldRecover = llmDraftText == null && suppliedResearch.isBlank() && localCalculation == null && !isClarification && !noWebRestriction && localMiss && researchFallback != null
         var researchResult: ResearchRunResult? = null
 
         if (localMiss && shouldRecover && maxRecoveryAttempts == 1) {
@@ -87,6 +121,11 @@ class ChatResponseExecutor(
         val finalText: String
         val status: ConversationStatus
         when {
+            llmDraftText != null -> {
+                finalText = llmDraftText
+                evidence += "chat:conversation:synthesis"
+                status = ConversationStatus.ANSWER_READY
+            }
             researchResult?.answer?.isNotBlank() == true -> {
                 finalText = trimToSentenceBoundary(researchResult.answer.trim(), maxChars = 1600)
                 evidence += "chat:conversation:synthesis"
@@ -112,7 +151,7 @@ class ChatResponseExecutor(
             }
         }
 
-        if (outputReviewer != null) {
+        if (outputReviewer != null && llmDraftText == null) {
             val review = outputReviewer.conferir(prompt, finalText)
             metrics.recordLlmCall("reviewer", "standard", review.respondeAoPedido && review.completo)
             evidence += "chat:llm:reviewer"

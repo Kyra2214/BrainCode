@@ -15,6 +15,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -112,6 +113,7 @@ private fun ExtensionsSettings(viewModel: SandboxViewModel) {
 private fun LlmExtensionsSettings() {
     val manager = (LocalContext.current.applicationContext as BrainCodeApplication).lfmModelManager
     val state by manager.state.collectAsState()
+    val progress by manager.downloadProgress.collectAsState()
     LazyColumn(modifier = Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             Text("Modelos locais", style = MaterialTheme.typography.titleMedium)
@@ -119,13 +121,26 @@ private fun LlmExtensionsSettings() {
         }
         item {
             Card(modifier = Modifier.fillMaxWidth()) {
-                Row(modifier = Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("LFM2.5-350M", style = MaterialTheme.typography.titleSmall)
-                        Text("Braço local do Secretário • Q4_K_M", style = MaterialTheme.typography.bodySmall)
+                Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("LFM2.5-350M", style = MaterialTheme.typography.titleSmall)
+                            Text("Braço local do Secretário • Q4_K_M", style = MaterialTheme.typography.bodySmall)
+                        }
+                        OutlinedButton(onClick = {}, enabled = false) {
+                            Text(lfmStateLabel(state, progress))
+                        }
                     }
-                    OutlinedButton(onClick = {}, enabled = false) {
-                        Text(lfmStateLabel(state))
+                    if (state == LfmModelState.DOWNLOADING) {
+                        val (done, total) = progress
+                        if (total > 0L) {
+                            LinearProgressIndicator(
+                                progress = { (done.toFloat() / total.toFloat()).coerceIn(0f, 1f) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
                     }
                 }
             }
@@ -133,9 +148,24 @@ private fun LlmExtensionsSettings() {
     }
 }
 
-private fun lfmStateLabel(state: LfmModelState): String = when (state) {
+private fun formatBytes(bytes: Long): String {
+    val mb = bytes / (1024.0 * 1024.0)
+    return if (mb >= 1.0) "%.0f MB".format(mb) else "%.0f KB".format(bytes / 1024.0)
+}
+
+private fun lfmStateLabel(state: LfmModelState, progress: Pair<Long, Long> = 0L to -1L): String = when (state) {
     LfmModelState.NOT_INSTALLED -> "Não instalado"
-    LfmModelState.DOWNLOADING -> "Baixando…"
+    LfmModelState.DOWNLOADING -> {
+        val (done, total) = progress
+        if (total > 0L) {
+            val pct = (done * 100L / total).coerceIn(0L, 100L)
+            "Baixando… $pct% (${formatBytes(done)}/${formatBytes(total)})"
+        } else if (done > 0L) {
+            "Baixando… ${formatBytes(done)}"
+        } else {
+            "Baixando…"
+        }
+    }
     LfmModelState.VERIFYING -> "Verificando…"
     LfmModelState.READY -> "Instalado"
     LfmModelState.LOADING -> "Carregando…"

@@ -116,6 +116,35 @@ class LlmConversationInterpreter(
     """.trimIndent()
 }
 
+/**
+ * Camada 2 (llm) do fluxo local→llm→web→api. Gera um rascunho de resposta; nunca é a fonte
+ * que fala com o usuário — quem decide se o rascunho vira resposta é o [OutputReviewer]
+ * (ver [LlmOutputReviewer]), chamado pelo orquestrador da porta (ChatResponseExecutor/
+ * PromptGenerationExecutor) logo em seguida. Falha ou ausência de conta autorizada aqui
+ * é tratada como "sem rascunho": o orquestrador segue para a camada 3 (web) normalmente.
+ */
+class LlmConversationDrafter(
+    private val gateway: BrainApiGateway,
+    private val accounts: Set<String> = emptySet()
+) : ConversationDrafter {
+    override fun rascunhar(prompt: String, context: ConversationContext): String =
+        runCatching {
+            if (accounts.isEmpty()) return ""
+            gateway.complete(drafterPrompt(prompt, context), PapelPipeline.CONVERSACAO, accounts).text.trim()
+        }.getOrDefault("")
+
+    private fun drafterPrompt(prompt: String, context: ConversationContext) = """
+        Você é o implementador de rascunhos conversacionais do BrainCode. Seu texto NUNCA é
+        entregue diretamente ao usuário — outra etapa determinística/LLM revisa e decide se ele
+        vira a resposta final. Escreva apenas o rascunho da resposta, sem prefácio, comentário,
+        aspas ou menção a esta instrução. Não invente fatos verificáveis (datas, números, eventos,
+        nomes) sobre os quais não tenha certeza absoluta; nesse caso, diga que não tem certeza.
+        Idioma: pt-BR.
+
+        Mensagem do usuário: $prompt
+    """.trimIndent()
+}
+
 class LlmOutputReviewer(
     private val gateway: BrainApiGateway,
     private val fallback: OutputReviewer = NoOpOutputReviewer,

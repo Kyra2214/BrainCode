@@ -252,10 +252,22 @@ class WeatherExecutor(http: ApiHttpClient = UrlConnectionApiHttpClient()) : Dete
         val dayToken = Regex("(?i)\\b(amanhã|amanha|hoje|agora|neste momento)\\b").find(query)?.groupValues?.get(1)?.lowercase()
         val tomorrow = dayToken == "amanhã" || dayToken == "amanha"
 
-        val geoUrl = "https://geocoding-api.open-meteo.com/v1/search?name=${location.encodeQuery()}&count=1&language=pt&format=json&countryCode=BR"
+        // Users often say "cidade UF" ("Macaé rj"). Open-Meteo's geocoder only matches city
+        // names, so a trailing state abbreviation makes the whole string match nothing. Strip
+        // it out for the lookup and use it afterwards only to pick the right city among
+        // same-named results.
+        val ufMatch = Regex("(?i)^(.*\\S)\\s+([A-Za-z]{2})$").find(location)
+        val uf = ufMatch?.groupValues?.get(2)?.uppercase()?.takeIf { it in BR_STATE_NAMES }
+        val cityQuery = if (uf != null) ufMatch!!.groupValues[1].trim() else location
+
+        val geoUrl = "https://geocoding-api.open-meteo.com/v1/search?name=${cityQuery.encodeQuery()}&count=10&language=pt&format=json&countryCode=BR"
         val geoRoot = JSONObject(json(http.get(geoUrl), "Open-Meteo geocoding"))
         val places = geoRoot.optJSONArray("results") ?: error("cidade não encontrada no Open-Meteo")
-        val place = places.optJSONObject(0) ?: error("cidade não encontrada no Brasil")
+        val place = (uf?.let { code ->
+            val stateName = BR_STATE_NAMES[code]
+            (0 until places.length()).map { places.getJSONObject(it) }
+                .firstOrNull { it.optString("admin1").equals(stateName, ignoreCase = true) }
+        }) ?: places.optJSONObject(0) ?: error("cidade não encontrada no Brasil")
         val lat = place.optDouble("latitude", Double.NaN)
         val lon = place.optDouble("longitude", Double.NaN)
         if (!lat.isFinite() || !lon.isFinite()) error("Open-Meteo retornou coordenadas inválidas")
@@ -305,6 +317,18 @@ class WeatherExecutor(http: ApiHttpClient = UrlConnectionApiHttpClient()) : Dete
         45, 48 -> "nevoeiro"; 51, 53, 55 -> "garoa"; 56, 57 -> "garoa congelante";
         61, 63, 65 -> "chuva"; 66, 67 -> "chuva congelante"; 71, 73, 75, 77 -> "neve";
         80, 81, 82 -> "pancadas de chuva"; 85, 86 -> "pancadas de neve"; 95, 96, 99 -> "trovoada"; else -> null
+    }
+
+    private companion object {
+        val BR_STATE_NAMES = mapOf(
+            "AC" to "Acre", "AL" to "Alagoas", "AP" to "Amapá", "AM" to "Amazonas",
+            "BA" to "Bahia", "CE" to "Ceará", "DF" to "Distrito Federal", "ES" to "Espírito Santo",
+            "GO" to "Goiás", "MA" to "Maranhão", "MT" to "Mato Grosso", "MS" to "Mato Grosso do Sul",
+            "MG" to "Minas Gerais", "PA" to "Pará", "PB" to "Paraíba", "PR" to "Paraná",
+            "PE" to "Pernambuco", "PI" to "Piauí", "RJ" to "Rio de Janeiro", "RN" to "Rio Grande do Norte",
+            "RS" to "Rio Grande do Sul", "RO" to "Rondônia", "RR" to "Roraima", "SC" to "Santa Catarina",
+            "SP" to "São Paulo", "SE" to "Sergipe", "TO" to "Tocantins"
+        )
     }
 }
 /** Câmbio Frankfurter first; fallback static currency-api only on HTTP/parse/no-data failure. */

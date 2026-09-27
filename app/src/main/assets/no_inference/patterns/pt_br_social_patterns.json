@@ -1,6 +1,6 @@
 {
   "greetings": {
-    "patterns": ["^(?:olá|ola)$", "^(?:olá|ola) (?:boa noite|bom dia|boa tarde)$", "^oi$", "^oi (?:boa noite|bom dia|boa tarde)$", "^bom dia$", "^boa tarde$", "^boa noite$", "^como vai$", "^como você está$", "^como voce esta$"],
+    "patterns": ["^(?:olá|ola)$", "^(?:olá|ola) (?:boa noite|bom dia|boa tarde)$", "^oi$", "^oi (?:boa noite|bom dia|boa tarde)$", "^bom dia$", "^boa tarde$", "^boa noite$", "^como vai\\??$", "^como você está$", "^como voce esta$", "^e aí\\??$", "^e ai\\??$"],
     "response": ["Olá! Como posso ajudar?", "Oi! Estou pronto para conversar. Sobre o que você quer falar?", "Olá! Pode me fazer uma pergunta."]
   },
   "farewells": {
@@ -12,7 +12,7 @@
     "response": ["De nada!", "Por nada! Se precisar, pode perguntar.", "Fico feliz em ajudar."]
   },
   "wellbeing": {
-    "patterns": ["^como você está\\??$", "^como voce esta\\??$", "^tudo bem\\??$"],
+    "patterns": ["^como você está\\??$", "^como voce esta\\??$", "^como está\\??$", "^como esta\\??$", "^tudo bem\\??$", "^tudo bom\\??$", "^tudo certo\\??$"],
     "response": "Estou bem e pronto para ajudar. Como você está?"
   },
   "identity": {

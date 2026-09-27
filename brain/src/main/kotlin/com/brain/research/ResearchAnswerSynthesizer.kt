@@ -24,7 +24,13 @@ object ResearchQueryRewriter {
         val cleaned = stripFillers(query)
         val normalized = cleaned.lowercase(Locale.ROOT).trim()
         return when {
-            normalized.contains("como funciona") || normalized.startsWith("como ") ->
+            // Só aplica o viés técnico quando a pergunta é de fato sobre como algo
+            // funciona ("como funciona X", "como X funciona"). `startsWith("como ")`
+            // sozinho é grande demais: "como está", "como você está", "como faço
+            // isso", "como chegar" também começam com "como" mas não pedem uma
+            // explicação de arquitetura/componentes — anexar esse sufixo a elas
+            // desviava a busca para conteúdo técnico sem relação com a pergunta.
+            Regex("(?i)\\bcomo\\b.*\\bfunciona\\b").containsMatchIn(normalized) ->
                 "$cleaned arquitetura, componentes e funcionamento técnico"
             else ->
                 "$cleaned explicação, definição e contexto"

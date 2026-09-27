@@ -96,6 +96,21 @@ class StructuredPublicDataExecutorsTest {
         assertEquals(2, http.urls.size)
         assertTrue(http.urls[0].contains("geocoding-api.open-meteo.com"))
         assertTrue(http.urls[1].contains("api.open-meteo.com/v1/forecast"))
+        // Regression: the trailing state abbreviation must not be sent as part of the city
+        // name, or Open-Meteo's geocoder finds nothing (real bug: "Macaé rj" -> 0 results).
+        assertFalse(http.urls[0].contains("rj", ignoreCase = true))
+        assertTrue(http.urls[0].contains("name=Maca"))
+    }
+
+    @Test fun `pergunta com cidade e UF em minusculo ainda encontra o clima`() {
+        val http = FakeHttp(
+            response(200, """{"results":[{"name":"Macaé","admin1":"Rio de Janeiro","latitude":-22.37,"longitude":-41.78,"country_code":"BR"},{"name":"Macaé","admin1":"Bahia","latitude":-1.0,"longitude":-1.0,"country_code":"BR"}]}"""),
+            response(200, """{"current":{"temperature_2m":28.0,"apparent_temperature":29.1,"relative_humidity_2m":72,"precipitation":0.0,"weather_code":2,"wind_speed_10m":11.2},"current_units":{"temperature_2m":"°C","apparent_temperature":"°C","relative_humidity_2m":"%","precipitation":"mm","wind_speed_10m":"km/h"}}""")
+        )
+        val execution = WeatherExecutor(http).execute(request("weather", "como está o tempo hoje em Macaé rj"), capability("weather"), allow)
+        assertTrue(execution.success)
+        assertTrue(execution.userResponse!!.text.contains("Macaé - Rio de Janeiro"))
+        assertFalse(http.urls[0].contains("rj", ignoreCase = true))
     }
 
     @Test

@@ -807,6 +807,12 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 val webResearchExecutor = WebResearchExecutor(provider = webResearchProvider, researchAgent = automaticConversationResearch)
                 val publicDataCapabilities = PublicDataCapabilityProvider()
                 val conversationKnowledgeCycle = com.brain.memory.KnowledgeLearningCycle()
+                // Porta 1 (CHAT): local → llm → web (sem api — a camada llm usa só o LFM
+                // on-device, gratuito e sem rede; LfmConversationDrafter.rascunhar() devolve ""
+                // se o modelo não estiver carregado, e o fluxo cai direto pra camada 3, como
+                // antes). O revisor da camada 2 é o Secretário determinístico (secretaryGate,
+                // dentro do próprio ChatResponseExecutor) — nenhuma chamada de api entra aqui.
+                val localLlmGateway = (getApplication<BrainCodeApplication>()).localLlmGateway
                 val chatResponseExecutor = ChatResponseExecutor(
                     contextProvider = {
                         sessions.firstOrNull { it.id == activeSessionId }?.conversationContext ?: ConversationContext()
@@ -814,10 +820,9 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     conversationEngine = noInferenceEngine(getApplication()),
                     researchFallback = automaticConversationResearch.takeUnless { BuildConfig.E2E_FAKE_ROOTFS },
                     knowledgeCycle = conversationKnowledgeCycle,
-                    // Porta 1 permanece sem LLM: o promoter usa o interpretador determinístico
-                    // padrão e o Secretário valida a saída sem reviewer externo.
                     knowledgePromoter = com.brain.memory.ResearchKnowledgePromoter(),
                     structuredInterpreter = null,
+                    drafter = localLlmGateway?.let { LfmConversationDrafter(it) },
                     outputReviewer = null
                 )
                 brainController = BrainSandboxController(

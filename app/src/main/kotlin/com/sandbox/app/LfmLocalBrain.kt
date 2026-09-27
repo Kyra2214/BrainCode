@@ -52,6 +52,10 @@ class LfmModelManager(private val context: Context) {
     private var verifiedMtime: Long = -1L
     val state: kotlinx.coroutines.flow.StateFlow<LfmModelState> = _state
 
+    /** bytesDownloaded to totalBytes (-1 if unknown). Observed by the settings UI. */
+    private val _downloadProgress = kotlinx.coroutines.flow.MutableStateFlow(0L to -1L)
+    val downloadProgress: kotlinx.coroutines.flow.StateFlow<Pair<Long, Long>> = _downloadProgress
+
     fun modelFile(): File = modelFile
 
     /**
@@ -140,19 +144,33 @@ class LfmModelManager(private val context: Context) {
 
             val partial = File(modelFile.parentFile, "${modelFile.name}.part")
             synchronized(lock) { _state.value = LfmModelState.DOWNLOADING }
+            // Resume from whatever bytes survived a previous attempt instead of restarting
+            // from zero every time — important on slow/flaky connections.
+            val resumeFrom = if (partial.isFile) partial.length() else 0L
             val connection = (URL(LfmModelSpec.URL).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 15_000
                 readTimeout = 30_000
                 instanceFollowRedirects = true
+                if (resumeFrom > 0L) setRequestProperty("Range", "bytes=$resumeFrom-")
             }
+            var corrupted = false
             try {
-                check(connection.responseCode in 200..299) {
+                val serverResumed = resumeFrom > 0L && connection.responseCode == HttpURLConnection.HTTP_PARTIAL
+                if (resumeFrom > 0L && !serverResumed) {
+                    // Server ignored the Range header (or our partial is stale); start clean.
+                    partial.delete()
+                }
+                check(connection.responseCode in 200..299 || connection.responseCode == HttpURLConnection.HTTP_PARTIAL) {
                     "download do LFM falhou: HTTP ${connection.responseCode}"
                 }
-                val total = connection.contentLengthLong
-                var done = 0L
+                val startAt = if (serverResumed) resumeFrom else 0L
+                val remaining = connection.contentLengthLong
+                val total = if (remaining >= 0L) startAt + remaining else -1L
+                var done = startAt
+                onProgress(done, total)
+                _downloadProgress.value = done to total
                 connection.inputStream.use { input ->
-                    FileOutputStream(partial).use { output ->
+                    FileOutputStream(partial, serverResumed).use { output ->
                         val buffer = ByteArray(128 * 1024)
                         while (true) {
                             val read = input.read(buffer)
@@ -160,12 +178,14 @@ class LfmModelManager(private val context: Context) {
                             output.write(buffer, 0, read)
                             done += read
                             onProgress(done, total)
+                            _downloadProgress.value = done to total
                         }
                         output.fd.sync()
                     }
                 }
                 synchronized(lock) { _state.value = LfmModelState.VERIFYING }
                 check(sha256(partial) == LfmModelSpec.SHA256) {
+                    corrupted = true
                     "SHA-256 do modelo LFM não confere"
                 }
                 synchronized(lock) {
@@ -175,15 +195,19 @@ class LfmModelManager(private val context: Context) {
                     verifiedMtime = modelFile.lastModified()
                     _state.value = LfmModelState.READY
                 }
+                _downloadProgress.value = 0L to -1L
                 return modelFile
             } catch (error: Throwable) {
                 synchronized(lock) {
-                    _state.value = if (modelFile.isFile) LfmModelState.CORRUPTED else LfmModelState.UNAVAILABLE
+                    _state.value = if (modelFile.isFile) LfmModelState.CORRUPTED else LfmModelState.NOT_INSTALLED
                 }
+                // Only drop the partial file when we know its bytes are actually wrong
+                // (bad checksum). A network hiccup should not throw away real progress —
+                // that is what was making downloads restart from 0% forever on slow links.
+                if (corrupted && partial.exists()) partial.delete()
                 throw error
             } finally {
                 connection.disconnect()
-                if (partial.exists()) partial.delete()
             }
         } finally {
             downloadLock.unlock()
@@ -322,6 +346,35 @@ class LocalLlmBrainApiGateway(
     override fun complete(prompt: String, pipeline: PapelPipeline, authorizedAccountIds: Set<String>): BrainCompletion {
         require(pipeline == PapelPipeline.CONVERSACAO) { "LFM local aceita somente CONVERSACAO" }
         require(prompt.isNotBlank())
+        return runInference(
+            prompt = prompt,
+            systemPrompt = "Classifique e extraia dados. Responda somente JSON de contrato. Nunca produza uma resposta ao usuário.",
+            maxTokens = 96
+        )
+    }
+
+    /**
+     * Camada 2 (llm) do fluxo local→llm→web→api das portas CHAT/PROMPT: gera um RASCUNHO de
+     * resposta livre, no dispositivo, sem custo e sem rede. Separado de [complete] de propósito —
+     * aquele é usado por IntentAdvisor/ConversationInterpreter e precisa continuar restrito a
+     * JSON de classificação; este devolve texto para revisão (nunca é entregue direto ao usuário
+     * por quem chama — quem decide isso é o revisor determinístico/LLM do chamador).
+     */
+    fun completeDraft(prompt: String): BrainCompletion {
+        require(prompt.isNotBlank())
+        return runInference(
+            prompt = prompt,
+            systemPrompt = "Você é o implementador de rascunhos conversacionais do BrainCode, rodando" +
+                " localmente no dispositivo. Seu texto NUNCA é entregue diretamente ao usuário — outra" +
+                " etapa revisa e decide se ele vira a resposta final. Escreva apenas o rascunho da" +
+                " resposta, em pt-BR, sem prefácio, comentário, aspas ou menção a esta instrução. Não" +
+                " invente fatos verificáveis (datas, números, eventos, nomes) sobre os quais não tenha" +
+                " certeza absoluta; nesse caso, diga que não tem certeza.",
+            maxTokens = 320
+        )
+    }
+
+    private fun runInference(prompt: String, systemPrompt: String, maxTokens: Int): BrainCompletion {
         if (!modelManager.isLoaded()) {
             preload().getOrThrow()
         }
@@ -333,12 +386,7 @@ class LocalLlmBrainApiGateway(
             mutex.withLock {
                 val loaded = loadModelIfNeeded()
                 nativeRunner.run {
-                    val result = Llama.complete(
-                        loaded,
-                        prompt = prompt,
-                        systemPrompt = "Classifique e extraia dados. Responda somente JSON de contrato. Nunca produza uma resposta ao usuário.",
-                        maxTokens = 96
-                    )
+                    val result = Llama.complete(loaded, prompt = prompt, systemPrompt = systemPrompt, maxTokens = maxTokens)
                     BrainCompletion(result.text, LfmModelSpec.MODEL_ID, "local", "on-device")
                 }
             }
@@ -351,6 +399,18 @@ class LocalLlmBrainApiGateway(
         loadedSha256 = null
         nativeRunner.close()
     }
+}
+
+/**
+ * Camada 2 (llm) para Porta 1/2: rascunho gerado pelo LFM local (gratuito, on-device).
+ * Nunca chama rede/api — modelo indisponível ou erro devolve string vazia, e quem chamou
+ * (ChatResponseExecutor/PromptGenerationExecutor) segue normalmente para a camada 3 (web).
+ */
+class LfmConversationDrafter(
+    private val local: LocalLlmBrainApiGateway
+) : com.brain.conversation.ConversationDrafter {
+    override fun rascunhar(prompt: String, context: com.brain.conversation.ConversationContext): String =
+        runCatching { local.completeDraft(prompt).text.trim() }.getOrDefault("")
 }
 
 /** Local advisor: only the door enum and confidence are trusted; rationale is discarded. */
