@@ -141,6 +141,7 @@ private fun lfmStateLabel(state: LfmModelState): String = when (state) {
     LfmModelState.LOADING -> "Carregando…"
     LfmModelState.LOADED -> "Instalado"
     LfmModelState.CORRUPTED -> "Corrompido"
+    LfmModelState.LOAD_FAILED -> "Falha ao carregar"
     LfmModelState.UNAVAILABLE -> "Indisponível"
 }
 
@@ -150,6 +151,7 @@ private fun lfmIntegrityLabel(state: LfmModelState): String = when (state) {
     LfmModelState.LOADED -> "Q4_K_M • carregado na memória"
     LfmModelState.VERIFYING -> "Q4_K_M • verificando integridade"
     LfmModelState.CORRUPTED -> "Q4_K_M • SHA-256 inválido"
+    LfmModelState.LOAD_FAILED -> "Q4_K_M • falha no carregamento nativo"
     LfmModelState.DOWNLOADING -> "Q4_K_M • download em andamento"
     LfmModelState.NOT_INSTALLED -> "Q4_K_M • aguardando instalação"
     LfmModelState.UNAVAILABLE -> "Q4_K_M • indisponível no momento"
