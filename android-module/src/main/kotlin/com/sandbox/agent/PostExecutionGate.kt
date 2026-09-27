@@ -40,6 +40,8 @@ import com.brain.validation.ValidationResult
  * CicloExecucaoPlano e transforma evidência em verification, critic, revisão,
  * readiness e learning validado.
  */
+private val PUBLIC_DATA_CAPABILITIES = setOf("weather", "br.dados", "br.economia", "br.geografia", "cambio")
+
 class PostExecutionGate(
     private val memory: LayeredMemory,
     /** Fase 12 (ver docs/LEGADO_E_DECISOES.md, "Fase 12 — conexão de trace e gates", seção 2): mesma decisão PASSED/FAILED/BLOCKED
@@ -321,6 +323,7 @@ class PostExecutionGate(
             val evidence = result?.executionEvidence.orEmpty()
             val response = result?.userResponse
             val researchStep = step.capacidade == "network.research"
+            val directDataStep = step.capacidade in PUBLIC_DATA_CAPABILITIES
             val recoveryRequested = "chat:orchestrator:recovery" in evidence
             val evidenceComplete = "chat:secretary:accept" in evidence &&
                 evidence.any { it.startsWith("chat:request:") } &&
@@ -334,18 +337,23 @@ class PostExecutionGate(
             val qualidadePesquisa = evidence.firstOrNull { it.startsWith("web-research:quality=") }
                 ?.removePrefix("web-research:quality=")
             val qualidadeUtilizavel = qualidadePesquisa == null || qualidadePesquisa !in setOf("REJECTED", "LOW")
-            val stepPassed = if (researchStep) {
-                result?.status == StatusPasso.APROVADO &&
+            val stepPassed = when {
+                researchStep -> result?.status == StatusPasso.APROVADO &&
                     (result.resultado?.isNotBlank() == true || evidence.isNotEmpty() || result.evidencias.isNotEmpty()) &&
                     qualidadeUtilizavel
-            } else {
-                result?.status == StatusPasso.APROVADO && response?.text?.isNotBlank() == true && evidenceComplete
+                directDataStep -> result?.status == StatusPasso.APROVADO &&
+                    response?.text?.isNotBlank() == true && evidence.isNotEmpty()
+                else -> result?.status == StatusPasso.APROVADO && response?.text?.isNotBlank() == true && evidenceComplete
             }
             VerificationCheck(
                 criterionId = step.id,
                 passed = stepPassed,
                 detail = if (stepPassed) {
-                    if (researchStep) "pesquisa aprovada com evidência própria" else "UserResponse aceita e correlacionada"
+                    when {
+                        researchStep -> "pesquisa aprovada com evidência própria"
+                        directDataStep -> "UserResponse de dado público aceita com evidência própria"
+                        else -> "UserResponse aceita e correlacionada"
+                    }
                 } else if (researchStep) {
                     if (!qualidadeUtilizavel) "pesquisa com qualidade insuficiente ($qualidadePesquisa) para responder com segurança"
                     else "pesquisa/evidência ausente"
