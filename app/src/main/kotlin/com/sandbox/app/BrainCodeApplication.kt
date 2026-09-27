@@ -1,6 +1,7 @@
 package com.sandbox.app
 
 import android.app.Application
+import com.brain.conversation.ConversationInterpreterRegistry
 import com.brain.conversation.HybridIntentAdvisor
 import com.brain.conversation.IntentAdvisorRegistry
 import com.brain.conversation.LlmIntentAdvisor
@@ -30,6 +31,7 @@ class BrainCodeApplication : Application() {
         )
         val cloudAdvisor = LlmIntentAdvisor(ConversationBrainGatewayAdapter(providerGateway), NoOpIntentAdvisor)
         IntentAdvisorRegistry.current = HybridIntentAdvisor(LfmIntentAdvisor(local), cloudAdvisor)
+        ConversationInterpreterRegistry.current = LfmEntityInterpreter(local)
 
         // Provision the 229 MB quantized model once in the background. E2E builds
         // deliberately stay model-free and keep their offline determinism.
