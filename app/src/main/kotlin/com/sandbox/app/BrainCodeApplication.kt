@@ -65,7 +65,10 @@ class BrainCodeApplication : Application() {
             val rooftsReady = runCatching { factory.isRoofts06Installed() }.getOrDefault(false)
             if (rooftsReady) {
                 runCatching { modelManager.ensureDownloaded() }
-                if (modelManager.refreshState() == LfmModelState.READY) return
+                if (modelManager.refreshState() == LfmModelState.READY) {
+                    localGateway?.preload()
+                    if (modelManager.refreshState() == LfmModelState.READY) return
+                }
                 delay(30_000L)
             } else {
                 delay(2_000L)
