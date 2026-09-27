@@ -136,4 +136,24 @@ class LfmLocalBrainTest {
         assertTrue(gateway.pipelines.isEmpty())
     }
 
+    @Test
+    fun nativeInferenceRunner_times_out_and_serializes_follow_up_calls() {
+        val runner = LfmNativeInferenceRunner(timeoutMs = 40L)
+        try {
+            val timed = runCatching {
+                runner.run {
+                    Thread.sleep(200L)
+                    "late"
+                }
+            }
+            assertTrue(timed.isFailure)
+            assertTrue(timed.exceptionOrNull()?.message?.contains("tempo limite") == true)
+
+            val followUp = runner.run { "ok" }
+            assertEquals("ok", followUp)
+        } finally {
+            runner.close()
+        }
+    }
+
 }
