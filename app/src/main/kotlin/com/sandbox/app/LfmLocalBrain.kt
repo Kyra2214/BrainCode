@@ -41,7 +41,11 @@ enum class LfmModelState {
 class LfmModelManager(private val context: Context) {
     private val modelFile = File(context.filesDir, "brain/models/${LfmModelSpec.FILE_NAME}")
     private val lock = Any()
+    private val downloadLock = java.util.concurrent.locks.ReentrantLock()
     private val _state = kotlinx.coroutines.flow.MutableStateFlow(LfmModelState.NOT_INSTALLED)
+    private var verifiedSha256: String? = null
+    private var verifiedSize: Long = -1L
+    private var verifiedMtime: Long = -1L
     val state: kotlinx.coroutines.flow.StateFlow<LfmModelState> = _state
 
     fun modelFile(): File = modelFile
@@ -51,20 +55,21 @@ class LfmModelManager(private val context: Context) {
      * only; the cryptographic SHA is the source of truth.
      */
     fun refreshState(forceVerify: Boolean = false): LfmModelState = synchronized(lock) {
-        if (!forceVerify && (_state.value == LfmModelState.READY ||
-            _state.value == LfmModelState.LOADING || _state.value == LfmModelState.LOADED)) {
-            return@synchronized _state.value
-        }
+        if (_state.value == LfmModelState.LOADED) return@synchronized LfmModelState.LOADED
+        if (!forceVerify && (_state.value == LfmModelState.READY || _state.value == LfmModelState.LOADING)) return@synchronized _state.value
         if (!modelFile.isFile) {
             _state.value = LfmModelState.NOT_INSTALLED
             return@synchronized _state.value
         }
-        val wasLoaded = _state.value == LfmModelState.LOADED
         _state.value = LfmModelState.VERIFYING
-        val valid = runCatching { sha256(modelFile) == LfmModelSpec.SHA256 }.getOrDefault(false)
-        if (valid) {
-            _state.value = if (wasLoaded) LfmModelState.LOADED else LfmModelState.READY
+        val digest = runCatching { sha256(modelFile) }.getOrNull()
+        if (digest == LfmModelSpec.SHA256) {
+            verifiedSha256 = digest
+            verifiedSize = modelFile.length()
+            verifiedMtime = modelFile.lastModified()
+            _state.value = LfmModelState.READY
         } else {
+            verifiedSha256 = null
             _state.value = LfmModelState.CORRUPTED
         }
         return@synchronized _state.value
@@ -75,6 +80,12 @@ class LfmModelManager(private val context: Context) {
             refreshState() in setOf(LfmModelState.READY, LfmModelState.LOADING, LfmModelState.LOADED)
 
     fun isLoaded(): Boolean = _state.value == LfmModelState.LOADED
+
+    internal fun verifiedSha256(): String? = synchronized(lock) { verifiedSha256 }
+
+    internal fun artifactChangedSinceVerification(): Boolean = synchronized(lock) {
+        !modelFile.isFile || modelFile.length() != verifiedSize || modelFile.lastModified() != verifiedMtime
+    }
 
     internal fun markLoading() = synchronized(lock) {
         check(modelFile.isFile) { "modelo LFM local não está instalado" }
@@ -91,7 +102,9 @@ class LfmModelManager(private val context: Context) {
     }
 
     fun ensureDownloaded(onProgress: (Long, Long) -> Unit = { _, _ -> }): File {
-        synchronized(lock) {
+        downloadLock.lock()
+        try {
+            synchronized(lock) {
             if (refreshState() == LfmModelState.READY) return modelFile
             modelFile.parentFile?.mkdirs()
             val partial = File(modelFile.parentFile, "${modelFile.name}.part")
@@ -122,8 +135,13 @@ class LfmModelManager(private val context: Context) {
                 check(sha256(partial) == LfmModelSpec.SHA256) {
                     "SHA-256 do modelo LFM não confere"
                 }
-                replaceVerifiedModel(partial)
-                _state.value = LfmModelState.READY
+                synchronized(lock) {
+                    replaceVerifiedModel(partial)
+                    verifiedSha256 = LfmModelSpec.SHA256
+                    verifiedSize = modelFile.length()
+                    verifiedMtime = modelFile.lastModified()
+                    _state.value = LfmModelState.READY
+                }
                 return modelFile
             } catch (error: Throwable) {
                 _state.value = if (modelFile.isFile) LfmModelState.CORRUPTED else LfmModelState.UNAVAILABLE
@@ -132,6 +150,8 @@ class LfmModelManager(private val context: Context) {
                 connection.disconnect()
                 if (partial.exists()) partial.delete()
             }
+        } finally {
+            downloadLock.unlock()
         }
     }
 
