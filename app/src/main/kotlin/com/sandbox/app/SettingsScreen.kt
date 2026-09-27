@@ -111,7 +111,7 @@ private fun ExtensionsSettings(viewModel: SandboxViewModel) {
 @Composable
 private fun LlmExtensionsSettings() {
     val manager = (LocalContext.current.applicationContext as BrainCodeApplication).lfmModelManager
-    val state by manager.state.collectAsStateWithLifecycle()
+    val state by manager.state.collectAsState()
     LazyColumn(modifier = Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             Text("Modelos locais", style = MaterialTheme.typography.titleMedium)
