@@ -59,8 +59,8 @@ class LfmModelManager(private val context: Context) {
             _state.value = LfmModelState.NOT_INSTALLED
             return@synchronized _state.value
         }
-        _state.value = LfmModelState.VERIFYING
         val wasLoaded = _state.value == LfmModelState.LOADED
+        _state.value = LfmModelState.VERIFYING
         val valid = runCatching { sha256(modelFile) == LfmModelSpec.SHA256 }.getOrDefault(false)
         if (valid) {
             writeVerifiedMetadata()
@@ -89,7 +89,7 @@ class LfmModelManager(private val context: Context) {
     }
 
     internal fun markLoadFailed() = synchronized(lock) {
-        _state.value = if (modelFile.isFile) LfmModelState.READY else LfmModelState.UNAVAILABLE
+        _state.value = if (modelFile.isFile) LfmModelState.UNAVAILABLE else LfmModelState.UNAVAILABLE
     }
 
     fun ensureDownloaded(onProgress: (Long, Long) -> Unit = { _, _ -> }): File {
