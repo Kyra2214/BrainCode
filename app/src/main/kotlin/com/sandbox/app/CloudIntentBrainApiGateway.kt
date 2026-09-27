@@ -21,7 +21,8 @@ class CloudIntentBrainApiGateway(context: Context) : BrainApiGateway {
         pipeline: PapelPipeline,
         authorizedAccountIds: Set<String>
     ): BrainCompletion {
-        val result = gateway.complete(prompt, pipeline, authorizedAccountIds)
+        val providerPipeline = if (pipeline == PapelPipeline.CONVERSACAO) PapelPipeline.ESCRITA_DE_PROMPT else pipeline
+        val result = gateway.complete(prompt, providerPipeline, authorizedAccountIds)
         return BrainCompletion(
             text = result.text,
             modelId = result.modelId,
