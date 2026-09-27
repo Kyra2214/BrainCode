@@ -149,6 +149,9 @@ class LfmLocalBrainTest {
             assertTrue(timed.isFailure)
             assertTrue(timed.exceptionOrNull()?.message?.contains("tempo limite") == true)
 
+            val queued = runCatching { runner.run { "queued" } }
+            assertTrue(queued.isFailure)
+            Thread.sleep(220L)
             val followUp = runner.run { "ok" }
             assertEquals("ok", followUp)
         } finally {
