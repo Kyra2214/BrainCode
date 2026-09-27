@@ -5,6 +5,7 @@ import com.brain.conversation.ConversationInterpreterRegistry
 import com.brain.conversation.HybridIntentAdvisor
 import com.brain.conversation.IntentAdvisorRegistry
 import com.brain.conversation.LlmIntentAdvisor
+import com.brain.conversation.NoOpConversationInterpreter
 import com.brain.conversation.NoOpIntentAdvisor
 import com.brain.memory.FileKnowledgeMemory
 import com.brain.memory.KnowledgeLearningCycle
@@ -21,9 +22,14 @@ class BrainCodeApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        if (BuildConfig.E2E_FAKE_ROOTFS) {
+            IntentAdvisorRegistry.current = NoOpIntentAdvisor
+            ConversationInterpreterRegistry.current = NoOpConversationInterpreter
+            return
+        }
+
         val local = LocalLlmBrainApiGateway(this)
         localGateway = local
-
         val providerGateway = BrainApiGateway(
             runCatching { ApiKeyCatalogLoader.load(this) }.getOrElse { emptyList() },
             ApiKeyStore(this),
@@ -33,11 +39,8 @@ class BrainCodeApplication : Application() {
         IntentAdvisorRegistry.current = HybridIntentAdvisor(LfmIntentAdvisor(local), cloudAdvisor)
         ConversationInterpreterRegistry.current = LfmEntityInterpreter(local)
 
-        // Provision the 229 MB quantized model once in the background. E2E builds
-        // deliberately stay model-free and keep their offline determinism.
-        if (!BuildConfig.E2E_FAKE_ROOTFS) {
-            scope.launch { runCatching { LfmModelManager(this@BrainCodeApplication).ensureDownloaded() } }
-        }
+        // Provision the 229 MB quantized model once in the background.
+        scope.launch { runCatching { LfmModelManager(this@BrainCodeApplication).ensureDownloaded() } }
     }
 
     override fun onTerminate() {
