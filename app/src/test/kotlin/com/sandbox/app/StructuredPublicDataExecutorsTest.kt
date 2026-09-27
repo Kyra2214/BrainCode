@@ -3,7 +3,7 @@ package com.sandbox.app
 import com.brain.capability.CapabilityRegistry
 import com.brain.execution.RiskClass
 import com.brain.gateway.ActionRequest
-import com.brain.gateway.PolicyContext
+import com.brain.policy.PolicyContext
 import com.brain.policy.ApprovalRequired
 import com.brain.policy.Decision
 import com.brain.policy.PolicyDecision
@@ -50,7 +50,8 @@ class StructuredPublicDataExecutorsTest {
         val http = FakeHttp(response(200, """{"code":341,"name":"ITAÚ UNIBANCO S.A.","fullName":"Banco Itaú Unibanco S.A."}"""))
         val execution = BrasilApiExecutor(http).execute(request("br.dados", "Qual o código do banco 341?"), capability("br.dados"), allow)
         assertTrue(execution.success)
-        assertTrue(execution.userResponse!!.text.contains("ITAÚ UNIBANCO S.A."))
+        assertTrue(execution.result!!.contains("ITAÚ UNIBANCO S.A."))
+        assertEquals(null, execution.userResponse)
         assertTrue(execution.evidence.any { it.contains("https://brasilapi.com.br/api/banks/v1/341") })
         assertTrue(http.urls.single().endsWith("/341"))
     }
@@ -60,8 +61,9 @@ class StructuredPublicDataExecutorsTest {
         val fallback = FakeHttp(response(200, """{"cep":"01310-100","logradouro":"Avenida Paulista","bairro":"Bela Vista","localidade":"São Paulo","uf":"SP","erro":false}"""))
         val execution = BrasilApiExecutor(http, fallback).execute(request("br.dados", "Qual o CEP 01310-100?"), capability("br.dados"), allow)
         assertTrue(execution.success)
-        assertTrue(execution.userResponse!!.text.contains("Avenida Paulista"))
-        assertTrue(execution.userResponse!!.text.contains("São Paulo"))
+        assertTrue(execution.result!!.contains("Avenida Paulista"))
+        assertTrue(execution.result!!.contains("São Paulo"))
+        assertEquals(null, execution.userResponse)
         assertTrue(execution.evidence.any { it.contains("https://viacep.com.br/ws/01310100/json/") })
         assertEquals(1, fallback.urls.size)
     }
@@ -78,7 +80,8 @@ class StructuredPublicDataExecutorsTest {
         val http = FakeHttp(response(200, """[{"data":"25/09/2026","valor":"15.00"}]"""))
         val execution = BcbExecutor(http).execute(request("br.economia", "Qual a taxa Selic atual?"), capability("br.economia"), allow)
         assertTrue(execution.success)
-        assertTrue(execution.userResponse!!.text.contains("15.00"))
+        assertTrue(execution.result!!.contains("15.00"))
+        assertEquals(null, execution.userResponse)
         assertTrue(http.urls.single().contains("bcdata.sgs.432"))
         assertTrue(execution.evidence.any { it.contains("api.bcb.gov.br") })
     }
@@ -90,12 +93,52 @@ class StructuredPublicDataExecutorsTest {
         )
         val execution = WeatherExecutor(http).execute(request("weather", "Qual o tempo em Macaé RJ?"), capability("weather"), allow)
         assertTrue(execution.success)
-        assertTrue(execution.userResponse!!.text.contains("Macaé"))
-        assertTrue(execution.userResponse!!.text.contains("28.0°C"))
-        assertTrue(execution.userResponse!!.text.contains("parcialmente nublado"))
+        assertTrue(execution.result!!.contains("Macaé"))
+        assertTrue(execution.result!!.contains("28.0°C"))
+        assertTrue(execution.result!!.contains("parcialmente nublado"))
+        assertEquals(null, execution.userResponse)
         assertEquals(2, http.urls.size)
         assertTrue(http.urls[0].contains("geocoding-api.open-meteo.com"))
         assertTrue(http.urls[1].contains("api.open-meteo.com/v1/forecast"))
+    }
+
+    @Test fun `Open-Meteo nao envia a sigla da UF dentro do name do geocoding`() {
+        // Regressão: "Macaé RJ" mandado como name= literal não bate no geocoding real do
+        // Open-Meteo (o campo name só aceita o nome do lugar). A UF deve virar filtro de
+        // admin1, nunca parte do texto buscado.
+        val http = FakeHttp(
+            response(200, """{"results":[{"name":"Macaé","admin1":"Rio de Janeiro","latitude":-22.37,"longitude":-41.78,"country_code":"BR"}]}"""),
+            response(200, """{"current":{"temperature_2m":28.0,"apparent_temperature":29.1,"relative_humidity_2m":72,"precipitation":0.0,"weather_code":2,"wind_speed_10m":11.2},"current_units":{"temperature_2m":"°C","apparent_temperature":"°C","relative_humidity_2m":"%","precipitation":"mm","wind_speed_10m":"km/h"}}""")
+        )
+        val execution = WeatherExecutor(http).execute(request("weather", "qual a previsão do tempo hoje em Macaé RJ"), capability("weather"), allow)
+        assertTrue(execution.success)
+        val geocodingUrl = http.urls[0]
+        assertFalse("UF não pode ir dentro do name= do geocoding: $geocodingUrl", geocodingUrl.contains("Maca%C3%A9+RJ") || geocodingUrl.contains("Maca%C3%A9%20RJ"))
+        assertTrue(geocodingUrl.contains("name=Maca"))
+    }
+
+    @Test fun `Open-Meteo desempata homonimos pela UF quando ha varios resultados`() {
+        val http = FakeHttp(
+            response(200, """{"results":[
+                {"name":"Rio das Ostras","admin1":"Rio Grande do Sul","latitude":-1.0,"longitude":-1.0,"country_code":"BR"},
+                {"name":"Rio das Ostras","admin1":"Rio de Janeiro","latitude":-22.53,"longitude":-41.95,"country_code":"BR"}
+            ]}"""),
+            response(200, """{"current":{"temperature_2m":30.0,"apparent_temperature":31.0,"relative_humidity_2m":70,"precipitation":0.0,"weather_code":0,"wind_speed_10m":9.0},"current_units":{"temperature_2m":"°C","apparent_temperature":"°C","relative_humidity_2m":"%","precipitation":"mm","wind_speed_10m":"km/h"}}""")
+        )
+        val execution = WeatherExecutor(http).execute(request("weather", "tempo em Rio das Ostras RJ agora"), capability("weather"), allow)
+        assertTrue(execution.success)
+        assertTrue(execution.result!!.contains("Rio das Ostras - Rio de Janeiro"))
+        assertEquals(null, execution.userResponse)
+    }
+
+    @Test fun `local sem preposicao em ou de ainda e reconhecido`() {
+        val http = FakeHttp(
+            response(200, """{"results":[{"name":"Rio das Ostras","admin1":"Rio de Janeiro","latitude":-22.53,"longitude":-41.95,"country_code":"BR"}]}"""),
+            response(200, """{"current":{"temperature_2m":27.0,"apparent_temperature":28.0,"relative_humidity_2m":80,"precipitation":0.0,"weather_code":1,"wind_speed_10m":10.0},"current_units":{"temperature_2m":"°C","apparent_temperature":"°C","relative_humidity_2m":"%","precipitation":"mm","wind_speed_10m":"km/h"}}""")
+        )
+        val execution = WeatherExecutor(http).execute(request("weather", "qual a previsão do tempo hoje rio das ostras"), capability("weather"), allow)
+        assertTrue(execution.success)
+        assertTrue(http.urls[0].contains("name=rio"))
     }
 
     @Test fun `cambio tenta Frankfurter e usa fallback de taxa se necessario`() {
@@ -103,7 +146,8 @@ class StructuredPublicDataExecutorsTest {
         val fallback = FakeHttp(response(200, """{"date":"2026-09-25","brl":{"usd":0.193}}"""))
         val execution = ExchangeRateExecutor(http, fallback).execute(request("cambio", "Converta 100 reais para dólar"), capability("cambio"), allow)
         assertTrue(execution.success)
-        assertTrue(execution.userResponse!!.text.contains("19,3 USD"))
+        assertTrue(execution.result!!.contains("19,3 USD"))
+        assertEquals(null, execution.userResponse)
         assertTrue(http.urls.single().contains("/v2/rate/brl/usd"))
         assertTrue(fallback.urls.single().contains("currency-api@latest"))
         assertTrue(execution.evidence.any { it.contains("currency-api@latest") })

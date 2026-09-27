@@ -45,7 +45,6 @@ import com.brain.behavior.VerificationResult
 import com.brain.behavior.VerificationStatus
 import com.brain.validation.ValidationResult
 import com.brain.secretary.UserResponse
-import com.brain.secretary.Door
 
 
 enum class StatusPasso { APROVADO, REPROVADO, NEGADO_PELA_POLICY, AGUARDANDO_APROVACAO, BLOQUEADO_POR_DEPENDENCIA }
@@ -89,8 +88,17 @@ data class ResultadoCiclo(
     val concluido: Boolean
         get() = passos.isNotEmpty() && passos.all { it.status == StatusPasso.APROVADO } && (posExecucao == null || posExecucao.aprovado)
     val aprovado: Boolean get() = concluido
-    /** Somente respostas liberadas pelo Secretary podem ser consumidas pela UI. */
-    val resposta: String? get() = passos.asSequence().mapNotNull { it.userResponse?.text }.lastOrNull()
+    /** Somente UserResponse aceito pelo Secretário em `chat.respond` pode chegar à UI. */
+    val resposta: String? get() = passos.asSequence()
+        .filter { it.capacidade == "chat.respond" && it.status == StatusPasso.APROVADO }
+        .mapNotNull { step ->
+            val response = step.userResponse ?: return@mapNotNull null
+            val evidence = step.executionEvidence + response.evidence
+            response.text.takeIf {
+                it.isNotBlank() && "chat:secretary:accept" in evidence && "chat:request:${response.requestId}" in evidence
+            }
+        }
+        .lastOrNull()
     val researchSources: List<ResearchResult> get() = passos.flatMap { it.researchSources }.distinctBy { it.url }
     val promptReasoning: PromptReasoningTrace? get() = passos.mapNotNull { it.promptReasoning }.reduceOrNull { a, b -> a.merge(b) }
 }
@@ -184,7 +192,12 @@ class CicloExecucaoPlano(
             // Context Builder mínimo: resultado textual das dependências já concluídas vira
             // parâmetro extra do passo (ex.: contexto do WebResearch chega ao Prompt Creator).
             val contextoDependencias = passo.dependeDe.mapNotNull { resultadosPorId[it]?.payloadInterno ?: resultadosPorId[it]?.resultado }
-            val passoComContexto = if (contextoDependencias.isEmpty()) passo else passo.copy(parametros = passo.parametros + contextoDependencias)
+            val capacidadesDependencias = passo.dependeDe.mapNotNull { resultadosPorId[it]?.capacidade }.distinct()
+            val metadadoCapacidades = if (passo.capacidade == "chat.respond" && capacidadesDependencias.isNotEmpty()) {
+                listOf("dependency.capability=${capacidadesDependencias.joinToString(",")}")
+            } else emptyList()
+            val passoComContexto = if (contextoDependencias.isEmpty() && metadadoCapacidades.isEmpty()) passo
+                else passo.copy(parametros = passo.parametros + contextoDependencias + metadadoCapacidades)
             val resultado = processarPasso(passoComContexto, autorizado.authorizations.getValue(passo.id), autorizado.decisions[passo.id])
             resultados += resultado
             resultadosPorId[passo.id] = resultado
@@ -321,19 +334,8 @@ class CicloExecucaoPlano(
                     if (!diagnosis.healthy) runtimeDoctor.repair(authorization.runId, passo.id, diagnosis)
                 }
             }
-            val chatResponse = if (passo.capacidade == "chat.respond" && sucesso) {
-                gatewayExecution?.userResponse ?: gatewayExecution?.result?.takeIf { it.isNotBlank() }?.let {
-                    UserResponse(
-                        text = it,
-                        evidence = gatewayExecution.evidence,
-                        requestId = "${authorization.runId}:${passo.id}",
-                        conversationId = authorization.runId
-                    )
-                }
-            } else gatewayExecution?.userResponse
-            val chatEvidence = if (passo.capacidade == "chat.respond" && chatResponse != null && authorization.doorScope?.door == Door.CHAT) {
-                (gatewayExecution?.evidence.orEmpty() + "chat:secretary:accept" + "chat:request:${passo.id}").distinct()
-            } else gatewayExecution?.evidence.orEmpty()
+            val chatResponse = if (passo.capacidade == "chat.respond" && sucesso) gatewayExecution?.userResponse else null
+            val chatEvidence = gatewayExecution?.evidence.orEmpty()
             return ResultadoPasso(
                 passo.id,
                 if (sucesso) StatusPasso.APROVADO else StatusPasso.REPROVADO,

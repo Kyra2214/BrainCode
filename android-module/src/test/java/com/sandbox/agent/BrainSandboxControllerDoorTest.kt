@@ -3,6 +3,7 @@ package com.sandbox.agent
 import com.brain.gateway.ActionExecution
 import com.brain.gateway.ActionExecutor
 import com.brain.secretary.DeterministicSecretary
+import com.brain.secretary.UserResponse
 import com.sandbox.runtime.FileExecutionLogRepository
 import com.sandbox.runtime.ManagedSandboxRuntime
 import com.sandbox.runtime.SandboxProcessLauncher
@@ -23,7 +24,11 @@ class BrainSandboxControllerDoorTest {
                 runtime = runtime,
                 rootfsDir = root,
                 capabilityExecutors = mapOf(
-                    "chat.respond" to ActionExecutor { _, _, _ -> ActionExecution(true, result = "resposta local", evidence = listOf("local:chat")) }
+                    "chat.respond" to ActionExecutor { request, _, _ ->
+                        val text = "resposta local"
+                        val evidence = listOf("chat:request:${request.actionId}", "chat:secretary:accept")
+                        ActionExecution(true, result = text, evidence = evidence, userResponse = UserResponse(text, evidence, request.actionId))
+                    }
                 )
             )
             val intent = DeterministicSecretary().classify("Estou pensando em criar um aplicativo")
@@ -47,7 +52,9 @@ class BrainSandboxControllerDoorTest {
                 runtime = runtime,
                 rootfsDir = root,
                 capabilityExecutors = mapOf("chat.respond" to ActionExecutor { request, _, _ ->
-                    ActionExecution(true, result = request.parameters["parameter.0"], evidence = listOf("chat:clarification-question"))
+                    val text = request.parameters["parameter.0"].orEmpty()
+                    val evidence = listOf("chat:clarification-question", "chat:request:${request.actionId}", "chat:secretary:accept")
+                    ActionExecution(true, result = text, evidence = evidence, userResponse = UserResponse(text, evidence, request.actionId))
                 })
             )
             val intent = DeterministicSecretary().classify("Crie um aplicativo")

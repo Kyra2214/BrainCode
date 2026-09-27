@@ -145,7 +145,18 @@ class ChatResponseExecutor(
         }
         val provenance = provenance(capability).toMutableList()
         if (researchResult != null) provenance += "research:auto-fallback-after-local-miss"
-        if (researchResult != null || suppliedResearch.isNotBlank()) provenance += "source:dependency:network.research"
+        if (researchResult != null) {
+            provenance += "source:dependency:network.research"
+        } else if (suppliedResearch.isNotBlank()) {
+            val dependencies = request.parameters.values
+                .firstOrNull { it.startsWith("dependency.capability=") }
+                ?.removePrefix("dependency.capability=")
+                ?.split(',')
+                ?.map(String::trim)
+                ?.filter(String::isNotBlank)
+                .orEmpty()
+            provenance += dependencies.ifEmpty { listOf("network.research") }.map { "source:dependency:$it" }
+        }
         val candidate = ConversationCandidate(requestId, prompt, status = status, source = if (researchResult != null) "web-research" else "local", evidence = evidence.distinct(), text = finalText, researchAttempted = researchResult != null)
         val promoted = secretaryGate.accept(candidate) ?: run {
             metrics.recordSecretary("form", accepted = false)

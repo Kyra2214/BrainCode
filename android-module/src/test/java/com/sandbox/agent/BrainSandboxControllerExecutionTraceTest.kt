@@ -4,6 +4,7 @@ import com.brain.gateway.ActionExecution
 import com.brain.gateway.ActionExecutor
 import com.brain.observability.TraceStage
 import com.brain.secretary.DeterministicSecretary
+import com.brain.secretary.UserResponse
 import com.sandbox.runtime.FileExecutionLogRepository
 import com.sandbox.runtime.ManagedSandboxRuntime
 import com.sandbox.runtime.SandboxProcessLauncher
@@ -67,7 +68,10 @@ class BrainSandboxControllerExecutionTraceTest {
                         CapabilityResolver.Resolution.Comando(listOf("sh", "-c", "printf sandbox-health-ok"))
                     }
                 )),
-                capabilityExecutors = mapOf("chat.respond" to ActionExecutor { _, _, _ -> ActionExecution(true, result = "ok", evidence = listOf("chat:test")) })
+                capabilityExecutors = mapOf("chat.respond" to ActionExecutor { request, _, _ ->
+                    val evidence = listOf("chat:request:${request.actionId}", "chat:secretary:accept")
+                    ActionExecution(true, result = "ok", evidence = evidence, userResponse = UserResponse("ok", evidence, request.actionId))
+                })
             )
 
             controller.healthCheck("trace-a")

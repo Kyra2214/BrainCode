@@ -321,9 +321,11 @@ class PostExecutionGate(
             val evidence = result?.executionEvidence.orEmpty()
             val response = result?.userResponse
             val researchStep = step.capacidade == "network.research"
+            val structuredDataStep = step.capacidade in PUBLIC_DATA_CAPABILITIES
+            val internalContextStep = researchStep || step.capacidade == "sandbox.info" || structuredDataStep
             val recoveryRequested = "chat:orchestrator:recovery" in evidence
-            val evidenceComplete = "chat:secretary:accept" in evidence &&
-                evidence.any { it.startsWith("chat:request:") } &&
+            val evidenceComplete = response != null && "chat:secretary:accept" in evidence &&
+                "chat:request:${response.requestId}" in evidence &&
                 (!recoveryRequested || "chat:websearch:executed" in evidence)
             // web-research:quality já era emitido por WebResearchExecutor e nunca era
             // consultado aqui: um passo com texto não-vazio passava mesmo quando o
@@ -334,10 +336,15 @@ class PostExecutionGate(
             val qualidadePesquisa = evidence.firstOrNull { it.startsWith("web-research:quality=") }
                 ?.removePrefix("web-research:quality=")
             val qualidadeUtilizavel = qualidadePesquisa == null || qualidadePesquisa !in setOf("REJECTED", "LOW")
-            val stepPassed = if (researchStep) {
+            val structuredEvidenceComplete = !structuredDataStep || (
+                evidence.any { it.startsWith("api:") } &&
+                    evidence.any { it.startsWith("url:https://") } &&
+                    evidence.any { it.startsWith("data:") }
+                )
+            val stepPassed = if (internalContextStep) {
                 result?.status == StatusPasso.APROVADO &&
                     (result.resultado?.isNotBlank() == true || evidence.isNotEmpty() || result.evidencias.isNotEmpty()) &&
-                    qualidadeUtilizavel
+                    qualidadeUtilizavel && structuredEvidenceComplete
             } else {
                 result?.status == StatusPasso.APROVADO && response?.text?.isNotBlank() == true && evidenceComplete
             }
@@ -345,10 +352,11 @@ class PostExecutionGate(
                 criterionId = step.id,
                 passed = stepPassed,
                 detail = if (stepPassed) {
-                    if (researchStep) "pesquisa aprovada com evidência própria" else "UserResponse aceita e correlacionada"
-                } else if (researchStep) {
+                    if (internalContextStep) "contexto interno aprovado com evidência própria" else "UserResponse aceita e correlacionada"
+                } else if (internalContextStep) {
                     if (!qualidadeUtilizavel) "pesquisa com qualidade insuficiente ($qualidadePesquisa) para responder com segurança"
-                    else "pesquisa/evidência ausente"
+                    else if (!structuredEvidenceComplete) "evidência estruturada de API, URL HTTPS ou payload ausente"
+                    else "pesquisa/contexto/evidência ausente"
                 } else "UserResponse/evidência Secretary ausente",
                 evidenceId = ownEvidenceId
             )
@@ -404,5 +412,8 @@ class PostExecutionGate(
             selfE2E = emptyList(),
             doorE2E = doorE2E
         )
+    }
+    private companion object {
+        val PUBLIC_DATA_CAPABILITIES = setOf("weather", "br.dados", "br.economia", "br.geografia", "cambio")
     }
 }

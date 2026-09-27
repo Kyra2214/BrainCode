@@ -63,10 +63,10 @@ class PostExecutionGateResearchQualityTest {
                     status = StatusPasso.APROVADO,
                     userResponse = UserResponse(
                         text = "resposta sintetizada a partir da pesquisa",
-                        evidence = listOf("chat:secretary:accept", "chat:request:x"),
+                        evidence = listOf("chat:secretary:accept", "chat:request:req-1"),
                         requestId = "req-1"
                     ),
-                    executionEvidence = listOf("chat:secretary:accept", "chat:request:x"),
+                    executionEvidence = listOf("chat:secretary:accept", "chat:request:req-1"),
                     capacidade = "chat.respond",
                     decisaoPolicy = allow("chat.respond")
                 )

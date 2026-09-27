@@ -10,7 +10,6 @@ import com.brain.gateway.ActionExecution
 import com.brain.gateway.ActionExecutor
 import com.brain.gateway.ActionRequest
 import com.brain.policy.PolicyDecision
-import com.brain.secretary.UserResponse
 import java.net.URL
 import java.time.Instant
 import java.util.Locale
@@ -46,8 +45,7 @@ abstract class DeterministicApiExecutor(
         val evidence = listOf("api:$serviceName", "url:$sourceUrl", "data:${detail.take(600)}")
         return ActionExecution(
             success = true, result = result, evidence = evidence,
-            provenance = listOf("public-api:$serviceName", "capability:${capability.id}"),
-            userResponse = UserResponse(result, evidence, request.actionId, request.parameters["conversationId"])
+            provenance = listOf("public-api:$serviceName", "capability:${capability.id}")
         )
     }
     protected fun explicitFailure(capability: CapabilityDefinition, message: String) = ActionExecution(
@@ -242,17 +240,42 @@ class BcbExecutor(http: ApiHttpClient = UrlConnectionApiHttpClient()) : Determin
     }.getOrElse { explicitFailure(capability, "BCB: ${it.message ?: "falha sem detalhe"}") }
 }
 
+/** Siglas de UF -> nome do estado como o admin1 do Open-Meteo devolve, usadas só para desempate de homônimos. */
+private val brazilianUfNames = mapOf(
+    "AC" to "Acre", "AL" to "Alagoas", "AP" to "Amapá", "AM" to "Amazonas", "BA" to "Bahia",
+    "CE" to "Ceará", "DF" to "Distrito Federal", "ES" to "Espírito Santo", "GO" to "Goiás",
+    "MA" to "Maranhão", "MT" to "Mato Grosso", "MS" to "Mato Grosso do Sul", "MG" to "Minas Gerais",
+    "PA" to "Pará", "PB" to "Paraíba", "PR" to "Paraná", "PE" to "Pernambuco", "PI" to "Piauí",
+    "RJ" to "Rio de Janeiro", "RN" to "Rio Grande do Norte", "RS" to "Rio Grande do Sul",
+    "RO" to "Rondônia", "RR" to "Roraima", "SC" to "Santa Catarina", "SP" to "São Paulo",
+    "SE" to "Sergipe", "TO" to "Tocantins"
+)
+
 /** Geocodifica a cidade e só então consulta a previsão atual, ambas as APIs Open-Meteo. */
 class WeatherExecutor(http: ApiHttpClient = UrlConnectionApiHttpClient()) : DeterministicApiExecutor(http, "open-meteo") {
     override fun execute(request: ActionRequest, capability: CapabilityDefinition, decision: PolicyDecision): ActionExecution = runCatching {
         val query = requiredQuery(request)
-        val location = Regex("(?i)\\b(?:em|de)\\s+(.+?)(?=\\s+(?:hoje|agora|amanhã|amanha|neste momento)\\b|[?!.;,]|$)").find(query)?.groupValues?.get(1)?.trim()
+        val rawLocation = Regex("(?i)\\b(?:em|de)\\s+(.+?)(?=\\s+(?:hoje|agora|amanhã|amanha|neste momento)\\b|[?!.;,]|$)").find(query)?.groupValues?.get(1)?.trim()
             ?: Regex("(?i)(?:tempo|clima)\\s+(?:em|de)\\s+(.+?)(?=[?!.;,]|$)").find(query)?.groupValues?.get(1)?.trim()
+            // "tempo hoje rio das ostras": sem "em"/"de", a cidade vem direto depois do marcador de tempo.
+            ?: Regex("(?i)(?:tempo|clima)\\s+(?:hoje|agora|amanhã|amanha|neste momento)\\s+(.+?)(?=[?!.;,]|$)").find(query)?.groupValues?.get(1)?.trim()
             ?: error("informe a cidade para consultar o clima")
-        val geoUrl = "https://geocoding-api.open-meteo.com/v1/search?name=${location.encodeQuery()}&count=1&language=pt&format=json&countryCode=BR"
+        // O campo "name" do geocoding do Open-Meteo é só o nome do lugar: "Macaé RJ" não bate com nada,
+        // então a sigla da UF (se houver) é separada e usada apenas para desempatar entre resultados
+        // homônimos via "admin1", nunca enviada dentro da própria busca por nome.
+        val tokens = rawLocation.trim().split(Regex("\\s+"))
+        val ufHint = tokens.lastOrNull()?.uppercase(Locale.ROOT)?.takeIf { tokens.size > 1 && it in brazilianUfNames }
+        val location = if (ufHint != null) tokens.dropLast(1).joinToString(" ") else rawLocation
+        val geoUrl = "https://geocoding-api.open-meteo.com/v1/search?name=${location.encodeQuery()}&count=5&language=pt&format=json&countryCode=BR"
         val geoRoot = JSONObject(json(http.get(geoUrl), "Open-Meteo geocoding"))
         val places = geoRoot.optJSONArray("results") ?: error("cidade não encontrada no Open-Meteo")
-        val place = places.optJSONObject(0) ?: error("cidade não encontrada no Brasil")
+        if (places.length() == 0) error("cidade não encontrada no Brasil")
+        val place = ufHint?.let { hint ->
+            val stateName = brazilianUfNames.getValue(hint)
+            (0 until places.length()).firstNotNullOfOrNull { i ->
+                places.optJSONObject(i)?.takeIf { it.optString("admin1").equals(stateName, ignoreCase = true) }
+            }
+        } ?: places.optJSONObject(0) ?: error("cidade não encontrada no Brasil")
         val lat = place.optDouble("latitude", Double.NaN); val lon = place.optDouble("longitude", Double.NaN)
         if (!lat.isFinite() || !lon.isFinite()) error("Open-Meteo retornou coordenadas inválidas")
         val placeName = listOf(place.optString("name"), place.optString("admin1")).filter { it.isNotBlank() }.distinct().joinToString(" - ")
@@ -301,12 +324,21 @@ class ExchangeRateExecutor(
             if (!value.isFinite() || value <= 0) error("currency-api sem taxa válida")
             Triple(value, obj.optString("date"), fallbackUrl)
         }.getOrThrow()
-        val conversion = pair.amount?.let { amount -> "${format(amount)} ${pair.base} = ${format(amount * rate.first)} ${pair.quote}; " }.orEmpty()
-        val result = "${conversion}1 ${pair.base} = ${format(rate.first)} ${pair.quote}${rate.second.takeIf { it.isNotBlank() }?.let { " (data: $it)" }.orEmpty()} (taxa indicativa diária)."
+        val conversion = pair.amount?.let { amount -> "${format(amount)} ${currencyName(pair.base)} (${pair.base}) = ${format(amount * rate.first)} ${currencyName(pair.quote)} (${pair.quote}); " }.orEmpty()
+        val result = "${conversion}1 ${currencyName(pair.base)} (${pair.base}) = ${format(rate.first)} ${currencyName(pair.quote)} (${pair.quote})${rate.second.takeIf { it.isNotBlank() }?.let { " (data: $it)" }.orEmpty()} (taxa indicativa diária)."
         success(request, capability, result, rate.third, result)
     }.getOrElse { explicitFailure(capability, "Câmbio indisponível: ${it.message ?: "falha sem detalhe"}") }
 
     private fun format(value: Double) = java.text.DecimalFormat("#,##0.####", java.text.DecimalFormatSymbols(java.util.Locale("pt", "BR"))).format(value)
+    private fun currencyName(code: String): String = when (code) {
+        "USD" -> "dólares"
+        "BRL" -> "reais"
+        "EUR" -> "euros"
+        "GBP" -> "libras esterlinas"
+        "JPY" -> "ienes"
+        "ARS" -> "pesos argentinos"
+        else -> code
+    }
 }
 
 private data class CurrencyPair(val base: String, val quote: String, val amount: Double?) {

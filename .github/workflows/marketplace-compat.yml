@@ -40,13 +40,13 @@ jobs:
         with:
           api-level: ${{ matrix.api-level }}
           target: default
-          # O APK empacota as bibliotecas nativas do sandbox somente em arm64-v8a.
-          # x86_64 falha antes do teste com INSTALL_FAILED_NO_MATCHING_ABIS.
-          arch: arm64-v8a
+          # A variante exclusiva desta checagem filtra as bibliotecas nativas do app
+          # para x86_64; o teste JCA não inicializa o sandbox/ARM64 do produto.
+          arch: x86_64
           profile: pixel_2
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
-          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.sandbox.app.Ed25519CompatibilityInstrumentedTest --no-daemon --stacktrace
+          script: ./gradlew :app:connectedDebugAndroidTest -Pbraincode.ed25519.compatOnly=true -Pandroid.testInstrumentationRunnerArguments.class=com.sandbox.app.Ed25519CompatibilityInstrumentedTest --no-daemon --stacktrace
 
       # O teste usa org.junit.Assume para virar "skip" (não "fail") quando o
       # provider JCA Ed25519 não existe nesta imagem de emulador. O runner do

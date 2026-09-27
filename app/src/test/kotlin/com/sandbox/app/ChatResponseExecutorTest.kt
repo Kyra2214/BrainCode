@@ -100,6 +100,22 @@ class ChatResponseExecutorTest {
     }
 
     @Test
+    fun `aceita dado publico estruturado pelo secretario sem atribuir a pesquisa web`() {
+        val weather = "Agora em Macaé - Rio de Janeiro: 28°C, parcialmente nublado."
+        val result = ChatResponseExecutor().execute(
+            request("Qual a temperatura em Macaé agora?", weather, dependencyCapability = "weather"),
+            capability,
+            decision
+        )
+
+        assertTrue(result.success)
+        assertEquals(weather, result.userResponse?.text)
+        assertTrue(result.evidence.contains("chat:secretary:accept"))
+        assertTrue(result.provenance.contains("source:dependency:weather"))
+        assertFalse(result.provenance.contains("source:dependency:network.research"))
+    }
+
+    @Test
     fun `pergunta factual sem pesquisa nao finge ter entendido`() {
         val result = ChatResponseExecutor().execute(request("Qual a temperatura de Rio das Ostras hoje"), capability, decision)
 
@@ -197,11 +213,16 @@ class ChatResponseExecutorTest {
         java.io.File("src/main/assets/$path").readText()
     })
 
-    private fun request(prompt: String, research: String? = null, clarification: Boolean = false): ActionRequest = ActionRequest(
+    private fun request(prompt: String, research: String? = null, clarification: Boolean = false, dependencyCapability: String? = null): ActionRequest = ActionRequest(
         actionId = "chat-test",
         actor = "android-app",
         capability = "chat.respond",
-        parameters = buildMap { put("parameter.0", prompt); research?.let { put("parameter.1", it) }; if (clarification) put("parameter.clarification", "clarification.status=NEEDS_CLARIFICATION") },
+        parameters = buildMap {
+            put("parameter.0", prompt)
+            research?.let { put("parameter.1", it) }
+            dependencyCapability?.let { put("parameter.2", "dependency.capability=$it") }
+            if (clarification) put("parameter.clarification", "clarification.status=NEEDS_CLARIFICATION")
+        },
         context = PolicyContext("run-chat", "chat", "android-app")
     )
 }
