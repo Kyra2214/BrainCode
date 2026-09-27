@@ -180,6 +180,30 @@ class LocalLlmBrainApiGateway(
     private val mutex = Mutex()
     private var model: LlamaModel? = null
 
+    private fun loadModelIfNeeded(): LlamaModel = model ?: Llama.loadModel(
+        modelManager.modelFile().absolutePath,
+        LlamaConfig(
+            contextSize = 1024,
+            threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4),
+            gpuLayers = 0,
+            temperature = 0.1f,
+            topP = 0.9f,
+            topK = 50,
+            seed = 7
+        )
+    ).also { model = it }
+
+    /** Loads the native model before the first user request, so cold-start loading is not paid by the 1.5s inference budget. */
+    fun preload(timeoutMs: Long = 15_000L): Boolean = runCatching {
+        check(modelManager.isReady()) { "modelo LFM local ainda não está disponível" }
+        runBlocking {
+            withTimeout(timeoutMs) {
+                mutex.withLock { loadModelIfNeeded() }
+            }
+        }
+        true
+    }.getOrDefault(false)
+
     override fun complete(prompt: String, pipeline: PapelPipeline, authorizedAccountIds: Set<String>): BrainCompletion {
         require(pipeline == PapelPipeline.CONVERSACAO) { "LFM local aceita somente CONVERSACAO" }
         require(prompt.isNotBlank())
@@ -187,18 +211,7 @@ class LocalLlmBrainApiGateway(
         val result = runBlocking {
             withTimeout(timeoutMs) {
                 mutex.withLock {
-                    val loaded = model ?: Llama.loadModel(
-                        modelManager.modelFile().absolutePath,
-                        LlamaConfig(
-                            contextSize = 1024,
-                            threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4),
-                            gpuLayers = 0,
-                            temperature = 0.1f,
-                            topP = 0.9f,
-                            topK = 50,
-                            seed = 7
-                        )
-                    ).also { model = it }
+                    val loaded = loadModelIfNeeded()
                     Llama.complete(
                         loaded,
                         prompt = prompt,
