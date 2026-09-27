@@ -3,6 +3,22 @@
    <configuration>
       <verify-metadata>true</verify-metadata>
       <verify-signatures>false</verify-signatures>
+      <trusted-artifacts>
+         <!-- Toolchain interna do Android Gradle Plugin / Lint, resolvida via
+              detached configuration na task :android-module:extractDebugAnnotations.
+              Nenhum destes artefatos é distribuído dentro do app; são ferramentas
+              de build do Google/JetBrains/Apache. Versão fixada em cada regex de
+              propósito: uma atualização do AGP/lint volta a falhar a verificação
+              (avisando) em vez de confiar silenciosamente numa versão nova. -->
+         <trust file="kotlin-compiler-31\.5\.0\.(jar|pom)" regex="true" reason="Toolchain interna do Android Lint (AGP 31.5.0), não entra no app"/>
+         <trust file="kotlin-reflect-1\.9\.20\.(jar|pom)" regex="true" reason="Dependência transitiva do Lint, não é dependência do app"/>
+         <trust file="(intellij-core|uast)-31\.5\.0\.(jar|pom)" regex="true" reason="Toolchain interna do Android Lint (AGP 31.5.0)"/>
+         <trust file="lint(-api|-checks|-gradle)?-31\.5\.0\.(jar|pom)" regex="true" reason="Toolchain do Android Lint (AGP 31.5.0)"/>
+         <trust file="play-sdk-proto-31\.5\.0\.(jar|pom)" regex="true" reason="Dependência transitiva do Android Lint"/>
+         <trust file="groovy-3\.0\.17\.(jar|pom)" regex="true" reason="Dependência transitiva do Lint (Apache Groovy)"/>
+         <trust file="httpclient-4\.5\.6\.(jar|pom)" regex="true" reason="Dependência transitiva do Lint (Apache HttpClient)"/>
+         <trust file="commons-codec-1\.10\.jar" regex="true" reason="Dependência transitiva do Lint (Apache Commons Codec)"/>
+      </trusted-artifacts>
    </configuration>
    <components>
       <component group="androidx.activity" name="activity" version="1.9.0">
