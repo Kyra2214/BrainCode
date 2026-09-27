@@ -116,7 +116,10 @@ class BrainSandboxControllerWeatherSynthesisTest {
 
             assertFalse(cycle.aprovado)
             assertEquals(null, cycle.resposta)
-            assertTrue(cycle.passos.any { it.capacidade == "weather" && it.userResponse != null })
+            val weatherStep = cycle.passos.single { it.capacidade == "weather" }
+            assertEquals(directResponse, weatherStep.resultado)
+            assertEquals(null, weatherStep.userResponse)
+            assertTrue(cycle.passos.any { it.capacidade == "chat.respond" && it.status == StatusPasso.REPROVADO })
         } finally {
             root.deleteRecursively()
         }
