@@ -18,9 +18,9 @@ class HybridIntentAdvisor(
 
     override fun revisarClassificacao(prompt: String, classificacaoTentativa: OrderIntent): OrderIntentSugerido {
         if (prompt.length > maxPromptChars || containsComplexSignal(prompt)) {
-            val result = runCatching { cloud.revisarClassificacao(prompt, classificacaoTentativa) }
-                .getOrElse { fallback(classificacaoTentativa) }
-            metrics?.recordLlmCall("intent", "cloud", result != null)
+            val attempt = runCatching { cloud.revisarClassificacao(prompt, classificacaoTentativa) }
+            val result = attempt.getOrElse { fallback(classificacaoTentativa) }
+            metrics?.recordLlmCall("intent", "cloud", attempt.isSuccess)
             return result
         }
         val localSuggestion = runCatching {
@@ -32,18 +32,25 @@ class HybridIntentAdvisor(
             metrics?.recordLlmCall("intent", "local", true)
             return localSuggestion.copy(rationale = "local-advisor")
         }
-        val result = runCatching { cloud.revisarClassificacao(prompt, classificacaoTentativa) }
-            .getOrElse { fallback(classificacaoTentativa) }
-        metrics?.recordLlmCall("intent", "cloud", result != null)
+        val attempt = runCatching { cloud.revisarClassificacao(prompt, classificacaoTentativa) }
+        val result = attempt.getOrElse { fallback(classificacaoTentativa) }
+        metrics?.recordLlmCall("intent", "cloud", attempt.isSuccess)
         return result
     }
 
     private fun fallback(intent: OrderIntent) = OrderIntentSugerido(door = intent.door, confidence = 0.0, rationale = "advisory-fallback")
 
-    private fun containsComplexSignal(prompt: String): Boolean = listOf(
-        "```", "http://", "https://", "api", "código", "codigo", "stack trace",
-        "workflow", "sandbox", "executa", "implemente", "programa"
-    ).any { prompt.contains(it, ignoreCase = true) }
+    private fun containsComplexSignal(prompt: String): Boolean {
+        val tokens = prompt.lowercase().split(Regex("[^\\p{L}\\p{N}_]+" )).filter(String::isNotBlank)
+        return listOf(
+            "código", "codigo", "workflow", "sandbox", "executa", "implemente", "programa"
+        ).any { prompt.contains(it, ignoreCase = true) } ||
+            "api" in tokens ||
+            prompt.contains("```") ||
+            prompt.contains("http://", ignoreCase = true) ||
+            prompt.contains("https://", ignoreCase = true) ||
+            prompt.contains("stack trace", ignoreCase = true)
+    }
 
     private companion object {
         val DOORS = setOf(Door.CHAT, Door.PROMPT, Door.CREATE)
