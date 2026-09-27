@@ -20,6 +20,7 @@ class BrainCodeApplication : Application() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val lfmModelManager: LfmModelManager by lazy { LfmModelManager(this) }
     private var localGateway: LocalLlmBrainApiGateway? = null
+    private var cloudIntentGateway: CloudIntentBrainApiGateway? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -31,17 +32,33 @@ class BrainCodeApplication : Application() {
 
         val local = LocalLlmBrainApiGateway(this, lfmModelManager)
         localGateway = local
-        // Current runtime is strictly local-first: the LFM arm is the only advisory model.
-        // Cloud adapters remain available as future/explicit integrations but are not wired
-        // into the Secretary path, avoiding recurring token/network cost by default.
         IntentAdvisorRegistry.current = LocalOnlyIntentAdvisor(local)
         ConversationInterpreterRegistry.current = LfmEntityInterpreter(local)
+        refreshIntentAdvisor()
 
         // A LFM model is not bundled in the APK. Provision it automatically only after
         // the Roofts/rootfs installation has completed, so first-run network work follows
         // the same bootstrap order as the sandbox resources. Failure is non-fatal: the
         // Secretary continues with deterministic paths and the model can retry later.
         scope.launch { provisionLfmAfterRoofts() }
+    }
+
+    /**
+     * Selects the intent advisor from current credential state. Cloud is an optional
+     * escalation only; without a stored provider key the Secretary remains local-only.
+     */
+    fun refreshIntentAdvisor() {
+        val local = localGateway ?: return
+        val cloud = cloudIntentGateway ?: CloudIntentBrainApiGateway(this).also { cloudIntentGateway = it }
+        val accounts = cloud.authorizedAccounts()
+        IntentAdvisorRegistry.current = if (accounts.isEmpty()) {
+            LocalOnlyIntentAdvisor(local)
+        } else {
+            com.brain.conversation.HybridIntentAdvisor(
+                local = LfmIntentAdvisor(local),
+                cloud = com.brain.conversation.LlmIntentAdvisor(cloud, accounts = accounts)
+            )
+        }
     }
 
     private suspend fun provisionLfmAfterRoofts() {
