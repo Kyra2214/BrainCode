@@ -3,8 +3,6 @@ package com.sandbox.app
 import android.app.Application
 import android.util.Log
 import com.brain.conversation.ConversationInterpreterRegistry
-import com.brain.conversation.ConversationMetrics
-import com.brain.conversation.HybridIntentAdvisor
 import com.brain.conversation.IntentAdvisorRegistry
 import com.brain.conversation.NoOpConversationInterpreter
 import com.brain.conversation.NoOpIntentAdvisor
@@ -16,12 +14,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.cancel
-import java.io.File
 
 /** App-level wiring for optional on-device conversation intelligence. */
 class BrainCodeApplication : Application() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val conversationMetrics = ConversationMetrics()
     val lfmModelManager: LfmModelManager by lazy { LfmModelManager(this) }
     private var localGateway: LocalLlmBrainApiGateway? = null
 
@@ -33,13 +29,12 @@ class BrainCodeApplication : Application() {
             return
         }
 
-        lfmModelManager.refreshState()
         val local = LocalLlmBrainApiGateway(this, lfmModelManager)
         localGateway = local
         // Current runtime is strictly local-first: the LFM arm is the only advisory model.
         // Cloud adapters remain available as future/explicit integrations but are not wired
         // into the Secretary path, avoiding recurring token/network cost by default.
-        IntentAdvisorRegistry.current = HybridIntentAdvisor(LfmIntentAdvisor(local), NoOpIntentAdvisor, metrics = conversationMetrics)
+        IntentAdvisorRegistry.current = LocalOnlyIntentAdvisor(local)
         ConversationInterpreterRegistry.current = LfmEntityInterpreter(local)
 
         // A LFM model is not bundled in the APK. Provision it automatically only after
