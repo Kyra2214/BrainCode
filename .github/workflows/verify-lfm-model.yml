@@ -38,3 +38,10 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --write-verification-metadata sha256 :app:dependencies --no-daemon --stacktrace
           grep -n -A8 -B2 'dev.ffmpegkit-maintained' gradle/verification-metadata.xml
+      - name: Upload generated verification metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-gradle-verification-metadata
+          path: gradle/verification-metadata.xml
+          if-no-files-found: error
+          retention-days: 1
