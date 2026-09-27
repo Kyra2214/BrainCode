@@ -231,8 +231,7 @@ class LfmModelManager(private val context: Context) {
 /** Thin synchronous adapter required by the existing BrainApiGateway contract. */
 class LocalLlmBrainApiGateway(
     context: Context,
-    private val modelManager: LfmModelManager = LfmModelManager(context.applicationContext),
-    private val timeoutMs: Long = 1_500L
+    private val modelManager: LfmModelManager = LfmModelManager(context.applicationContext)
 ) : BrainApiGateway {
     private val mutex = Mutex()
     private var model: LlamaModel? = null
