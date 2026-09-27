@@ -56,7 +56,7 @@ class BrainCodeApplication : Application() {
 
     private suspend fun provisionLfmAfterRoofts() {
         val factory = AndroidSandboxFactory(this@BrainCodeApplication)
-        val modelManager = LfmModelManager(this@BrainCodeApplication)
+        val modelManager = lfmModelManager
         // Provisioning is persistent: there is no fixed 15-minute window. If Roofts is
         // still installing, wait; if the transfer fails, keep retrying later. A failed
         // model must never block the deterministic Secretary path.
