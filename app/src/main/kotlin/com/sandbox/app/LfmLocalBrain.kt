@@ -255,7 +255,7 @@ class LocalLlmBrainApiGateway(
      * Loads the native model before the first user request. The Result is intentional:
      * callers must observe native-load failure instead of treating a verified file as loaded.
      */
-    fun preload(timeoutMs: Long = 15_000L): Result<Unit> = runCatching {
+    fun preload(): Result<Unit> = runCatching {
         runBlocking {
             mutex.withLock {
                 if (modelManager.isLoaded() && model != null && loadedSha256 == modelManager.verifiedSha256() && !modelManager.artifactChangedSinceVerification()) return@withLock
@@ -290,7 +290,7 @@ class LocalLlmBrainApiGateway(
         require(pipeline == PapelPipeline.CONVERSACAO) { "LFM local aceita somente CONVERSACAO" }
         require(prompt.isNotBlank())
         if (!modelManager.isLoaded()) {
-            preload(10_000L).getOrThrow()
+            preload().getOrThrow()
         }
         if (modelManager.artifactChangedSinceVerification() || loadedSha256 != modelManager.verifiedSha256()) {
             preload(10_000L).getOrThrow()
@@ -298,14 +298,13 @@ class LocalLlmBrainApiGateway(
         check(modelManager.isLoaded() && loadedSha256 == modelManager.verifiedSha256()) { "modelo LFM local não está sincronizado com o GGUF verificado" }
         val result = runBlocking {
             mutex.withLock {
-                    val loaded = loadModelIfNeeded()
-                    Llama.complete(
-                        loaded,
-                        prompt = prompt,
-                        systemPrompt = "Classifique e extraia dados. Responda somente JSON de contrato. Nunca produza uma resposta ao usuário.",
-                        maxTokens = 96
-                    )
-                }
+                val loaded = loadModelIfNeeded()
+                Llama.complete(
+                    loaded,
+                    prompt = prompt,
+                    systemPrompt = "Classifique e extraia dados. Responda somente JSON de contrato. Nunca produza uma resposta ao usuário.",
+                    maxTokens = 96
+                )
             }
         }
         return BrainCompletion(result.text, LfmModelSpec.MODEL_ID, "local", "on-device")
