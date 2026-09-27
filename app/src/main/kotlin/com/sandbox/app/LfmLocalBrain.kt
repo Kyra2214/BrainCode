@@ -120,9 +120,6 @@ class LfmModelManager(private val context: Context) {
 
     private fun replaceVerifiedModel(partial: File) {
         check(partial.isFile) { "arquivo parcial do LFM não existe" }
-        check(modelFile.delete() || !modelFile.exists()) {
-            "não foi possível substituir o modelo LFM existente"
-        }
         val moved = runCatching {
             java.nio.file.Files.move(
                 partial.toPath(),
@@ -136,6 +133,14 @@ class LfmModelManager(private val context: Context) {
                 modelFile.toPath(),
                 java.nio.file.StandardCopyOption.REPLACE_EXISTING
             )
+        }.isSuccess || runCatching {
+            // Some Android filesystems do not implement REPLACE_EXISTING for this path.
+            // The partial has already passed SHA-256, so deleting the invalid/old target
+            // is safe at this point and cannot expose an unverified model.
+            if (modelFile.exists() && !modelFile.delete()) {
+                throw IllegalStateException("não foi possível remover o modelo LFM anterior")
+            }
+            java.nio.file.Files.move(partial.toPath(), modelFile.toPath())
         }.isSuccess
         check(moved) { "não foi possível finalizar o arquivo do modelo" }
     }
