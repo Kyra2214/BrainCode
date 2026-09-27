@@ -70,7 +70,7 @@ class LfmModelManager(private val context: Context) {
         return@synchronized _state.value
     }
 
-    fun isReady(): Boolean = _state.value == LfmModelState.READY
+    fun isReady(): Boolean = _state.value == LfmModelState.READY || refreshState() == LfmModelState.READY
 
     fun ensureDownloaded(onProgress: (Long, Long) -> Unit = { _, _ -> }): File {
         synchronized(lock) {
