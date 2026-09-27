@@ -20,6 +20,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -29,6 +30,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import android.app.Application
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.sandbox.sandbox.BuiltInToolchains
 import com.sandbox.sandbox.ComponentKind
 import com.sandbox.sandbox.ToolchainState
@@ -64,9 +69,21 @@ fun SettingsScreen(viewModel: SandboxViewModel, onBack: () -> Unit) {
 @Composable
 private fun DiagnosticsSettings(viewModel: SandboxViewModel) {
     val ready = viewModel.phase == SandboxPhase.Ready
+    var lfmInstalled by rememberSaveable { mutableStateOf(false) }
+    var lfmChecking by rememberSaveable { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            lfmInstalled = withContext(Dispatchers.IO) {
+                runCatching { LfmModelManager(viewModel.getApplication<Application>().applicationContext).isReady() }.getOrDefault(false)
+            }
+            lfmChecking = false
+            kotlinx.coroutines.delay(1500)
+        }
+    }
     LazyColumn(modifier = Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Status do sandbox", style = MaterialTheme.typography.titleMedium) }
         item { StatusSection(viewModel) }
+        item { LfmDiagnosticCard(installed = lfmInstalled, checking = lfmChecking) }
         item { Text("Diagnóstico e testes", style = MaterialTheme.typography.titleMedium) }
         item { Text("Os resultados aparecem como mensagens no chat.", style = MaterialTheme.typography.bodySmall) }
         item {
@@ -93,11 +110,63 @@ private fun ExtensionsSettings(viewModel: SandboxViewModel) {
         Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = kind == 0, onClick = { kind = 0 }, label = { Text("Tools") })
             FilterChip(selected = kind == 1, onClick = { kind = 1 }, label = { Text("Plugins") })
+            FilterChip(selected = kind == 2, onClick = { kind = 2 }, label = { Text("LLM") })
         }
-        if (kind == 0) {
-            ToolCatalog(viewModel)
-        } else {
-            PluginsScreen(viewModel, ComponentKind.PLUGIN)
+        when (kind) {
+            0 -> ToolCatalog(viewModel)
+            1 -> PluginsScreen(viewModel, ComponentKind.PLUGIN)
+            else -> LlmExtensionsSettings()
+        }
+    }
+}
+
+@Composable
+private fun LlmExtensionsSettings() {
+    var installed by rememberSaveable { mutableStateOf(false) }
+    var checking by rememberSaveable { mutableStateOf(true) }
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        while (true) {
+            installed = withContext(Dispatchers.IO) {
+                runCatching { LfmModelManager(context.applicationContext).isReady() }.getOrDefault(false)
+            }
+            checking = false
+            kotlinx.coroutines.delay(1500)
+        }
+    }
+    LazyColumn(modifier = Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        item {
+            Text("Modelos locais", style = MaterialTheme.typography.titleMedium)
+            Text("A LFM é provisionada automaticamente após o Roofts. Não é necessário iniciar o download manualmente.", style = MaterialTheme.typography.bodySmall)
+        }
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(modifier = Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("LFM2.5-350M", style = MaterialTheme.typography.titleSmall)
+                        Text("Braço local do Secretário • Q4_K_M", style = MaterialTheme.typography.bodySmall)
+                    }
+                    OutlinedButton(onClick = {}, enabled = false) {
+                        Text(if (checking) "Verificando…" else if (installed) "Instalado" else "Não instalado")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LfmDiagnosticCard(installed: Boolean, checking: Boolean) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("LFM2.5-350M", style = MaterialTheme.typography.titleSmall)
+                Text("LLM local do Secretário", style = MaterialTheme.typography.bodySmall)
+                Text("Q4_K_M • SHA-256 verificado", style = MaterialTheme.typography.bodySmall)
+            }
+            OutlinedButton(onClick = {}, enabled = false) {
+                Text(if (checking) "Verificando…" else if (installed) "Instalado" else "Não instalado")
+            }
         }
     }
 }
