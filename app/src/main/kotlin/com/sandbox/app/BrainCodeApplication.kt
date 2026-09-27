@@ -5,9 +5,8 @@ import com.brain.conversation.HybridIntentAdvisor
 import com.brain.conversation.IntentAdvisorRegistry
 import com.brain.conversation.LlmIntentAdvisor
 import com.brain.conversation.NoOpIntentAdvisor
-import com.brain.memory.KnowledgeLearningCycle
 import com.brain.memory.FileKnowledgeMemory
-import com.brain.conversation.LlmConversationAdapters
+import com.brain.memory.KnowledgeLearningCycle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,10 +29,9 @@ class BrainCodeApplication : Application() {
             learning = KnowledgeLearningCycle(FileKnowledgeMemory(File(filesDir, "brain/knowledge.jsonl")))
         )
         val cloudAdvisor = LlmIntentAdvisor(ConversationBrainGatewayAdapter(providerGateway), NoOpIntentAdvisor)
-        val localAdvisor = LfmIntentAdvisor(local)
-        IntentAdvisorRegistry.current = HybridIntentAdvisor(localAdvisor, cloudAdvisor)
+        IntentAdvisorRegistry.current = HybridIntentAdvisor(LfmIntentAdvisor(local), cloudAdvisor)
 
-        // The 229 MB quantized model is provisioned once in the background. E2E builds
+        // Provision the 229 MB quantized model once in the background. E2E builds
         // deliberately stay model-free and keep their offline determinism.
         if (!BuildConfig.E2E_FAKE_ROOTFS) {
             scope.launch { runCatching { LfmModelManager(this@BrainCodeApplication).ensureDownloaded() } }
@@ -42,7 +40,6 @@ class BrainCodeApplication : Application() {
 
     override fun onTerminate() {
         localGateway?.close()
-        scope.coroutineContext.cancel()
         super.onTerminate()
     }
 }
