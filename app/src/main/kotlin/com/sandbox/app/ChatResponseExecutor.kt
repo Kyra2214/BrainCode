@@ -84,7 +84,7 @@ class ChatResponseExecutor(
         // também. Reprovado em qualquer um, o ciclo segue normalmente para a camada 3 (web).
         var llmDraftText: String? = null
         if (localMiss && localCalculation == null && !isClarification && drafter != null) {
-            val draft = runCatching { drafter.rascunhar(prompt, com.brain.conversation.ConversationContext(requestId = request.actionId)) }
+            val draft = runCatching { drafter?.rascunhar(prompt, com.brain.conversation.ConversationContext(requestId = request.actionId)) }
                 .getOrNull()?.takeIf { it.isNotBlank() }
             if (draft != null) {
                 evidence += "chat:llm:implementer"
