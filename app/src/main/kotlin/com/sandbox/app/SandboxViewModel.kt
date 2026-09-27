@@ -517,8 +517,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         "approval" -> ThreadEvent.Approval(item.optString("id"))
         "terminal" -> ThreadEvent.System(item.optString("text"))
         "diff" -> {
-            val files = item.optJSONArray("files") ?: return@when null
-            ThreadEvent.Diff((0 until files.length()).mapNotNull { index ->
+            val files = item.optJSONArray("files")
+            if (files == null) null else ThreadEvent.Diff((0 until files.length()).mapNotNull { index ->
                 val file = files.optJSONObject(index) ?: return@mapNotNull null
                 val lines = file.optJSONArray("lines") ?: JSONArray()
                 DiffFile(
