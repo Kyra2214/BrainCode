@@ -16,13 +16,10 @@ import com.brain.secretary.OrderIntent
 import dev.ffmpegkit.llama.Llama
 import dev.ffmpegkit.llama.LlamaConfig
 import dev.ffmpegkit.llama.LlamaModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
@@ -41,7 +38,7 @@ class LfmModelManager(private val context: Context) {
     private val modelFile = File(context.filesDir, "brain/models/${LfmModelSpec.FILE_NAME}")
 
     fun modelFile(): File = modelFile
-    fun isReady(): Boolean = modelFile.isFile && sha256(modelFile) == LfmModelSpec.SHA256
+    fun isReady(): Boolean = modelFile.isFile && runCatching { sha256(modelFile) == LfmModelSpec.SHA256 }.getOrDefault(false)
 
     fun ensureDownloaded(onProgress: (Long, Long) -> Unit = { _, _ -> }): File {
         if (isReady()) return modelFile
@@ -103,25 +100,22 @@ class LocalLlmBrainApiGateway(
     override fun complete(prompt: String, pipeline: PapelPipeline, authorizedAccountIds: Set<String>): BrainCompletion {
         require(pipeline == PapelPipeline.CONVERSACAO) { "LFM local aceita somente CONVERSACAO" }
         require(prompt.isNotBlank())
+        check(modelManager.isReady()) { "modelo LFM local ainda não está disponível" }
         val result = runBlocking {
             withTimeout(timeoutMs) {
                 mutex.withLock {
-                    val loaded = model ?: withContext(Dispatchers.IO) {
-                        modelManager.ensureDownloaded()
-                    }.let { file ->
-                        Llama.loadModel(
-                            file.absolutePath,
-                            LlamaConfig(
-                                contextSize = 1024,
-                                threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4),
-                                gpuLayers = 0,
-                                temperature = 0.1f,
-                                topP = 0.9f,
-                                topK = 50,
-                                seed = 7
-                            )
-                        ).also { model = it }
-                    }
+                    val loaded = model ?: Llama.loadModel(
+                        modelManager.modelFile().absolutePath,
+                        LlamaConfig(
+                            contextSize = 1024,
+                            threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4),
+                            gpuLayers = 0,
+                            temperature = 0.1f,
+                            topP = 0.9f,
+                            topK = 50,
+                            seed = 7
+                        )
+                    ).also { model = it }
                     Llama.complete(
                         loaded,
                         prompt = prompt,
@@ -171,7 +165,8 @@ class LfmEntityInterpreter(private val gateway: BrainApiGateway) : ConversationI
                 emptySet()
             )
             val json = StructuredLlmParser.objectFrom(completion.text)
-            StructuredLlmParser.stringMap(json, "entities").filterValues { it.isNotBlank() && prompt.contains(it, ignoreCase = true) }
+            StructuredLlmParser.stringMap(json, "entities")
+                .filterValues { it.isNotBlank() && prompt.contains(it, ignoreCase = true) }
         }.getOrDefault(emptyMap())
         return base.copy(entities = entities)
     }
