@@ -8,7 +8,8 @@ class HybridIntentAdvisor(
     private val local: IntentAdvisor,
     private val cloud: IntentAdvisor = NoOpIntentAdvisor,
     private val maxPromptChars: Int = 1200,
-    private val minLocalConfidence: Double = 0.70
+    private val minLocalConfidence: Double = 0.70,
+    private val metrics: ConversationMetrics? = null
 ) : IntentAdvisor {
     init {
         require(maxPromptChars > 0)
@@ -17,16 +18,27 @@ class HybridIntentAdvisor(
 
     override fun revisarClassificacao(prompt: String, classificacaoTentativa: OrderIntent): OrderIntentSugerido {
         if (prompt.length > maxPromptChars || containsComplexSignal(prompt)) {
-            return cloud.revisarClassificacao(prompt, classificacaoTentativa)
+            val result = runCatching { cloud.revisarClassificacao(prompt, classificacaoTentativa) }
+                .getOrElse { fallback(classificacaoTentativa) }
+            metrics?.recordLlmCall("intent", "cloud", result != null)
+            return result
         }
         val localSuggestion = runCatching {
             local.revisarClassificacao(prompt, classificacaoTentativa)
         }.getOrNull()
         if (localSuggestion != null && localSuggestion.door in DOORS &&
             (localSuggestion.confidence ?: 0.0) >= minLocalConfidence
-        ) return localSuggestion.copy(rationale = "local-advisor")
-        return cloud.revisarClassificacao(prompt, classificacaoTentativa)
+        ) {
+            metrics?.recordLlmCall("intent", "local", true)
+            return localSuggestion.copy(rationale = "local-advisor")
+        }
+        val result = runCatching { cloud.revisarClassificacao(prompt, classificacaoTentativa) }
+            .getOrElse { fallback(classificacaoTentativa) }
+        metrics?.recordLlmCall("intent", "cloud", result != null)
+        return result
     }
+
+    private fun fallback(intent: OrderIntent) = OrderIntentSugerido(door = intent.door, confidence = 0.0, rationale = "advisory-fallback")
 
     private fun containsComplexSignal(prompt: String): Boolean = listOf(
         "```", "http://", "https://", "api", "código", "codigo", "stack trace",
