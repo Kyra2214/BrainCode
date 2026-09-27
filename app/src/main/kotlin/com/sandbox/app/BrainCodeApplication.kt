@@ -16,12 +16,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancel
 import java.io.File
 
 /** App-level wiring for optional on-device conversation intelligence. */
 class BrainCodeApplication : Application() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val conversationMetrics = ConversationMetrics()
+    val lfmModelManager: LfmModelManager by lazy { LfmModelManager(this) }
     private var localGateway: LocalLlmBrainApiGateway? = null
 
     override fun onCreate() {
@@ -32,7 +34,8 @@ class BrainCodeApplication : Application() {
             return
         }
 
-        val local = LocalLlmBrainApiGateway(this)
+        lfmModelManager.refreshState()
+        val local = LocalLlmBrainApiGateway(this, lfmModelManager)
         localGateway = local
         val providerGateway = BrainApiGateway(
             runCatching { ApiKeyCatalogLoader.load(this) }.getOrElse { emptyList() },
@@ -53,22 +56,24 @@ class BrainCodeApplication : Application() {
     private suspend fun provisionLfmAfterRoofts() {
         val factory = AndroidSandboxFactory(this@BrainCodeApplication)
         val modelManager = LfmModelManager(this@BrainCodeApplication)
-        if (modelManager.isReady()) return
-
-        // Roofts 0.6 is installed as part of sandbox preparation. Do not start the
-        // 229 MB LFM transfer before that bootstrap finishes. Polling is deliberately
-        // lightweight and bounded; a later app launch retries automatically if needed.
-        val deadline = System.currentTimeMillis() + 15 * 60_000L
-        while (System.currentTimeMillis() < deadline) {
-            if (runCatching { factory.isRoofts06Installed() }.getOrDefault(false)) {
+        // Provisioning is persistent: there is no fixed 15-minute window. If Roofts is
+        // still installing, wait; if the transfer fails, keep retrying later. A failed
+        // model must never block the deterministic Secretary path.
+        while (kotlinx.coroutines.currentCoroutineContext().isActive) {
+            if (modelManager.refreshState() == LfmModelState.READY) return
+            val rooftsReady = runCatching { factory.isRoofts06Installed() }.getOrDefault(false)
+            if (rooftsReady) {
                 runCatching { modelManager.ensureDownloaded() }
-                return
+                if (modelManager.refreshState() == LfmModelState.READY) return
+                delay(30_000L)
+            } else {
+                delay(2_000L)
             }
-            delay(2_000L)
         }
     }
 
     override fun onTerminate() {
+        scope.cancel()
         localGateway?.close()
         super.onTerminate()
     }
