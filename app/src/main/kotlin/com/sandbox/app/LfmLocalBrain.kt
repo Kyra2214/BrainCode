@@ -19,7 +19,6 @@ import dev.ffmpegkit.llama.LlamaModel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
@@ -54,30 +53,37 @@ class LfmModelManager(private val context: Context) {
      * Verifies the artifact when explicitly requested. Size/mtime metadata is informational
      * only; the cryptographic SHA is the source of truth.
      */
-    fun refreshState(forceVerify: Boolean = false): LfmModelState = synchronized(lock) {
-        if (_state.value == LfmModelState.LOADED && !forceVerify && !artifactChangedSinceVerification()) return@synchronized LfmModelState.LOADED
-        if (!forceVerify && (_state.value == LfmModelState.READY || _state.value == LfmModelState.LOADING)) return@synchronized _state.value
-        if (!modelFile.isFile) {
-            _state.value = LfmModelState.NOT_INSTALLED
-            return@synchronized _state.value
+    fun refreshState(forceVerify: Boolean = false): LfmModelState {
+        synchronized(lock) {
+            if (_state.value == LfmModelState.LOADED) {
+                check(!forceVerify) { "não é permitido verificar forçadamente o GGUF enquanto o modelo nativo está carregado" }
+                return if (!artifactChangedSinceVerification()) LfmModelState.LOADED else LfmModelState.LOAD_FAILED
+            }
+            if (!forceVerify && (_state.value == LfmModelState.READY || _state.value == LfmModelState.LOADING)) return _state.value
+            if (!modelFile.isFile) {
+                _state.value = LfmModelState.NOT_INSTALLED
+                return _state.value
+            }
+            _state.value = LfmModelState.VERIFYING
         }
-        _state.value = LfmModelState.VERIFYING
         val digest = runCatching { sha256(modelFile) }.getOrNull()
-        if (digest == LfmModelSpec.SHA256) {
-            verifiedSha256 = digest
-            verifiedSize = modelFile.length()
-            verifiedMtime = modelFile.lastModified()
-            _state.value = LfmModelState.READY
-        } else {
-            verifiedSha256 = null
-            _state.value = LfmModelState.CORRUPTED
+        synchronized(lock) {
+            if (digest == LfmModelSpec.SHA256 && modelFile.isFile) {
+                verifiedSha256 = digest
+                verifiedSize = modelFile.length()
+                verifiedMtime = modelFile.lastModified()
+                _state.value = LfmModelState.READY
+            } else {
+                verifiedSha256 = null
+                _state.value = LfmModelState.CORRUPTED
+            }
+            return _state.value
         }
-        return@synchronized _state.value
     }
 
-    fun isReady(): Boolean =
-        _state.value in setOf(LfmModelState.READY, LfmModelState.LOADING, LfmModelState.LOADED) ||
-            refreshState() in setOf(LfmModelState.READY, LfmModelState.LOADING, LfmModelState.LOADED)
+    fun isReady(): Boolean = synchronized(lock) {
+        _state.value in setOf(LfmModelState.READY, LfmModelState.LOADING, LfmModelState.LOADED)
+    }
 
     fun isLoaded(): Boolean = _state.value == LfmModelState.LOADED
 
@@ -89,11 +95,15 @@ class LfmModelManager(private val context: Context) {
 
     internal fun markLoading() = synchronized(lock) {
         check(modelFile.isFile) { "modelo LFM local não está instalado" }
+        check(verifiedSha256 == LfmModelSpec.SHA256) { "modelo LFM local não foi verificado" }
+        check(!artifactChangedSinceVerification()) { "GGUF LFM mudou após a verificação" }
         _state.value = LfmModelState.LOADING
     }
 
     internal fun markLoaded() = synchronized(lock) {
         check(modelFile.isFile) { "modelo LFM local não está instalado" }
+        check(verifiedSha256 == LfmModelSpec.SHA256) { "modelo LFM não foi verificado" }
+        check(!artifactChangedSinceVerification()) { "GGUF LFM mudou durante o carregamento" }
         _state.value = LfmModelState.LOADED
     }
 
@@ -108,9 +118,10 @@ class LfmModelManager(private val context: Context) {
                 if (_state.value == LfmModelState.LOADED || _state.value == LfmModelState.LOADING) {
                     throw IllegalStateException("não é permitido substituir o GGUF enquanto o modelo nativo está carregado")
                 }
-                if (refreshState() == LfmModelState.READY) return modelFile
+                if (_state.value == LfmModelState.READY && !artifactChangedSinceVerification()) return modelFile
                 modelFile.parentFile?.mkdirs()
             }
+            if (refreshState() == LfmModelState.READY) return modelFile
 
             val partial = File(modelFile.parentFile, "${modelFile.name}.part")
             synchronized(lock) { _state.value = LfmModelState.DOWNLOADING }
@@ -250,7 +261,7 @@ class LocalLlmBrainApiGateway(
                 check(modelManager.verifiedSha256() == LfmModelSpec.SHA256) { "modelo LFM local não possui artefato verificado" }
                 modelManager.markLoading()
                 try {
-                    withTimeout(timeoutMs) { loadModelIfNeeded() }
+                    loadModelIfNeeded()
                     loadedSha256 = modelManager.verifiedSha256()
                     modelManager.markLoaded()
                 } catch (error: Throwable) {
@@ -275,8 +286,7 @@ class LocalLlmBrainApiGateway(
         }
         check(modelManager.isLoaded() && loadedSha256 == modelManager.verifiedSha256()) { "modelo LFM local não está sincronizado com o GGUF verificado" }
         val result = runBlocking {
-            withTimeout(timeoutMs) {
-                mutex.withLock {
+            mutex.withLock {
                     val loaded = loadModelIfNeeded()
                     Llama.complete(
                         loaded,
@@ -313,6 +323,13 @@ class LfmIntentAdvisor(private val gateway: BrainApiGateway) : IntentAdvisor {
             require(!confidence.isNaN() && confidence in 0.0..1.0)
             OrderIntentSugerido(door = door, confidence = confidence)
         }.getOrElse { throw IllegalStateException("LFM local indisponível", it) }
+}
+
+/** Local-only advisor: deterministic fallback, with no cloud/token path. */
+class LocalOnlyIntentAdvisor(private val gateway: BrainApiGateway) : IntentAdvisor {
+    override fun revisarClassificacao(prompt: String, classificacaoTentativa: OrderIntent): OrderIntentSugerido =
+        runCatching { LfmIntentAdvisor(gateway).revisarClassificacao(prompt, classificacaoTentativa) }
+            .getOrElse { OrderIntentSugerido(classificacaoTentativa.door, 0.0, "local-fallback") }
 }
 
 /** Entity-only local interpreter. Intent/query remain deterministic and entities must be literal spans. */
