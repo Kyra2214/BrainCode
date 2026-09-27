@@ -16,6 +16,7 @@ import com.brain.secretary.DeterministicSecretaryGate
 import com.brain.secretary.SecretaryDecision
 import com.brain.secretary.UserResponse
 import com.brain.secretary.ConversationCandidate
+import com.brain.conversation.ConversationInterpreterRegistry
 import com.brain.conversation.ConversationMetrics
 import com.brain.conversation.ConversationKnowledgeFlow
 import com.brain.conversation.ConversationInterpreter
@@ -44,22 +45,19 @@ class ChatResponseExecutor(
 
     override fun execute(request: ActionRequest, capability: CapabilityDefinition, decision: PolicyDecision): ActionExecution {
         val prompt = request.parameters["parameter.0"]?.trim().orEmpty()
-        if (prompt.isBlank()) {
-            return ActionExecution(false, error = "mensagem conversacional ausente", provenance = provenance(capability))
-        }
+        if (prompt.isBlank()) return ActionExecution(false, error = "mensagem conversacional ausente", provenance = provenance(capability))
         val suppliedResearch = request.parameters["parameter.1"]?.trim().orEmpty()
         val isClarification = request.parameters.values.any { it.startsWith("clarification.status=NEEDS_CLARIFICATION") }
         val context = contextProvider()
         val evidence = mutableListOf("chat:conversation")
-        val structuredRecall = if (knowledgeCycle != null && structuredInterpreter != null) {
-            ConversationKnowledgeFlow(knowledgeCycleMemory(knowledgeCycle), structuredInterpreter, metrics) { evidence += it }.recall(
+        val interpreter = structuredInterpreter ?: ConversationInterpreterRegistry.current
+        val structuredRecall = if (knowledgeCycle != null) {
+            ConversationKnowledgeFlow(knowledgeCycleMemory(knowledgeCycle), interpreter, metrics) { evidence += it }.recall(
                 prompt,
                 com.brain.conversation.ConversationContext(
                     requestId = request.actionId,
-                    metadata = mapOf(
-                        "idea" to (context.idea ?: ""),
-                        "requirements" to context.requirements.joinToString("|")
-                    ).filterValues { it.isNotBlank() }
+                    metadata = mapOf("idea" to (context.idea ?: ""), "requirements" to context.requirements.joinToString("|"))
+                        .filterValues { it.isNotBlank() }
                 )
             )
         } else null
@@ -73,9 +71,7 @@ class ChatResponseExecutor(
             ConversationResponse(it.answer, "knowledge.learned", evidence = listOf("knowledge:validated", "knowledge:${it.provenance.name}"))
         } ?: conversationEngine?.respond(prompt, context)
         val localMiss = localResponse == null || localResponse.intent == "knowledge.unknown"
-        val noWebRestriction = request.parameters.values.any { value ->
-            value.contains("NO_WEB", ignoreCase = true) || value.contains("no web", ignoreCase = true)
-        }
+        val noWebRestriction = request.parameters.values.any { value -> value.contains("NO_WEB", ignoreCase = true) || value.contains("no web", ignoreCase = true) }
         val localCalculation = LocalArithmeticCalculator.calculate(prompt)
         val shouldRecover = suppliedResearch.isBlank() && localCalculation == null && !isClarification && !noWebRestriction && localMiss && researchFallback != null
         var researchResult: ResearchRunResult? = null
@@ -85,18 +81,13 @@ class ChatResponseExecutor(
             evidence += "chat:orchestrator:recovery"
             researchResult = requireNotNull(researchFallback).research(ResearchRequest(prompt, requestId = request.actionId, conversationId = request.parameters["conversationId"]))
             evidence += "chat:websearch:executed"
-            if (researchResult.sources.isNotEmpty() && researchResult.evidence.isNotEmpty()) {
-                evidence += "chat:websearch:evidence"
-            }
+            if (researchResult.sources.isNotEmpty() && researchResult.evidence.isNotEmpty()) evidence += "chat:websearch:evidence"
         }
 
         val finalText: String
         val status: ConversationStatus
         when {
             researchResult?.answer?.isNotBlank() == true -> {
-                // ResearchRunResult.answer é a única resposta autorizada da pesquisa.
-                // sources/evidence/citations permanecem evidência interna; não são uma segunda
-                // fonte de texto para o Composer.
                 finalText = trimToSentenceBoundary(researchResult.answer.trim(), maxChars = 1600)
                 evidence += "chat:conversation:synthesis"
                 status = ConversationStatus.ANSWER_READY
@@ -140,23 +131,20 @@ class ChatResponseExecutor(
         }
         metrics.recordSecretary("content", accepted = true)
         evidence += "chat:secretary:accept"
-        if (researchResult?.answer?.isNotBlank() == true) {
-            knowledgePromoter?.promote(ResearchRequest(prompt, requestId = request.actionId, conversationId = request.parameters["conversationId"]), researchResult)
-        }
+        if (researchResult?.answer?.isNotBlank() == true) knowledgePromoter?.promote(ResearchRequest(prompt, requestId = request.actionId, conversationId = request.parameters["conversationId"]), researchResult)
         val provenance = provenance(capability).toMutableList()
         if (researchResult != null) provenance += "research:auto-fallback-after-local-miss"
         if (researchResult != null || suppliedResearch.isNotBlank()) provenance += "source:dependency:network.research"
         val candidate = ConversationCandidate(requestId, prompt, status = status, source = if (researchResult != null) "web-research" else "local", evidence = evidence.distinct(), text = finalText, researchAttempted = researchResult != null)
         val promoted = secretaryGate.accept(candidate) ?: run {
             metrics.recordSecretary("form", accepted = false)
-            return ActionExecution(false, error = "Secretário rejeitou o candidato na promoção final", evidence = evidence + "chat:secretary:block", provenance = provenance(capability))
+            return ActionExecution(false, error = "Secretário rejeitou o candidato na promoção final", evidence = evidence + "chat:secretary:block", provenance = provenance)
         }
         metrics.recordSecretary("form", accepted = true)
         return ActionExecution(true, result = promoted.text, evidence = evidence.distinct(), provenance = provenance.distinct(), researchSources = researchResult?.sources.orEmpty(), userResponse = promoted.copy(conversationId = request.parameters["conversationId"]))
     }
 
     private fun knowledgeCycleMemory(cycle: KnowledgeLearningCycle): com.brain.memory.KnowledgeMemory = cycle.memoryForIntegration()
-    /** Corta no fim da última frase completa que caiba no limite, em vez de truncar no meio. */
     private fun trimToSentenceBoundary(text: String, maxChars: Int): String {
         if (text.length <= maxChars) return text
         val cortado = text.take(maxChars)
