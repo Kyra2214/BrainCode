@@ -1,6 +1,7 @@
 package com.sandbox.app
 
 import android.content.Context
+import android.util.Log
 import com.brain.conversation.BrainApiGateway
 import com.brain.conversation.BrainCompletion
 import com.brain.conversation.ConversationContext
@@ -29,6 +30,14 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
+
+private const val LFM_DIAG_TAG = "BrainCode.LFM.Diag"
+
+private fun logLfmDiagnostic(stage: String, startMs: Long, details: String = "") {
+    val endMs = System.nanoTime() / 1_000_000L
+    val suffix = if (details.isBlank()) "" else " $details"
+    Log.d(LFM_DIAG_TAG, "$stage start=$startMs end=$endMs duration_ms=${endMs - startMs}$suffix")
+}
 
 /** Model artifact is kept outside the APK and verified before first use. */
 object LfmModelSpec {
@@ -63,30 +72,35 @@ class LfmModelManager(private val context: Context) {
      * only; the cryptographic SHA is the source of truth.
      */
     fun refreshState(forceVerify: Boolean = false): LfmModelState {
-        synchronized(lock) {
-            if (_state.value == LfmModelState.LOADED) {
-                check(!forceVerify) { "não é permitido verificar forçadamente o GGUF enquanto o modelo nativo está carregado" }
-                return if (!artifactChangedSinceVerification()) LfmModelState.LOADED else LfmModelState.LOAD_FAILED
+        val started = System.nanoTime() / 1_000_000L
+        try {
+            synchronized(lock) {
+                if (_state.value == LfmModelState.LOADED) {
+                    check(!forceVerify) { "não é permitido verificar forçadamente o GGUF enquanto o modelo nativo está carregado" }
+                    return if (!artifactChangedSinceVerification()) LfmModelState.LOADED else LfmModelState.LOAD_FAILED
+                }
+                if (!forceVerify && (_state.value == LfmModelState.READY || _state.value == LfmModelState.LOADING)) return _state.value
+                if (!modelFile.isFile) {
+                    _state.value = LfmModelState.NOT_INSTALLED
+                    return _state.value
+                }
+                _state.value = LfmModelState.VERIFYING
             }
-            if (!forceVerify && (_state.value == LfmModelState.READY || _state.value == LfmModelState.LOADING)) return _state.value
-            if (!modelFile.isFile) {
-                _state.value = LfmModelState.NOT_INSTALLED
+            val digest = runCatching { sha256(modelFile) }.getOrNull()
+            synchronized(lock) {
+                if (digest == LfmModelSpec.SHA256 && modelFile.isFile) {
+                    verifiedSha256 = digest
+                    verifiedSize = modelFile.length()
+                    verifiedMtime = modelFile.lastModified()
+                    _state.value = LfmModelState.READY
+                } else {
+                    verifiedSha256 = null
+                    _state.value = LfmModelState.CORRUPTED
+                }
                 return _state.value
             }
-            _state.value = LfmModelState.VERIFYING
-        }
-        val digest = runCatching { sha256(modelFile) }.getOrNull()
-        synchronized(lock) {
-            if (digest == LfmModelSpec.SHA256 && modelFile.isFile) {
-                verifiedSha256 = digest
-                verifiedSize = modelFile.length()
-                verifiedMtime = modelFile.lastModified()
-                _state.value = LfmModelState.READY
-            } else {
-                verifiedSha256 = null
-                _state.value = LfmModelState.CORRUPTED
-            }
-            return _state.value
+        } finally {
+            if (forceVerify) logLfmDiagnostic("refreshState", started, "forceVerify=true")
         }
     }
 
@@ -99,7 +113,14 @@ class LfmModelManager(private val context: Context) {
     internal fun verifiedSha256(): String? = synchronized(lock) { verifiedSha256 }
 
     internal fun artifactChangedSinceVerification(): Boolean = synchronized(lock) {
-        !modelFile.isFile || modelFile.length() != verifiedSize || modelFile.lastModified() != verifiedMtime
+        val started = System.nanoTime() / 1_000_000L
+        val exists = modelFile.isFile
+        val length = modelFile.length()
+        val mtime = modelFile.lastModified()
+        val changed = !exists || length != verifiedSize || mtime != verifiedMtime
+        val details = if (changed) "result=true length=$length verifiedSize=$verifiedSize mtime=$mtime verifiedMtime=$verifiedMtime" else "result=false"
+        logLfmDiagnostic("artifactChangedSinceVerification", started, details)
+        changed
     }
 
     internal fun markLoading() = synchronized(lock) {
@@ -294,52 +315,72 @@ class LocalLlmBrainApiGateway(
     private var model: LlamaModel? = null
     private var loadedSha256: String? = null
 
-    private suspend fun loadModelIfNeeded(): LlamaModel = model ?: Llama.loadModel(
-        modelManager.modelFile().absolutePath,
-        LlamaConfig(
-            contextSize = 1024,
-            threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4),
-            gpuLayers = 0,
-            temperature = 0.1f,
-            topP = 0.9f,
-            topK = 50,
-            seed = 7
-        )
-    ).also { model = it }
+    private suspend fun loadModelIfNeeded(): LlamaModel {
+        model?.let { return it }
+        val started = System.nanoTime() / 1_000_000L
+        try {
+            return Llama.loadModel(
+                modelManager.modelFile().absolutePath,
+                LlamaConfig(
+                    contextSize = 1024,
+                    threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4),
+                    gpuLayers = 0,
+                    temperature = 0.1f,
+                    topP = 0.9f,
+                    topK = 50,
+                    seed = 7
+                )
+            ).also { model = it }
+        } finally {
+            logLfmDiagnostic("Llama.loadModel", started)
+        }
+    }
 
     /**
      * Loads the native model before the first user request. The Result is intentional:
      * callers must observe native-load failure instead of treating a verified file as loaded.
      */
-    fun preload(): Result<Unit> = runCatching {
-        runBlocking {
-            mutex.withLock {
-                if (modelManager.isLoaded() && model != null && loadedSha256 == modelManager.verifiedSha256() && !modelManager.artifactChangedSinceVerification()) return@withLock
-                val currentModel = model
-                if (currentModel != null) {
-                    Llama.releaseModel(currentModel)
-                    model = null
-                    loadedSha256 = null
-                }
-                if (modelManager.artifactChangedSinceVerification()) {
-                    if (modelManager.isLoaded()) modelManager.prepareForReloadAfterNativeRelease()
-                    modelManager.refreshState(forceVerify = true)
-                }
-                check(modelManager.isReady()) { "modelo LFM local ainda não está disponível" }
-                check(modelManager.verifiedSha256() == LfmModelSpec.SHA256) { "modelo LFM local não possui artefato verificado" }
-                modelManager.markLoading()
-                try {
-                    loadModelIfNeeded()
-                    loadedSha256 = modelManager.verifiedSha256()
-                    modelManager.markLoaded()
-                } catch (error: Throwable) {
-                    runCatching { model?.let(Llama::releaseModel) }
-                    model = null
-                    loadedSha256 = null
-                    modelManager.markLoadFailed()
-                    throw error
+    fun preload(): Result<Unit> {
+        val started = System.nanoTime() / 1_000_000L
+        var nativeAction = "unknown"
+        return runCatching {
+            runBlocking {
+                mutex.withLock {
+                    if (modelManager.isLoaded() && model != null && loadedSha256 == modelManager.verifiedSha256() && !modelManager.artifactChangedSinceVerification()) {
+                        nativeAction = "confirmed_cached"
+                        return@withLock
+                    }
+                    val currentModel = model
+                    if (currentModel != null) {
+                        nativeAction = "reloaded"
+                        Llama.releaseModel(currentModel)
+                        model = null
+                        loadedSha256 = null
+                    } else {
+                        nativeAction = "loaded_initial"
+                    }
+                    if (modelManager.artifactChangedSinceVerification()) {
+                        if (modelManager.isLoaded()) modelManager.prepareForReloadAfterNativeRelease()
+                        modelManager.refreshState(forceVerify = true)
+                    }
+                    check(modelManager.isReady()) { "modelo LFM local ainda não está disponível" }
+                    check(modelManager.verifiedSha256() == LfmModelSpec.SHA256) { "modelo LFM local não possui artefato verificado" }
+                    modelManager.markLoading()
+                    try {
+                        loadModelIfNeeded()
+                        loadedSha256 = modelManager.verifiedSha256()
+                        modelManager.markLoaded()
+                    } catch (error: Throwable) {
+                        runCatching { model?.let(Llama::releaseModel) }
+                        model = null
+                        loadedSha256 = null
+                        modelManager.markLoadFailed()
+                        throw error
+                    }
                 }
             }
+        }.also { result ->
+            logLfmDiagnostic("preload", started, "native_action=$nativeAction result=${if (result.isSuccess) "success" else "failure"}")
         }
     }
 
@@ -375,21 +416,31 @@ class LocalLlmBrainApiGateway(
     }
 
     private fun runInference(prompt: String, systemPrompt: String, maxTokens: Int): BrainCompletion {
-        if (!modelManager.isLoaded()) {
-            preload().getOrThrow()
-        }
-        if (modelManager.artifactChangedSinceVerification() || loadedSha256 != modelManager.verifiedSha256()) {
-            preload().getOrThrow()
-        }
-        check(modelManager.isLoaded() && loadedSha256 == modelManager.verifiedSha256()) { "modelo LFM local não está sincronizado com o GGUF verificado" }
-        return runBlocking {
-            mutex.withLock {
-                val loaded = loadModelIfNeeded()
-                nativeRunner.run {
-                    val result = Llama.complete(loaded, prompt = prompt, systemPrompt = systemPrompt, maxTokens = maxTokens)
-                    BrainCompletion(result.text, LfmModelSpec.MODEL_ID, "local", "on-device")
+        val started = System.nanoTime() / 1_000_000L
+        try {
+            if (!modelManager.isLoaded()) {
+                preload().getOrThrow()
+            }
+            if (modelManager.artifactChangedSinceVerification() || loadedSha256 != modelManager.verifiedSha256()) {
+                preload().getOrThrow()
+            }
+            check(modelManager.isLoaded() && loadedSha256 == modelManager.verifiedSha256()) { "modelo LFM local não está sincronizado com o GGUF verificado" }
+            return runBlocking {
+                mutex.withLock {
+                    val loaded = loadModelIfNeeded()
+                    nativeRunner.run {
+                        val completeStarted = System.nanoTime() / 1_000_000L
+                        try {
+                            val result = Llama.complete(loaded, prompt = prompt, systemPrompt = systemPrompt, maxTokens = maxTokens)
+                            BrainCompletion(result.text, LfmModelSpec.MODEL_ID, "local", "on-device")
+                        } finally {
+                            logLfmDiagnostic("Llama.complete", completeStarted)
+                        }
+                    }
                 }
             }
+        } finally {
+            logLfmDiagnostic("runInference", started)
         }
     }
 
