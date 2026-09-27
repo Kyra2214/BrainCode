@@ -4,6 +4,7 @@ import com.brain.gateway.ActionExecution
 import com.brain.gateway.ActionExecutor
 import com.brain.secretary.DeterministicSecretary
 import com.brain.secretary.Door
+import com.brain.secretary.UserResponse
 import com.sandbox.runtime.FileExecutionLogRepository
 import com.sandbox.runtime.ManagedSandboxRuntime
 import com.sandbox.runtime.SandboxProcessLauncher
@@ -25,7 +26,10 @@ class BrainSandboxControllerChatTest {
             val controller = BrainSandboxController(
                 runtime = ManagedSandboxRuntime(TestLauncher(root), FileExecutionLogRepository(File(root, "logs")), sessionId = "session-chat-spy"),
                 rootfsDir = root,
-                capabilityExecutors = mapOf("chat.respond" to ActionExecutor { _, _, _ -> ActionExecution(true, result = "ok", evidence = listOf("chat:test")) }),
+                capabilityExecutors = mapOf("chat.respond" to ActionExecutor { request, _, _ ->
+                    val evidence = listOf("chat:request:${request.actionId}", "chat:secretary:accept")
+                    ActionExecution(true, result = "ok", evidence = evidence, userResponse = UserResponse("ok", evidence, request.actionId))
+                }),
                 reasoningAnalyzer = ReasoningAnalyzer { reasoningCalls++; error("CHAT não pode chamar reasoning") },
                 planningArtifactPlanner = PlanningArtifactPlanner { _, _, _ -> planningCalls++; error("CHAT não pode chamar planner") },
                 requirementEvaluator = RequirementEvaluator { requirementCalls++; error("CHAT não pode chamar gate") }
@@ -50,8 +54,10 @@ class BrainSandboxControllerChatTest {
                 runtime = ManagedSandboxRuntime(TestLauncher(root), FileExecutionLogRepository(File(root, "logs")), sessionId = "session-chat"),
                 rootfsDir = root,
                 capabilityExecutors = mapOf(
-                    "chat.respond" to ActionExecutor { _, _, _ ->
-                        ActionExecution(true, result = "Resposta conversacional local sobre interface/aplicativo", evidence = listOf("chat:test"))
+                    "chat.respond" to ActionExecutor { request, _, _ ->
+                        val text = "Resposta conversacional local sobre interface/aplicativo"
+                        val evidence = listOf("chat:request:${request.actionId}", "chat:secretary:accept")
+                        ActionExecution(true, result = text, evidence = evidence, userResponse = UserResponse(text, evidence, request.actionId))
                     }
                 )
             )
@@ -90,10 +96,13 @@ class BrainSandboxControllerChatTest {
                 authorizedAccountIds = setOf("android:provider-a", "android:provider-b"),
                 capabilityExecutors = mapOf(
                     "chat.respond" to ActionExecutor { request, _, _ ->
+                        val text = "Preciso de um esclarecimento antes de continuar: ${request.parameters["parameter.0"]}"
+                        val evidence = listOf("chat:clarification-question", "chat:request:${request.actionId}", "chat:secretary:accept")
                         ActionExecution(
                             true,
-                            result = "Preciso de um esclarecimento antes de continuar: ${request.parameters["parameter.0"]}",
-                            evidence = listOf("chat:clarification-question")
+                            result = text,
+                            evidence = evidence,
+                            userResponse = UserResponse(text, evidence, request.actionId)
                         )
                     }
                 )

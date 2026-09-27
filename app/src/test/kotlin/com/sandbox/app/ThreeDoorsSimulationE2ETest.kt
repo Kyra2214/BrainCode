@@ -34,8 +34,10 @@ class ThreeDoorsSimulationE2ETest {
     fun `situacao 1 porta 1 chat normal nao cria nem executa projeto`() {
         withController(
             executors = mapOf(
-                "chat.respond" to ActionExecutor { _, _, _ ->
-                    ActionExecution(true, result = "Entendi a ideia e posso ajudar a organizá-la.", evidence = listOf("chat:e2e:local"))
+                "chat.respond" to ActionExecutor { request, _, _ ->
+                    val text = "Entendi a ideia e posso ajudar a organizá-la."
+                    val evidence = listOf("chat:e2e:local", "chat:request:${request.actionId}", "chat:secretary:accept")
+                    ActionExecution(true, result = text, evidence = evidence, userResponse = com.brain.secretary.UserResponse(text, evidence, request.actionId))
                 }
             )
         ) { root, controller ->
@@ -68,10 +70,13 @@ class ThreeDoorsSimulationE2ETest {
                     )
                 },
                 "chat.respond" to ActionExecutor { request, _, _ ->
+                    val text = "Síntese: use categorias, itens e prioridade para manter a lista simples."
+                    val evidence = listOf("chat:e2e:synthesis", "chat:websearch:evidence", "context:${request.parameters.values.any { it.contains("categorias") }}", "chat:request:${request.actionId}", "chat:secretary:accept")
                     ActionExecution(
                         true,
-                        result = "Síntese: use categorias, itens e prioridade para manter a lista simples.",
-                        evidence = listOf("chat:e2e:synthesis", "chat:websearch:evidence", "context:${request.parameters.values.any { it.contains("categorias") }}")
+                        result = text,
+                        evidence = evidence,
+                        userResponse = com.brain.secretary.UserResponse(text, evidence, request.actionId)
                     )
                 }
             )
@@ -145,7 +150,11 @@ class ThreeDoorsSimulationE2ETest {
                 },
                 "prompt.library.generate" to promptExecutor,
                 "prompt.library.write" to promptExecutor,
-                "chat.respond" to ActionExecutor { _, _, _ -> ActionExecution(true, result = "Pesquisa concluída.", evidence = listOf("chat:e2e:research-summary")) }
+                "chat.respond" to ActionExecutor { request, _, _ ->
+                    val text = "Pesquisa concluída."
+                    val evidence = listOf("chat:e2e:research-summary", "chat:request:${request.actionId}", "chat:secretary:accept")
+                    ActionExecution(true, result = text, evidence = evidence, userResponse = com.brain.secretary.UserResponse(text, evidence, request.actionId))
+                }
             )
         ) { _, controller ->
             val researchObjective = "Pesquise padrões para um app pequeno de lista de compras e explique as recomendações."

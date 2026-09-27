@@ -574,31 +574,26 @@ class BrainSandboxController(
         } else {
             listOf(objective)
         }
-        // WEATHER e RESEARCH resolvem targetCapability="network.research" com route CAPABILITY
-        // (ver BrainInputInterpreter.interpret). O WebResearchExecutor devolve o texto em
-        // `internalPayload`, nunca em `userResponse` — de propósito, porque só chat.respond/
-        // ChatResponseExecutor pode liberar texto ao usuário (Secretário/QC no meio). Sem esta
-        // segunda etapa, cycle.resposta (que só lê userResponse) ficava null mesmo com a
-        // pesquisa concluída com sucesso, e a UI caía no fallback "Plano concluído: true".
-        // O Context Builder de CicloExecucaoPlano.executar já propaga o resultado da
-        // dependência como parâmetro extra (mesmo mecanismo usado por DoorAwareSplitter).
+        // Pesquisa, sandbox.info e dados públicos estruturados são resultados internos. Eles
+        // só podem chegar à UI depois de ChatResponseExecutor/Secretário aceitarem uma resposta.
+        // O Context Builder propaga o resultado e a capability de origem ao passo dependente.
         if (envelope.route == Route.CAPABILITY && capability in INTERNAL_ONLY_CAPABILITIES) {
-            val pesquisar = PassoPlano(
-                id = "pesquisar",
+            val obterContexto = PassoPlano(
+                id = if (capability in PUBLIC_DATA_CAPABILITIES) "consultar-dados" else "pesquisar",
                 capacidade = capability,
-                criterioSucesso = "evidência de pesquisa disponível",
+                criterioSucesso = if (capability in PUBLIC_DATA_CAPABILITIES) "resultado estruturado com proveniência disponível" else "evidência de pesquisa disponível",
                 parametros = parameters,
-                riskClass = RiskClass.MEDIUM
+                riskClass = if (capability in PUBLIC_DATA_CAPABILITIES) RiskClass.LOW else RiskClass.MEDIUM
             )
             val responder = PassoPlano(
                 id = "responder",
                 capacidade = "chat.respond",
                 criterioSucesso = "resposta da rota ${envelope.route.name} não vazia",
                 parametros = parameters,
-                dependeDe = listOf(pesquisar.id),
+                dependeDe = listOf(obterContexto.id),
                 riskClass = RiskClass.LOW
             )
-            return PlanoExecucao(objetivo = objective, passos = listOf(pesquisar, responder))
+            return PlanoExecucao(objetivo = objective, passos = listOf(obterContexto, responder))
         }
         return PlanoExecucao(
             objetivo = objective,
@@ -901,8 +896,9 @@ class BrainSandboxController(
     }
 
     private companion object {
-        /** Capabilities cujo executor só devolve payload interno e precisam de chat.respond. */
-        val INTERNAL_ONLY_CAPABILITIES = setOf("network.research", "sandbox.info")
+        /** Resultados que devem permanecer internos até a validação do Secretário em chat.respond. */
+        val PUBLIC_DATA_CAPABILITIES = setOf("weather", "br.dados", "br.economia", "br.geografia", "cambio")
+        val INTERNAL_ONLY_CAPABILITIES = setOf("network.research", "sandbox.info") + PUBLIC_DATA_CAPABILITIES
         const val MAX_EXECUTION_ATTEMPTS = 3
         const val MAX_TECHNICAL_RETRIES = 2
         const val TECHNICAL_RETRY_BACKOFF_MS = 50L

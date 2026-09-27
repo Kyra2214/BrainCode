@@ -8,6 +8,7 @@ val configuredVersionCode = System.getenv("BRAINCODE_VERSION_CODE")?.toIntOrNull
 val resolvedVersionCode = maxOf(7, configuredVersionCode ?: ciVersionCode ?: 7)
 val e2eFakeRootfs = providers.gradleProperty("braincode.e2e.fakeRootfs").orNull == "true"
 val e2eOfflineAi = providers.gradleProperty("braincode.e2e.offlineAi").orNull == "true"
+val ed25519CompatOnly = providers.gradleProperty("braincode.ed25519.compatOnly").orNull == "true"
 
 android {
     namespace = "com.sandbox.app"
@@ -22,6 +23,7 @@ android {
         buildConfigField("boolean", "E2E_FAKE_ROOTFS", e2eFakeRootfs.toString())
         buildConfigField("boolean", "E2E_OFFLINE_AI", e2eOfflineAi.toString())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        if (ed25519CompatOnly) ndk { abiFilters += "x86_64" }
     }
 
     val signingStoreFile = System.getenv("BRAINCODE_KEYSTORE_FILE")

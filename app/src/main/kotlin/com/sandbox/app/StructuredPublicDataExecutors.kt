@@ -10,7 +10,6 @@ import com.brain.gateway.ActionExecution
 import com.brain.gateway.ActionExecutor
 import com.brain.gateway.ActionRequest
 import com.brain.policy.PolicyDecision
-import com.brain.secretary.UserResponse
 import java.net.URL
 import java.time.Instant
 import java.util.Locale
@@ -46,8 +45,7 @@ abstract class DeterministicApiExecutor(
         val evidence = listOf("api:$serviceName", "url:$sourceUrl", "data:${detail.take(600)}")
         return ActionExecution(
             success = true, result = result, evidence = evidence,
-            provenance = listOf("public-api:$serviceName", "capability:${capability.id}"),
-            userResponse = UserResponse(result, evidence, request.actionId, request.parameters["conversationId"])
+            provenance = listOf("public-api:$serviceName", "capability:${capability.id}")
         )
     }
     protected fun explicitFailure(capability: CapabilityDefinition, message: String) = ActionExecution(
@@ -326,12 +324,21 @@ class ExchangeRateExecutor(
             if (!value.isFinite() || value <= 0) error("currency-api sem taxa válida")
             Triple(value, obj.optString("date"), fallbackUrl)
         }.getOrThrow()
-        val conversion = pair.amount?.let { amount -> "${format(amount)} ${pair.base} = ${format(amount * rate.first)} ${pair.quote}; " }.orEmpty()
-        val result = "${conversion}1 ${pair.base} = ${format(rate.first)} ${pair.quote}${rate.second.takeIf { it.isNotBlank() }?.let { " (data: $it)" }.orEmpty()} (taxa indicativa diária)."
+        val conversion = pair.amount?.let { amount -> "${format(amount)} ${currencyName(pair.base)} (${pair.base}) = ${format(amount * rate.first)} ${currencyName(pair.quote)} (${pair.quote}); " }.orEmpty()
+        val result = "${conversion}1 ${currencyName(pair.base)} (${pair.base}) = ${format(rate.first)} ${currencyName(pair.quote)} (${pair.quote})${rate.second.takeIf { it.isNotBlank() }?.let { " (data: $it)" }.orEmpty()} (taxa indicativa diária)."
         success(request, capability, result, rate.third, result)
     }.getOrElse { explicitFailure(capability, "Câmbio indisponível: ${it.message ?: "falha sem detalhe"}") }
 
     private fun format(value: Double) = java.text.DecimalFormat("#,##0.####", java.text.DecimalFormatSymbols(java.util.Locale("pt", "BR"))).format(value)
+    private fun currencyName(code: String): String = when (code) {
+        "USD" -> "dólares"
+        "BRL" -> "reais"
+        "EUR" -> "euros"
+        "GBP" -> "libras esterlinas"
+        "JPY" -> "ienes"
+        "ARS" -> "pesos argentinos"
+        else -> code
+    }
 }
 
 private data class CurrencyPair(val base: String, val quote: String, val amount: Double?) {
