@@ -2,6 +2,7 @@ package com.sandbox.app
 
 import android.app.Application
 import com.brain.conversation.ConversationInterpreterRegistry
+import com.brain.conversation.ConversationMetrics
 import com.brain.conversation.HybridIntentAdvisor
 import com.brain.conversation.IntentAdvisorRegistry
 import com.brain.conversation.LlmIntentAdvisor
@@ -18,6 +19,7 @@ import java.io.File
 /** App-level wiring for optional on-device conversation intelligence. */
 class BrainCodeApplication : Application() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val conversationMetrics = ConversationMetrics()
     private var localGateway: LocalLlmBrainApiGateway? = null
 
     override fun onCreate() {
@@ -36,7 +38,7 @@ class BrainCodeApplication : Application() {
             learning = KnowledgeLearningCycle(FileKnowledgeMemory(File(filesDir, "brain/knowledge.jsonl")))
         )
         val cloudAdvisor = LlmIntentAdvisor(ConversationBrainGatewayAdapter(providerGateway), NoOpIntentAdvisor)
-        IntentAdvisorRegistry.current = HybridIntentAdvisor(LfmIntentAdvisor(local), cloudAdvisor)
+        IntentAdvisorRegistry.current = HybridIntentAdvisor(LfmIntentAdvisor(local), cloudAdvisor, metrics = conversationMetrics)
         ConversationInterpreterRegistry.current = LfmEntityInterpreter(local)
 
         // Provision the 229 MB quantized model once in the background.
