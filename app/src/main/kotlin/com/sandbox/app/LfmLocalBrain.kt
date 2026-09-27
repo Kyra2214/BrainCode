@@ -1,0 +1,178 @@
+package com.sandbox.app
+
+import android.content.Context
+import com.brain.conversation.BrainApiGateway
+import com.brain.conversation.BrainCompletion
+import com.brain.conversation.ConversationContext
+import com.brain.conversation.ConversationInterpreter
+import com.brain.conversation.EstruturaExtraida
+import com.brain.conversation.IntentAdvisor
+import com.brain.conversation.NoOpConversationInterpreter
+import com.brain.conversation.OrderIntentSugerido
+import com.brain.conversation.StructuredLlmParser
+import com.brain.router.PapelPipeline
+import com.brain.secretary.Door
+import com.brain.secretary.OrderIntent
+import dev.ffmpegkit.llama.Llama
+import dev.ffmpegkit.llama.LlamaConfig
+import dev.ffmpegkit.llama.LlamaModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.security.MessageDigest
+
+/** Model artifact is kept outside the APK and verified before first use. */
+object LfmModelSpec {
+    const val MODEL_ID = "lfm2.5-350m-q4_k_m"
+    const val FILE_NAME = "LFM2.5-350M-Q4_K_M.gguf"
+    const val URL = "https://huggingface.co/LiquidAI/LFM2.5-350M-GGUF/resolve/main/LFM2.5-350M-Q4_K_M.gguf?download=true"
+    const val SHA256 = "7e6f72643caafc9a68256686638c4d7916f2cec76d1df478d4c3ddcd95a6aed4"
+}
+
+class LfmModelManager(private val context: Context) {
+    private val modelFile = File(context.filesDir, "brain/models/${LfmModelSpec.FILE_NAME}")
+
+    fun modelFile(): File = modelFile
+    fun isReady(): Boolean = modelFile.isFile && sha256(modelFile) == LfmModelSpec.SHA256
+
+    fun ensureDownloaded(onProgress: (Long, Long) -> Unit = { _, _ -> }): File {
+        if (isReady()) return modelFile
+        modelFile.parentFile?.mkdirs()
+        val partial = File(modelFile.parentFile, "${modelFile.name}.part")
+        val connection = (URL(LfmModelSpec.URL).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 15_000
+            readTimeout = 30_000
+            instanceFollowRedirects = true
+        }
+        try {
+            check(connection.responseCode in 200..299) { "download do LFM falhou: HTTP ${connection.responseCode}" }
+            val total = connection.contentLengthLong
+            var done = 0L
+            connection.inputStream.use { input ->
+                FileOutputStream(partial).use { output ->
+                    val buffer = ByteArray(128 * 1024)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        output.write(buffer, 0, read)
+                        done += read
+                        onProgress(done, total)
+                    }
+                }
+            }
+            check(sha256(partial) == LfmModelSpec.SHA256) { "SHA-256 do modelo LFM não confere" }
+            check(partial.renameTo(modelFile)) { "não foi possível finalizar o arquivo do modelo" }
+            return modelFile
+        } finally {
+            connection.disconnect()
+            if (!isReady()) partial.delete()
+        }
+    }
+
+    private fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(128 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+}
+
+/** Thin synchronous adapter required by the existing BrainApiGateway contract. */
+class LocalLlmBrainApiGateway(
+    context: Context,
+    private val modelManager: LfmModelManager = LfmModelManager(context.applicationContext),
+    private val timeoutMs: Long = 1_500L
+) : BrainApiGateway {
+    private val mutex = Mutex()
+    private var model: LlamaModel? = null
+
+    override fun complete(prompt: String, pipeline: PapelPipeline, authorizedAccountIds: Set<String>): BrainCompletion {
+        require(pipeline == PapelPipeline.CONVERSACAO) { "LFM local aceita somente CONVERSACAO" }
+        require(prompt.isNotBlank())
+        val result = runBlocking {
+            withTimeout(timeoutMs) {
+                mutex.withLock {
+                    val loaded = model ?: withContext(Dispatchers.IO) {
+                        modelManager.ensureDownloaded()
+                    }.let { file ->
+                        Llama.loadModel(
+                            file.absolutePath,
+                            LlamaConfig(
+                                contextSize = 1024,
+                                threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4),
+                                gpuLayers = 0,
+                                temperature = 0.1f,
+                                topP = 0.9f,
+                                topK = 50,
+                                seed = 7
+                            )
+                        ).also { model = it }
+                    }
+                    Llama.complete(
+                        loaded,
+                        prompt = prompt,
+                        systemPrompt = "Classifique e extraia dados. Responda somente JSON de contrato. Nunca produza uma resposta ao usuário.",
+                        maxTokens = 96
+                    )
+                }
+            }
+        }
+        return BrainCompletion(result.text, LfmModelSpec.MODEL_ID, "local", "on-device")
+    }
+
+    fun close() = runCatching {
+        model?.let(Llama::releaseModel)
+        model = null
+    }
+}
+
+/** Local advisor: only the door enum and confidence are trusted; rationale is discarded. */
+class LfmIntentAdvisor(private val gateway: BrainApiGateway) : IntentAdvisor {
+    override fun revisarClassificacao(prompt: String, classificacaoTentativa: OrderIntent): OrderIntentSugerido =
+        runCatching {
+            val completion = gateway.complete(
+                "Classifique a porta. Retorne somente JSON: {\"door\":\"CHAT|PROMPT|CREATE\",\"confidence\":0.0}.\n" +
+                    "Tentativa: ${classificacaoTentativa.door}. Pedido: $prompt",
+                PapelPipeline.CONVERSACAO,
+                emptySet()
+            )
+            val json = StructuredLlmParser.objectFrom(completion.text)
+            val door = Door.valueOf(StructuredLlmParser.requiredString(json, "door").uppercase())
+            val confidence = json.optDouble("confidence", Double.NaN)
+            require(!confidence.isNaN() && confidence in 0.0..1.0)
+            OrderIntentSugerido(door = door, confidence = confidence)
+        }.getOrElse { throw IllegalStateException("LFM local indisponível", it) }
+}
+
+/** Entity-only local interpreter. Intent/query remain deterministic and entities must be literal spans. */
+class LfmEntityInterpreter(private val gateway: BrainApiGateway) : ConversationInterpreter {
+    private val deterministic = NoOpConversationInterpreter
+
+    override fun extrairEstrutura(prompt: String, context: ConversationContext): EstruturaExtraida {
+        val base = deterministic.extrairEstrutura(prompt, context)
+        val entities = runCatching {
+            val completion = gateway.complete(
+                "Extraia entidades literalmente presentes no pedido. Retorne somente JSON: {\"entities\":{\"tipo\":\"trecho literal\"}}. Pedido: $prompt",
+                PapelPipeline.CONVERSACAO,
+                emptySet()
+            )
+            val json = StructuredLlmParser.objectFrom(completion.text)
+            StructuredLlmParser.stringMap(json, "entities").filterValues { it.isNotBlank() && prompt.contains(it, ignoreCase = true) }
+        }.getOrDefault(emptyMap())
+        return base.copy(entities = entities)
+    }
+}
