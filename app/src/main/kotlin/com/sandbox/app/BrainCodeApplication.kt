@@ -61,7 +61,10 @@ class BrainCodeApplication : Application() {
         // still installing, wait; if the transfer fails, keep retrying later. A failed
         // model must never block the deterministic Secretary path.
         while (kotlinx.coroutines.currentCoroutineContext().isActive) {
-            if (modelManager.refreshState() == LfmModelState.READY) return
+            if (modelManager.refreshState() == LfmModelState.READY) {
+                localGateway?.preload()
+                if (modelManager.refreshState() == LfmModelState.READY) return
+            }
             val rooftsReady = runCatching { factory.isRoofts06Installed() }.getOrDefault(false)
             if (rooftsReady) {
                 runCatching { modelManager.ensureDownloaded() }
