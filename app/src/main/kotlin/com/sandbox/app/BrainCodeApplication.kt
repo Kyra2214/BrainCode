@@ -6,7 +6,6 @@ import com.brain.conversation.ConversationInterpreterRegistry
 import com.brain.conversation.ConversationMetrics
 import com.brain.conversation.HybridIntentAdvisor
 import com.brain.conversation.IntentAdvisorRegistry
-import com.brain.conversation.LlmIntentAdvisor
 import com.brain.conversation.NoOpConversationInterpreter
 import com.brain.conversation.NoOpIntentAdvisor
 import com.brain.memory.FileKnowledgeMemory
@@ -39,13 +38,10 @@ class BrainCodeApplication : Application() {
         lfmModelManager.refreshState()
         val local = LocalLlmBrainApiGateway(this, lfmModelManager)
         localGateway = local
-        val providerGateway = BrainApiGateway(
-            runCatching { ApiKeyCatalogLoader.load(this) }.getOrElse { emptyList() },
-            ApiKeyStore(this),
-            learning = KnowledgeLearningCycle(FileKnowledgeMemory(File(filesDir, "brain/knowledge.jsonl")))
-        )
-        val cloudAdvisor = LlmIntentAdvisor(ConversationBrainGatewayAdapter(providerGateway), NoOpIntentAdvisor)
-        IntentAdvisorRegistry.current = HybridIntentAdvisor(LfmIntentAdvisor(local), cloudAdvisor, metrics = conversationMetrics)
+        // Current runtime is strictly local-first: the LFM arm is the only advisory model.
+        // Cloud adapters remain available as future/explicit integrations but are not wired
+        // into the Secretary path, avoiding recurring token/network cost by default.
+        IntentAdvisorRegistry.current = HybridIntentAdvisor(LfmIntentAdvisor(local), NoOpIntentAdvisor, metrics = conversationMetrics)
         ConversationInterpreterRegistry.current = LfmEntityInterpreter(local)
 
         // A LFM model is not bundled in the APK. Provision it automatically only after
