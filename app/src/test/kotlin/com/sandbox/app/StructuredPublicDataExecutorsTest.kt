@@ -98,6 +98,22 @@ class StructuredPublicDataExecutorsTest {
         assertTrue(http.urls[1].contains("api.open-meteo.com/v1/forecast"))
     }
 
+    @Test
+    fun `Open-Meteo usa daily para amanha`() {
+        val http = FakeHttp(
+            response(200, """{"results":[{"name":"Macaé","admin1":"Rio de Janeiro","latitude":-22.37,"longitude":-41.78,"country_code":"BR"}]}"""),
+            response(200, """{"daily":{"time":["2026-09-27","2026-09-28"],"temperature_2m_max":[27.0,31.5],"temperature_2m_min":[20.0,22.0],"precipitation_probability_max":[30,65],"weather_code":[2,61]}}""")
+        )
+        val execution = WeatherExecutor(http).execute(request("weather", "Qual o tempo em Macaé amanhã?"), capability("weather"), allow)
+        assertTrue(execution.success)
+        assertTrue(execution.userResponse!!.text.contains("Amanhã em Macaé"))
+        assertTrue(execution.userResponse!!.text.contains("mínima 22.0°C"))
+        assertTrue(execution.userResponse!!.text.contains("máxima 31.5°C"))
+        assertTrue(execution.userResponse!!.text.contains("65%"))
+        assertTrue(http.urls[1].contains("daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code"))
+        assertTrue(http.urls[1].contains("forecast_days=2"))
+    }
+
     @Test fun `cambio tenta Frankfurter e usa fallback de taxa se necessario`() {
         val http = FakeHttp(response(429, "busy"))
         val fallback = FakeHttp(response(200, """{"date":"2026-09-25","brl":{"usd":0.193}}"""))
