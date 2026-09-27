@@ -34,45 +34,123 @@ object LfmModelSpec {
     const val SHA256 = "7e6f72643caafc9a68256686638c4d7916f2cec76d1df478d4c3ddcd95a6aed4"
 }
 
+enum class LfmModelState {
+    NOT_INSTALLED, DOWNLOADING, VERIFYING, READY, CORRUPTED, UNAVAILABLE
+}
+
 class LfmModelManager(private val context: Context) {
     private val modelFile = File(context.filesDir, "brain/models/${LfmModelSpec.FILE_NAME}")
+    private val stateFile = File(modelFile.parentFile, "${modelFile.name}.state")
+    private val lock = Any()
+    private val _state = kotlinx.coroutines.flow.MutableStateFlow(LfmModelState.NOT_INSTALLED)
+    val state: kotlinx.coroutines.flow.StateFlow<LfmModelState> = _state
 
     fun modelFile(): File = modelFile
-    fun isReady(): Boolean = modelFile.isFile && runCatching { sha256(modelFile) == LfmModelSpec.SHA256 }.getOrDefault(false)
+
+    /** Performs at most one integrity check per file metadata version. */
+    fun refreshState(): LfmModelState = synchronized(lock) {
+        if (!modelFile.isFile) {
+            _state.value = LfmModelState.NOT_INSTALLED
+            return@synchronized _state.value
+        }
+        val cached = readVerifiedMetadata()
+        if (cached != null && cached.first == modelFile.length() && cached.second == modelFile.lastModified()) {
+            _state.value = LfmModelState.READY
+            return@synchronized _state.value
+        }
+        _state.value = LfmModelState.VERIFYING
+        val valid = runCatching { sha256(modelFile) == LfmModelSpec.SHA256 }.getOrDefault(false)
+        if (valid) {
+            writeVerifiedMetadata()
+            _state.value = LfmModelState.READY
+        } else {
+            stateFile.delete()
+            _state.value = LfmModelState.CORRUPTED
+        }
+        return@synchronized _state.value
+    }
+
+    fun isReady(): Boolean = _state.value == LfmModelState.READY
 
     fun ensureDownloaded(onProgress: (Long, Long) -> Unit = { _, _ -> }): File {
-        if (isReady()) return modelFile
-        modelFile.parentFile?.mkdirs()
-        val partial = File(modelFile.parentFile, "${modelFile.name}.part")
-        val connection = (URL(LfmModelSpec.URL).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 15_000
-            readTimeout = 30_000
-            instanceFollowRedirects = true
-        }
-        try {
-            check(connection.responseCode in 200..299) { "download do LFM falhou: HTTP ${connection.responseCode}" }
-            val total = connection.contentLengthLong
-            var done = 0L
-            connection.inputStream.use { input ->
-                FileOutputStream(partial).use { output ->
-                    val buffer = ByteArray(128 * 1024)
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read < 0) break
-                        output.write(buffer, 0, read)
-                        done += read
-                        onProgress(done, total)
+        synchronized(lock) {
+            if (refreshState() == LfmModelState.READY) return modelFile
+            modelFile.parentFile?.mkdirs()
+            val partial = File(modelFile.parentFile, "${modelFile.name}.part")
+            _state.value = LfmModelState.DOWNLOADING
+            val connection = (URL(LfmModelSpec.URL).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 15_000
+                readTimeout = 30_000
+                instanceFollowRedirects = true
+            }
+            try {
+                check(connection.responseCode in 200..299) { "download do LFM falhou: HTTP ${connection.responseCode}" }
+                val total = connection.contentLengthLong
+                var done = 0L
+                connection.inputStream.use { input ->
+                    FileOutputStream(partial).use { output ->
+                        val buffer = ByteArray(128 * 1024)
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            output.write(buffer, 0, read)
+                            done += read
+                            onProgress(done, total)
+                        }
+                        output.fd.sync()
                     }
                 }
+                _state.value = LfmModelState.VERIFYING
+                check(sha256(partial) == LfmModelSpec.SHA256) {
+                    "SHA-256 do modelo LFM não confere"
+                }
+                replaceVerifiedModel(partial)
+                writeVerifiedMetadata()
+                _state.value = LfmModelState.READY
+                return modelFile
+            } catch (error: Throwable) {
+                _state.value = if (modelFile.isFile) LfmModelState.CORRUPTED else LfmModelState.UNAVAILABLE
+                throw error
+            } finally {
+                connection.disconnect()
+                if (partial.exists()) partial.delete()
             }
-            check(sha256(partial) == LfmModelSpec.SHA256) { "SHA-256 do modelo LFM não confere" }
-            check(partial.renameTo(modelFile)) { "não foi possível finalizar o arquivo do modelo" }
-            return modelFile
-        } finally {
-            connection.disconnect()
-            if (!isReady()) partial.delete()
         }
     }
+
+    private fun replaceVerifiedModel(partial: File) {
+        check(partial.isFile) { "arquivo parcial do LFM não existe" }
+        check(modelFile.delete() || !modelFile.exists()) {
+            "não foi possível substituir o modelo LFM existente"
+        }
+        val moved = runCatching {
+            java.nio.file.Files.move(
+                partial.toPath(),
+                modelFile.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                java.nio.file.StandardCopyOption.ATOMIC_MOVE
+            )
+        }.recoverCatching {
+            java.nio.file.Files.move(
+                partial.toPath(),
+                modelFile.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING
+            )
+        }.isSuccess
+        check(moved) { "não foi possível finalizar o arquivo do modelo" }
+    }
+
+    private fun writeVerifiedMetadata() {
+        stateFile.writeText("${modelFile.length()}:${modelFile.lastModified()}:${LfmModelSpec.SHA256}")
+    }
+
+    private fun readVerifiedMetadata(): Pair<Long, Long>? =
+        runCatching {
+            val parts = stateFile.readText().trim().split(':')
+            if (parts.size == 3 && parts[2] == LfmModelSpec.SHA256) {
+                parts[0].toLong() to parts[1].toLong()
+            } else null
+        }.getOrNull()
 
     private fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
