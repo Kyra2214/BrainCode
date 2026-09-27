@@ -1277,7 +1277,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
         // O relatório completo pertence ao painel de diagnóstico. Não o publique
         // no feed conversacional, onde só devem aparecer USER/ASSISTANT/STEP.
         diagnosticsReport = report
-        stage(if (post.aprovado) BrainUiStage.READY else BrainUiStage.FAILED, if (post.aprovado) "READY" else "FAILED")
+        stage(if (post.aprovado) BrainUiStage.READY else BrainUiStage.FAILED)
     }
     fun clearChat() { chatMessages.clear() }
 
