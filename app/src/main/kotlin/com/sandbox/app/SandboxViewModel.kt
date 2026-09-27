@@ -1284,7 +1284,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
     fun apiKeyInput(providerId: String): String = apiKeyInputs.getOrPut(providerId) { apiKeyStore.get(providerId).orEmpty() }
     fun updateApiKeyInput(providerId: String, value: String) { apiKeyInputs[providerId] = value }
     fun hasStoredApiKey(providerId: String): Boolean = !apiKeyStore.get(providerId).isNullOrBlank()
-    fun saveApiKey(providerId: String) { apiKeyStore.save(providerId, apiKeyInputs[providerId]?.trim().orEmpty()); apiKeyTestState[providerId] = ApiKeyTestUiState.Idle }
+    fun saveApiKey(providerId: String) { apiKeyStore.save(providerId, apiKeyInputs[providerId]?.trim().orEmpty()); apiKeyTestState[providerId] = ApiKeyTestUiState.Idle; getApplication<BrainCodeApplication>().refreshIntentAdvisor() }
     fun testApiKey(providerId: String, model: ApiProviderModel) {
         val key = apiKeyStore.get(providerId)?.takeIf { it.isNotBlank() } ?: run { apiKeyTestState[providerId] = ApiKeyTestUiState.Failure("Cole e salve uma chave antes de testar."); return }
         apiKeyTestState[providerId] = ApiKeyTestUiState.Testing
