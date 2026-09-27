@@ -1,14 +1,14 @@
 package com.brain.secretary
 
 import com.brain.conversation.IntentAdvisor
-import com.brain.conversation.NoOpIntentAdvisor
+import com.brain.conversation.IntentAdvisorRegistry
 import com.brain.prompt.PromptDomain
 import com.brain.text.IntentNegation
 import com.brain.text.TriggerLexicon
 
 /** Secretário sem LLM: classifica intenção, fase e restrições de forma reproduzível. */
 class DeterministicSecretary(
-    private val intentAdvisor: IntentAdvisor = NoOpIntentAdvisor
+    private val intentAdvisor: IntentAdvisor = IntentAdvisorRegistry.current
 ) {
     fun classify(prompt: String): OrderIntent {
         val original = prompt.trim()
@@ -35,10 +35,6 @@ class DeterministicSecretary(
             ).door
         }.getOrDefault(deterministicDoor) else deterministicDoor
         val phase = phaseFor(door, normalized)
-        // Contas externas ficam visíveis ao executor desde a classificação (ver
-        // docs/LEGADO_E_DECISOES.md, "Escalonamento da Porta 2 e DoorPolicy", item 1); quem decide se de fato
-        // usa é cada executor — ex.: PromptGenerationExecutor.escalonar só chama a IA quando o score
-        // local é insuficiente ou há gatilho explícito de melhoria ("melhore", "refaça").
         val scope = DoorScope(
             door = door,
             phase = phase,
@@ -87,7 +83,6 @@ class DeterministicSecretary(
         Door.CREATE -> if (isApprovalSignal(text)) CreatePhase.APPROVED else CreatePhase.DISCUSSION
     }
 
-    /** Perguntas sobre como criar explicam uma solução; não autorizam criação. */
     private fun isInformationalCreationQuestion(text: String): Boolean {
         val interrogative = text.contains("?") || text.startsWith("qual ") || text.startsWith("quais ") ||
             text.startsWith("como ") || text.startsWith("o que ")
