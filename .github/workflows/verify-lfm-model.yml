@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify-model:
@@ -37,23 +37,9 @@ jobs:
           set -euo pipefail
           test -f gradle/verification-metadata.xml
           chmod +x ./gradlew
-          ./gradlew --write-verification-metadata sha256 :android-module:compileDebugLibraryResources --no-daemon --stacktrace
+          ./gradlew :android-module:compileDebugLibraryResources --no-daemon --stacktrace
           grep -q 'dev.ffmpegkit-maintained' gradle/verification-metadata.xml
           grep -q 'llama-android-0.1.1.aar' gradle/verification-metadata.xml
           grep -q 'fdccf04c77de470004d7e54679bb918074ee9dbf31ea75af8c014d19c31e7501' gradle/verification-metadata.xml
-          if git diff --quiet -- gradle/verification-metadata.xml; then
-            echo 'No verification metadata changes'
-          else
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add gradle/verification-metadata.xml
-            git commit -m 'chore: verify detached Android build dependencies'
-            git push
-          fi
-      - name: Upload generated verification metadata
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-gradle-verification-metadata
-          path: gradle/verification-metadata.xml
-          if-no-files-found: error
-          retention-days: 1
+          grep -q 'aapt2-8.5.0-11315950-linux.jar' gradle/verification-metadata.xml
+          grep -q '0e307c068433efbc645a1864d4380bc79911cf5de311a976f92040cb218739dc' gradle/verification-metadata.xml
