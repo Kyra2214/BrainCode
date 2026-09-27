@@ -69,21 +69,12 @@ fun SettingsScreen(viewModel: SandboxViewModel, onBack: () -> Unit) {
 @Composable
 private fun DiagnosticsSettings(viewModel: SandboxViewModel) {
     val ready = viewModel.phase == SandboxPhase.Ready
-    var lfmInstalled by rememberSaveable { mutableStateOf(false) }
-    var lfmChecking by rememberSaveable { mutableStateOf(true) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            lfmInstalled = withContext(Dispatchers.IO) {
-                runCatching { LfmModelManager(viewModel.getApplication<Application>().applicationContext).isReady() }.getOrDefault(false)
-            }
-            lfmChecking = false
-            kotlinx.coroutines.delay(1500)
-        }
-    }
+    val lfmManager = (LocalContext.current.applicationContext as BrainCodeApplication).lfmModelManager
+    val lfmState by lfmManager.state.collectAsStateWithLifecycle()
     LazyColumn(modifier = Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Status do sandbox", style = MaterialTheme.typography.titleMedium) }
         item { StatusSection(viewModel) }
-        item { LfmDiagnosticCard(installed = lfmInstalled, checking = lfmChecking) }
+        item { LfmDiagnosticCard(state = lfmState) }
         item { Text("Diagnóstico e testes", style = MaterialTheme.typography.titleMedium) }
         item { Text("Os resultados aparecem como mensagens no chat.", style = MaterialTheme.typography.bodySmall) }
         item {
@@ -122,18 +113,8 @@ private fun ExtensionsSettings(viewModel: SandboxViewModel) {
 
 @Composable
 private fun LlmExtensionsSettings() {
-    var installed by rememberSaveable { mutableStateOf(false) }
-    var checking by rememberSaveable { mutableStateOf(true) }
-    val context = LocalContext.current
-    LaunchedEffect(Unit) {
-        while (true) {
-            installed = withContext(Dispatchers.IO) {
-                runCatching { LfmModelManager(context.applicationContext).isReady() }.getOrDefault(false)
-            }
-            checking = false
-            kotlinx.coroutines.delay(1500)
-        }
-    }
+    val manager = (LocalContext.current.applicationContext as BrainCodeApplication).lfmModelManager
+    val state by manager.state.collectAsStateWithLifecycle()
     LazyColumn(modifier = Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             Text("Modelos locais", style = MaterialTheme.typography.titleMedium)
@@ -147,7 +128,7 @@ private fun LlmExtensionsSettings() {
                         Text("Braço local do Secretário • Q4_K_M", style = MaterialTheme.typography.bodySmall)
                     }
                     OutlinedButton(onClick = {}, enabled = false) {
-                        Text(if (checking) "Verificando…" else if (installed) "Instalado" else "Não instalado")
+                        Text(lfmStateLabel(state))
                     }
                 }
             }
@@ -155,17 +136,35 @@ private fun LlmExtensionsSettings() {
     }
 }
 
+private fun lfmStateLabel(state: LfmModelState): String = when (state) {
+    LfmModelState.NOT_INSTALLED -> "Não instalado"
+    LfmModelState.DOWNLOADING -> "Baixando…"
+    LfmModelState.VERIFYING -> "Verificando…"
+    LfmModelState.READY -> "Instalado"
+    LfmModelState.CORRUPTED -> "Corrompido"
+    LfmModelState.UNAVAILABLE -> "Indisponível"
+}
+
+private fun lfmIntegrityLabel(state: LfmModelState): String = when (state) {
+    LfmModelState.READY -> "Q4_K_M • SHA-256 verificado"
+    LfmModelState.VERIFYING -> "Q4_K_M • verificando integridade"
+    LfmModelState.CORRUPTED -> "Q4_K_M • SHA-256 inválido"
+    LfmModelState.DOWNLOADING -> "Q4_K_M • download em andamento"
+    LfmModelState.NOT_INSTALLED -> "Q4_K_M • aguardando instalação"
+    LfmModelState.UNAVAILABLE -> "Q4_K_M • indisponível no momento"
+}
+
 @Composable
-private fun LfmDiagnosticCard(installed: Boolean, checking: Boolean) {
+private fun LfmDiagnosticCard(state: LfmModelState) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("LFM2.5-350M", style = MaterialTheme.typography.titleSmall)
                 Text("LLM local do Secretário", style = MaterialTheme.typography.bodySmall)
-                Text("Q4_K_M • SHA-256 verificado", style = MaterialTheme.typography.bodySmall)
+                Text(lfmIntegrityLabel(state), style = MaterialTheme.typography.bodySmall)
             }
             OutlinedButton(onClick = {}, enabled = false) {
-                Text(if (checking) "Verificando…" else if (installed) "Instalado" else "Não instalado")
+                Text(lfmStateLabel(state))
             }
         }
     }
