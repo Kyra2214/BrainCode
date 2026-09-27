@@ -1,0 +1,40 @@
+name: Verify LFM2.5-350M model integrity
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-model:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify official GGUF SHA-256
+        env:
+          MODEL_URL: https://huggingface.co/LiquidAI/LFM2.5-350M-GGUF/resolve/main/LFM2.5-350M-Q4_K_M.gguf?download=true
+          EXPECTED_SHA256: 7e6f72643caafc9a68256686638c4d7916f2cec76d1df478d4c3ddcd95a6aed4
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 2 --output model.gguf "$MODEL_URL"
+          actual="$(sha256sum model.gguf | awk '{print $1}')"
+          echo "expected=$EXPECTED_SHA256"
+          echo "actual=$actual"
+          test "$actual" = "$EXPECTED_SHA256"
+          rm -f model.gguf
+
+      - name: Verify dependency metadata policy
+        run: |
+          set -euo pipefail
+          test -f gradle/verification-metadata.xml
+          grep -q 'dev.ffmpegkit-maintained' gradle/verification-metadata.xml
+          grep -q 'llama-android-0.1.1' gradle/verification-metadata.xml
