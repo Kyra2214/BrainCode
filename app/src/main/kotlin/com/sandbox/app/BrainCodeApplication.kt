@@ -1,6 +1,7 @@
 package com.sandbox.app
 
 import android.app.Application
+import android.util.Log
 import com.brain.conversation.ConversationInterpreterRegistry
 import com.brain.conversation.ConversationMetrics
 import com.brain.conversation.HybridIntentAdvisor
@@ -61,16 +62,28 @@ class BrainCodeApplication : Application() {
         // still installing, wait; if the transfer fails, keep retrying later. A failed
         // model must never block the deterministic Secretary path.
         while (kotlinx.coroutines.currentCoroutineContext().isActive) {
-            if (modelManager.refreshState() == LfmModelState.READY) {
-                localGateway?.preload()
-                if (modelManager.refreshState() == LfmModelState.READY) return
+            if (modelManager.refreshState() in setOf(LfmModelState.READY, LfmModelState.LOADED)) {
+                val preload = localGateway?.preload()
+                if (preload?.isSuccess == true && modelManager.isLoaded()) return
+                preload?.exceptionOrNull()?.let {
+                    Log.w("BrainCode.LFM", "falha ao carregar LFM local; nova tentativa será feita", it)
+                }
+                delay(30_000L)
+                continue
             }
+
             val rooftsReady = runCatching { factory.isRoofts06Installed() }.getOrDefault(false)
             if (rooftsReady) {
-                runCatching { modelManager.ensureDownloaded() }
+                val download = runCatching { modelManager.ensureDownloaded() }
+                download.exceptionOrNull()?.let {
+                    Log.w("BrainCode.LFM", "falha ao provisionar LFM local; nova tentativa será feita", it)
+                }
                 if (modelManager.refreshState() == LfmModelState.READY) {
-                    localGateway?.preload()
-                    if (modelManager.refreshState() == LfmModelState.READY) return
+                    val preload = localGateway?.preload()
+                    if (preload?.isSuccess == true && modelManager.isLoaded()) return
+                    preload?.exceptionOrNull()?.let {
+                        Log.w("BrainCode.LFM", "falha ao aquecer LFM local; nova tentativa será feita", it)
+                    }
                 }
                 delay(30_000L)
             } else {
