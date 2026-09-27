@@ -3,10 +3,15 @@ package com.sandbox.app
 import com.brain.conversation.BrainApiGateway
 import com.brain.conversation.BrainCompletion
 import com.brain.conversation.ConversationContext
+import com.brain.conversation.ConversationMetrics
+import com.brain.conversation.HybridIntentAdvisor
+import com.brain.conversation.IntentAdvisor
+import com.brain.conversation.OrderIntentSugerido
 import com.brain.router.PapelPipeline
 import com.brain.secretary.Door
 import com.brain.secretary.OrderIntent
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -51,4 +56,61 @@ class LfmLocalBrainTest {
         assertTrue("inventada" !in result.entities)
         assertEquals(listOf(PapelPipeline.CONVERSACAO), gateway.pipelines)
     }
+    @Test
+    fun localEntityInterpreter_skips_model_for_trivial_conversation() {
+        val gateway = FakeGateway("""{"entities":{"cidade":"Macaé"}}""")
+        val result = LfmEntityInterpreter(gateway).extrairEstrutura(
+            "Olá",
+            ConversationContext("test")
+        )
+        assertTrue(result.entities.isEmpty())
+        assertTrue(gateway.pipelines.isEmpty())
+    }
+
+    @Test
+    fun hybridAdvisor_treats_api_as_token_not_substring() {
+        class CountingAdvisor(private val result: OrderIntentSugerido) : IntentAdvisor {
+            var calls = 0
+            override fun revisarClassificacao(prompt: String, classificacaoTentativa: OrderIntent): OrderIntentSugerido {
+                calls++
+                return result
+            }
+        }
+
+        val local = CountingAdvisor(OrderIntentSugerido(Door.CHAT, 0.95))
+        val cloud = CountingAdvisor(OrderIntentSugerido(Door.PROMPT, 0.99))
+        val advisor = HybridIntentAdvisor(local, cloud)
+
+        advisor.revisarClassificacao("capability", OrderIntent("capability", Door.CHAT, com.brain.secretary.CreatePhase.CHAT))
+        assertEquals(1, local.calls)
+        assertEquals(0, cloud.calls)
+
+        advisor.revisarClassificacao("use the API", OrderIntent("use the API", Door.CHAT, com.brain.secretary.CreatePhase.CHAT))
+        assertEquals(1, local.calls)
+        assertEquals(1, cloud.calls)
+    }
+
+    @Test
+    fun hybridAdvisor_records_cloud_failure_in_metrics() {
+        val metrics = ConversationMetrics()
+        val local = object : IntentAdvisor {
+            override fun revisarClassificacao(prompt: String, classificacaoTentativa: OrderIntent): OrderIntentSugerido =
+                OrderIntentSugerido(Door.CHAT, 0.5)
+        }
+        val cloud = object : IntentAdvisor {
+            override fun revisarClassificacao(prompt: String, classificacaoTentativa: OrderIntent): OrderIntentSugerido =
+                error("cloud unavailable")
+        }
+
+        HybridIntentAdvisor(local, cloud, metrics = metrics).revisarClassificacao(
+            "use the API",
+            OrderIntent("use the API", Door.CHAT, com.brain.secretary.CreatePhase.CHAT)
+        )
+
+        val snapshot = metrics.snapshot()
+        assertEquals(1L, snapshot.llmCallsByHop["intent"])
+        assertEquals(1L, snapshot.llmFailuresByHop["intent"])
+        assertFalse(snapshot.llmFailuresByHop.isEmpty())
+    }
+
 }
