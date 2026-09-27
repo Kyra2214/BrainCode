@@ -63,7 +63,6 @@ class LfmModelManager(private val context: Context) {
         _state.value = LfmModelState.VERIFYING
         val valid = runCatching { sha256(modelFile) == LfmModelSpec.SHA256 }.getOrDefault(false)
         if (valid) {
-            writeVerifiedMetadata()
             _state.value = if (wasLoaded) LfmModelState.LOADED else LfmModelState.READY
         } else {
             _state.value = LfmModelState.CORRUPTED
@@ -124,7 +123,6 @@ class LfmModelManager(private val context: Context) {
                     "SHA-256 do modelo LFM não confere"
                 }
                 replaceVerifiedModel(partial)
-                writeVerifiedMetadata()
                 _state.value = LfmModelState.READY
                 return modelFile
             } catch (error: Throwable) {
