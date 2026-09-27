@@ -55,7 +55,7 @@ class LfmModelManager(private val context: Context) {
      * only; the cryptographic SHA is the source of truth.
      */
     fun refreshState(forceVerify: Boolean = false): LfmModelState = synchronized(lock) {
-        if (_state.value == LfmModelState.LOADED) return@synchronized LfmModelState.LOADED
+        if (_state.value == LfmModelState.LOADED && !forceVerify && !artifactChangedSinceVerification()) return@synchronized LfmModelState.LOADED
         if (!forceVerify && (_state.value == LfmModelState.READY || _state.value == LfmModelState.LOADING)) return@synchronized _state.value
         if (!modelFile.isFile) {
             _state.value = LfmModelState.NOT_INSTALLED
@@ -243,6 +243,9 @@ class LocalLlmBrainApiGateway(
                     model = null
                     loadedSha256 = null
                 }
+                if (modelManager.artifactChangedSinceVerification()) {
+                    modelManager.refreshState(forceVerify = true)
+                }
                 check(modelManager.isReady()) { "modelo LFM local ainda não está disponível" }
                 check(modelManager.verifiedSha256() == LfmModelSpec.SHA256) { "modelo LFM local não possui artefato verificado" }
                 modelManager.markLoading()
@@ -251,6 +254,9 @@ class LocalLlmBrainApiGateway(
                     loadedSha256 = modelManager.verifiedSha256()
                     modelManager.markLoaded()
                 } catch (error: Throwable) {
+                    runCatching { model?.let(Llama::releaseModel) }
+                    model = null
+                    loadedSha256 = null
                     modelManager.markLoadFailed()
                     throw error
                 }
