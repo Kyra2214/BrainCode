@@ -35,7 +35,7 @@ object LfmModelSpec {
 }
 
 enum class LfmModelState {
-    NOT_INSTALLED, DOWNLOADING, VERIFYING, READY, CORRUPTED, UNAVAILABLE
+    NOT_INSTALLED, DOWNLOADING, VERIFYING, READY, LOADING, LOADED, CORRUPTED, UNAVAILABLE
 }
 
 class LfmModelManager(private val context: Context) {
@@ -47,22 +47,24 @@ class LfmModelManager(private val context: Context) {
 
     fun modelFile(): File = modelFile
 
-    /** Performs at most one integrity check per file metadata version. */
-    fun refreshState(): LfmModelState = synchronized(lock) {
+    /**
+     * Verifies the artifact when explicitly requested. Size/mtime metadata is informational
+     * only; the cryptographic SHA is the source of truth.
+     */
+    fun refreshState(forceVerify: Boolean = false): LfmModelState = synchronized(lock) {
+        if (!forceVerify && (_state.value == LfmModelState.LOADING || _state.value == LfmModelState.LOADED)) {
+            return@synchronized _state.value
+        }
         if (!modelFile.isFile) {
             _state.value = LfmModelState.NOT_INSTALLED
             return@synchronized _state.value
         }
-        val cached = readVerifiedMetadata()
-        if (cached != null && cached.first == modelFile.length() && cached.second == modelFile.lastModified()) {
-            _state.value = LfmModelState.READY
-            return@synchronized _state.value
-        }
         _state.value = LfmModelState.VERIFYING
+        val wasLoaded = _state.value == LfmModelState.LOADED
         val valid = runCatching { sha256(modelFile) == LfmModelSpec.SHA256 }.getOrDefault(false)
         if (valid) {
             writeVerifiedMetadata()
-            _state.value = LfmModelState.READY
+            _state.value = if (wasLoaded) LfmModelState.LOADED else LfmModelState.READY
         } else {
             stateFile.delete()
             _state.value = LfmModelState.CORRUPTED
@@ -70,7 +72,25 @@ class LfmModelManager(private val context: Context) {
         return@synchronized _state.value
     }
 
-    fun isReady(): Boolean = _state.value == LfmModelState.READY || refreshState() == LfmModelState.READY
+    fun isReady(): Boolean =
+        _state.value in setOf(LfmModelState.READY, LfmModelState.LOADING, LfmModelState.LOADED) ||
+            refreshState() in setOf(LfmModelState.READY, LfmModelState.LOADING, LfmModelState.LOADED)
+
+    fun isLoaded(): Boolean = _state.value == LfmModelState.LOADED
+
+    internal fun markLoading() = synchronized(lock) {
+        check(modelFile.isFile) { "modelo LFM local não está instalado" }
+        _state.value = LfmModelState.LOADING
+    }
+
+    internal fun markLoaded() = synchronized(lock) {
+        check(modelFile.isFile) { "modelo LFM local não está instalado" }
+        _state.value = LfmModelState.LOADED
+    }
+
+    internal fun markLoadFailed() = synchronized(lock) {
+        _state.value = if (modelFile.isFile) LfmModelState.READY else LfmModelState.UNAVAILABLE
+    }
 
     fun ensureDownloaded(onProgress: (Long, Long) -> Unit = { _, _ -> }): File {
         synchronized(lock) {
@@ -146,16 +166,8 @@ class LfmModelManager(private val context: Context) {
     }
 
     private fun writeVerifiedMetadata() {
-        stateFile.writeText("${modelFile.length()}:${modelFile.lastModified()}:${LfmModelSpec.SHA256}")
+        stateFile.writeText(modelFile.length().toString() + ":" + modelFile.lastModified() + ":" + LfmModelSpec.SHA256)
     }
-
-    private fun readVerifiedMetadata(): Pair<Long, Long>? =
-        runCatching {
-            val parts = stateFile.readText().trim().split(':')
-            if (parts.size == 3 && parts[2] == LfmModelSpec.SHA256) {
-                parts[0].toLong() to parts[1].toLong()
-            } else null
-        }.getOrNull()
 
     private fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -193,21 +205,34 @@ class LocalLlmBrainApiGateway(
         )
     ).also { model = it }
 
-    /** Loads the native model before the first user request, so cold-start loading is not paid by the 1.5s inference budget. */
-    fun preload(timeoutMs: Long = 15_000L): Boolean = runCatching {
+    /**
+     * Loads the native model before the first user request. The Result is intentional:
+     * callers must observe native-load failure instead of treating a verified file as loaded.
+     */
+    fun preload(timeoutMs: Long = 15_000L): Result<Unit> = runCatching {
+        if (modelManager.isLoaded() && model != null) return@runCatching Unit
         check(modelManager.isReady()) { "modelo LFM local ainda não está disponível" }
-        runBlocking {
-            withTimeout(timeoutMs) {
-                mutex.withLock { loadModelIfNeeded() }
+        modelManager.markLoading()
+        try {
+            runBlocking {
+                withTimeout(timeoutMs) {
+                    mutex.withLock { loadModelIfNeeded() }
+                }
             }
+            modelManager.markLoaded()
+        } catch (error: Throwable) {
+            modelManager.markLoadFailed()
+            throw error
         }
-        true
-    }.getOrDefault(false)
+    }
 
     override fun complete(prompt: String, pipeline: PapelPipeline, authorizedAccountIds: Set<String>): BrainCompletion {
         require(pipeline == PapelPipeline.CONVERSACAO) { "LFM local aceita somente CONVERSACAO" }
         require(prompt.isNotBlank())
-        check(modelManager.isReady()) { "modelo LFM local ainda não está disponível" }
+        if (!modelManager.isLoaded()) {
+            preload(10_000L).getOrThrow()
+        }
+        check(modelManager.isLoaded()) { "modelo LFM local ainda não foi carregado" }
         val result = runBlocking {
             withTimeout(timeoutMs) {
                 mutex.withLock {
@@ -254,6 +279,11 @@ class LfmEntityInterpreter(private val gateway: BrainApiGateway) : ConversationI
 
     override fun extrairEstrutura(prompt: String, context: ConversationContext): EstruturaExtraida {
         val base = deterministic.extrairEstrutura(prompt, context)
+        val shouldExtractEntities = prompt.length >= 20 && ENTITY_CUES.any { cue ->
+            prompt.contains(cue, ignoreCase = true)
+        }
+        if (!shouldExtractEntities) return base
+
         val entities = runCatching {
             val completion = gateway.complete(
                 "Extraia entidades literalmente presentes no pedido. Retorne somente JSON: {\"entities\":{\"tipo\":\"trecho literal\"}}. Pedido: $prompt",
@@ -265,5 +295,13 @@ class LfmEntityInterpreter(private val gateway: BrainApiGateway) : ConversationI
                 .filterValues { it.isNotBlank() && prompt.contains(it, ignoreCase = true) }
         }.getOrDefault(emptyMap())
         return base.copy(entities = entities)
+    }
+
+    private companion object {
+        val ENTITY_CUES = setOf(
+            " em ", " no ", " na ", " de ", " para ", " sobre ",
+            "cidade", "estado", "país", "nome", "empresa", "data",
+            "dia", "hora", "local", "endereço", "endereco"
+        )
     }
 }
