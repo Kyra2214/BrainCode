@@ -1238,17 +1238,17 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
             if (!cycle.aprovado && brainUiStage != BrainUiStage.BLOCKED) brainUiStage = BrainUiStage.FAILED
             return
         }
-        fun stage(stage: BrainUiStage, text: String) {
+        fun stage(stage: BrainUiStage) {
             // Stage/verification/critic/revision/readiness são somente observabilidade interna.
             // O diagnóstico completo continua em diagnosticsReport; a conversa recebe apenas User/Assistant.
             brainUiStage = stage
         }
-        stage(BrainUiStage.VERIFICANDO, "VERIFICANDO — ${post.verification.status.name}")
-        stage(BrainUiStage.CRITICANDO, "CRITICANDO — ${post.critique.status.name}")
+        stage(BrainUiStage.VERIFICANDO)
+        stage(BrainUiStage.CRITICANDO)
         if (post.revision.action == com.brain.behavior.RevisionAction.REVISE) {
-            stage(BrainUiStage.REVISE, "REVISE — ${post.revision.reason}")
-            stage(BrainUiStage.CORRIGINDO, "CORRIGINDO — ${post.revision.targetCriteria.joinToString().ifBlank { "critérios do Brain" }}")
-            if (post.revisionAttempts.isNotEmpty()) stage(BrainUiStage.REEXECUTANDO, "REEXECUTANDO — ${post.revisionAttempts.size} tentativa(s)")
+            stage(BrainUiStage.REVISE)
+            stage(BrainUiStage.CORRIGINDO)
+            if (post.revisionAttempts.isNotEmpty()) stage(BrainUiStage.REEXECUTANDO)
         }
         val evidence = cycle.passos.flatMap { passo ->
             passo.executionEvidence.map { "${passo.passoId}: $it" } + passo.evidencias.map { "${passo.passoId}: ${it}" }
