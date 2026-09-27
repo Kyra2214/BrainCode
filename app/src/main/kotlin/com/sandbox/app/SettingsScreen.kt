@@ -20,6 +20,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -29,7 +30,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.LocalContext
 import com.sandbox.sandbox.BuiltInToolchains
 import com.sandbox.sandbox.ComponentKind
@@ -67,7 +67,7 @@ fun SettingsScreen(viewModel: SandboxViewModel, onBack: () -> Unit) {
 private fun DiagnosticsSettings(viewModel: SandboxViewModel) {
     val ready = viewModel.phase == SandboxPhase.Ready
     val lfmManager = (LocalContext.current.applicationContext as BrainCodeApplication).lfmModelManager
-    val lfmState by lfmManager.state.collectAsStateWithLifecycle()
+    val lfmState by lfmManager.state.collectAsState()
     LazyColumn(modifier = Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Status do sandbox", style = MaterialTheme.typography.titleMedium) }
         item { StatusSection(viewModel) }
