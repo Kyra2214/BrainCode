@@ -24,6 +24,11 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 /** Model artifact is kept outside the APK and verified before first use. */
 object LfmModelSpec {
@@ -228,12 +233,40 @@ class LfmModelManager(private val context: Context) {
     }
 }
 
+/**
+ * Serializes native inference on one dedicated thread and bounds the caller wait.
+ * llama.cpp may ignore interruption after timeout; keeping the executor alive ensures a
+ * timed-out native call cannot overlap the next call against the same native model.
+ */
+internal class LfmNativeInferenceRunner(
+    private val timeoutMs: Long = 3_000L,
+    private val executor: ExecutorService = Executors.newSingleThreadExecutor()
+) : AutoCloseable {
+    init { require(timeoutMs > 0L) }
+
+    fun <T> run(block: () -> T): T {
+        val future = executor.submit(Callable { block() })
+        return try {
+            future.get(timeoutMs, TimeUnit.MILLISECONDS)
+        } catch (error: TimeoutException) {
+            future.cancel(true)
+            throw IllegalStateException("LFM local excedeu o tempo limite de $timeoutMs ms", error)
+        }
+    }
+
+    override fun close() {
+        executor.shutdownNow()
+    }
+}
+
 /** Thin synchronous adapter required by the existing BrainApiGateway contract. */
 class LocalLlmBrainApiGateway(
     context: Context,
-    private val modelManager: LfmModelManager = LfmModelManager(context.applicationContext)
+    private val modelManager: LfmModelManager = LfmModelManager(context.applicationContext),
+    private val timeoutMs: Long = 3_000L
 ) : BrainApiGateway {
     private val mutex = Mutex()
+    private val nativeRunner = LfmNativeInferenceRunner(timeoutMs)
     private var model: LlamaModel? = null
     private var loadedSha256: String? = null
 
@@ -292,27 +325,30 @@ class LocalLlmBrainApiGateway(
             preload().getOrThrow()
         }
         if (modelManager.artifactChangedSinceVerification() || loadedSha256 != modelManager.verifiedSha256()) {
-            preload(10_000L).getOrThrow()
+            preload().getOrThrow()
         }
         check(modelManager.isLoaded() && loadedSha256 == modelManager.verifiedSha256()) { "modelo LFM local não está sincronizado com o GGUF verificado" }
-        val result = runBlocking {
+        return runBlocking {
             mutex.withLock {
                 val loaded = loadModelIfNeeded()
-                Llama.complete(
-                    loaded,
-                    prompt = prompt,
-                    systemPrompt = "Classifique e extraia dados. Responda somente JSON de contrato. Nunca produza uma resposta ao usuário.",
-                    maxTokens = 96
-                )
+                nativeRunner.run {
+                    val result = Llama.complete(
+                        loaded,
+                        prompt = prompt,
+                        systemPrompt = "Classifique e extraia dados. Responda somente JSON de contrato. Nunca produza uma resposta ao usuário.",
+                        maxTokens = 96
+                    )
+                    BrainCompletion(result.text, LfmModelSpec.MODEL_ID, "local", "on-device")
+                }
             }
         }
-        return BrainCompletion(result.text, LfmModelSpec.MODEL_ID, "local", "on-device")
     }
 
     fun close() = runCatching {
         model?.let(Llama::releaseModel)
         model = null
         loadedSha256 = null
+        nativeRunner.close()
     }
 }
 
