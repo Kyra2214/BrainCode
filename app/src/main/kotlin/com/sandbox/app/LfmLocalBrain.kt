@@ -111,6 +111,16 @@ class LfmModelManager(private val context: Context) {
         _state.value = LfmModelState.LOAD_FAILED
     }
 
+    internal fun prepareForReloadAfterNativeRelease() = synchronized(lock) {
+        check(_state.value == LfmModelState.LOADED) { "modelo LFM não está carregado" }
+        check(artifactChangedSinceVerification()) { "GGUF LFM não mudou desde a verificação" }
+        verifiedSha256 = null
+        verifiedSize = -1L
+        verifiedMtime = -1L
+        _state.value = LfmModelState.READY
+    }
+
+
     fun ensureDownloaded(onProgress: (Long, Long) -> Unit = { _, _ -> }): File {
         downloadLock.lock()
         try {
@@ -255,6 +265,7 @@ class LocalLlmBrainApiGateway(
                     loadedSha256 = null
                 }
                 if (modelManager.artifactChangedSinceVerification()) {
+                    if (modelManager.isLoaded()) modelManager.prepareForReloadAfterNativeRelease()
                     modelManager.refreshState(forceVerify = true)
                 }
                 check(modelManager.isReady()) { "modelo LFM local ainda não está disponível" }
