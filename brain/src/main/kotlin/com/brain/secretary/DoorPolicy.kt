@@ -26,8 +26,9 @@ object DoorPolicy {
     /**
      * Contas externas *visíveis* ao executor da porta — não "usadas": cada executor decide se e
      * quando de fato chama a IA (ex.: [com.sandbox.app.PromptGenerationExecutor.escalonar] só
-     * escala quando o score local é insuficiente ou há gatilho explícito de melhoria). Chat nunca
-     * libera; Prompt e Criação liberam desde o início, no mesmo padrão.
+     * escala quando o score local é insuficiente ou há gatilho explícito de melhoria). Chat,
+     * Prompt e Criação liberam visibilidade ao executor; em Chat, a chamada
+     * ocorre somente após miss local e passa pelo gateway com as contas da Policy.
      *
      * Corrigido em 23/09/2026 (ver docs/LEGADO_E_DECISOES.md, "Escalonamento da Porta 2 e DoorPolicy", item 1):
      * antes, a Porta 2 só liberava contas quando o texto original já continha um gatilho de
@@ -38,7 +39,7 @@ object DoorPolicy {
      * `authorizedAccountIds` chegava sempre vazio ao executor.
      */
     fun externalAccountsAllowed(door: Door): Boolean = when (door) {
-        Door.CHAT -> false
+        Door.CHAT -> true
         Door.PROMPT -> true
         Door.CREATE -> true
     }

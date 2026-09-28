@@ -65,10 +65,19 @@ class DoorPolicyTest {
     }
 
     @Test
-    fun `chat nunca permite conta externa, prompt e criacao permitem desde o inicio`() {
-        assertFalse(DoorPolicy.externalAccountsAllowed(Door.CHAT))
+    fun `chat prompt e criacao permitem contas externas ao executor conforme a porta`() {
+        assertTrue(DoorPolicy.externalAccountsAllowed(Door.CHAT))
         assertTrue(DoorPolicy.externalAccountsAllowed(Door.PROMPT))
         assertTrue(DoorPolicy.externalAccountsAllowed(Door.CREATE))
+    }
+
+    @Test
+    fun `chat mantem contas externas bloqueadas quando o usuario proibe APIs`() {
+        val intent = DeterministicSecretary().classify("Sem API externa, só quero conversar sobre Kotlin")
+
+        assertTrue(Restriction.NO_EXTERNAL_APIS in intent.restrictions)
+        assertFalse(intent.scope.externalAccountsAllowed)
+        assertEquals(emptySet<String>(), intent.scope.visibleAccounts(setOf("android:provider-a")))
     }
 
     @Test

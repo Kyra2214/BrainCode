@@ -37,7 +37,7 @@ class ChatResponseExecutor(
     private val knowledgeCycle: KnowledgeLearningCycle? = null,
     private val knowledgePromoter: ResearchKnowledgePromoter? = null,
     private val structuredInterpreter: ConversationInterpreter? = null,
-    /** Camada 2 (llm) do fallback local→llm→web→api. Só é consultada quando a camada 1 (local) erra. */
+    /** Camada 2 (API LLM) do fallback local→llm→web: só após miss local e com contas autorizadas pela Policy. */
     private val drafter: ConversationDrafter? = null,
     private val outputReviewer: OutputReviewer? = null,
     private val secretaryGate: DeterministicSecretaryGate = DeterministicSecretaryGate(),
@@ -77,14 +77,19 @@ class ChatResponseExecutor(
         val noWebRestriction = request.parameters.values.any { value -> value.contains("NO_WEB", ignoreCase = true) || value.contains("no web", ignoreCase = true) }
         val localCalculation = LocalArithmeticCalculator.calculate(prompt)
 
-        // Camada 2 (llm): só entra quando a camada 1 (local) não resolveu. O rascunho da LLM
-        // nunca vira resposta por conta própria: primeiro passa pelo Secretário determinístico
-        // (secretaryGate, o mesmo gate usado no fim do ciclo — nenhuma chamada de api entra aqui)
-        // e, se um outputReviewer LLM também estiver configurado (camada api, opcional), por ele
-        // também. Reprovado em qualquer um, o ciclo segue normalmente para a camada 3 (web).
+        // Camada 2 (API LLM): só entra quando a camada local não resolveu e recebe apenas
+        // decision.authorizedAccountIds. O rascunho nunca vira resposta por conta própria:
+        // passa pelo Secretário determinístico e, se configurado, também pelo outputReviewer.
+        // Se falhar/reprovar, o ciclo segue normalmente para a camada 3 (web).
         var llmDraftText: String? = null
-        if (localMiss && localCalculation == null && !isClarification && drafter != null) {
-            val draft = runCatching { drafter?.rascunhar(prompt, com.brain.conversation.ConversationContext(requestId = request.actionId)) }
+        if (localMiss && localCalculation == null && !composer.isLocalClockQuestion(prompt) && !isClarification && drafter != null) {
+            val draft = runCatching {
+                drafter?.rascunhar(
+                    prompt,
+                    com.brain.conversation.ConversationContext(requestId = request.actionId),
+                    decision.authorizedAccountIds
+                )
+            }
                 .getOrNull()?.takeIf { it.isNotBlank() }
             if (draft != null) {
                 evidence += "chat:llm:implementer"

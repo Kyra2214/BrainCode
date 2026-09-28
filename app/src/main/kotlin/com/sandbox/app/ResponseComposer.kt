@@ -15,6 +15,12 @@ class ResponseComposer(
     private val clock: Clock = Clock.systemDefaultZone(),
     private val conversationEngine: NoInferenceConversationEngine? = null
 ) {
+    /** Data/hora são atalhos locais determinísticos e nunca precisam de provider externo. */
+    fun isLocalClockQuestion(prompt: String): Boolean {
+        val normalized = prompt.lowercase(Locale.ROOT)
+        return asksTime(normalized) || asksDate(normalized)
+    }
+
     fun compose(
         prompt: String,
         research: String = "",

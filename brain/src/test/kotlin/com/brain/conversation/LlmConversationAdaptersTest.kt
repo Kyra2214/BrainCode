@@ -13,8 +13,10 @@ import kotlin.test.assertTrue
 class LlmConversationAdaptersTest {
     private class FakeGateway(private val response: String) : BrainApiGateway {
         val pipelines = mutableListOf<PapelPipeline>()
+        val accountSets = mutableListOf<Set<String>>()
         override fun complete(prompt: String, pipeline: PapelPipeline, authorizedAccountIds: Set<String>): BrainCompletion {
             pipelines += pipeline
+            accountSets += authorizedAccountIds
             return BrainCompletion(response, "model-test", "free", "fake")
         }
     }
@@ -55,5 +57,20 @@ class LlmConversationAdaptersTest {
         val tentative = OrderIntent("quero conversar", Door.CHAT, com.brain.secretary.CreatePhase.CHAT, emptySet(), com.brain.secretary.DoorScope(Door.CHAT, com.brain.secretary.CreatePhase.CHAT, emptySet(), false))
         assertEquals(Door.CHAT, LlmIntentAdvisor(gateway).revisarClassificacao("quero conversar", tentative).door)
         assertTrue(gateway.pipelines.contains(PapelPipeline.CONVERSACAO))
+    }
+
+    @Test
+    fun `conversation drafter exige contas autorizadas por chamada`() {
+        val gateway = FakeGateway("Resposta do modelo")
+        val drafter = LlmConversationDrafter(gateway)
+        val context = ConversationContext("request-1")
+
+        assertEquals("", drafter.rascunhar("pedido", context, emptySet()))
+        assertTrue(gateway.pipelines.isEmpty())
+
+        val accounts = setOf("android:groq")
+        assertEquals("Resposta do modelo", drafter.rascunhar("pedido", context, accounts))
+        assertEquals(listOf(PapelPipeline.CONVERSACAO), gateway.pipelines)
+        assertEquals(listOf(accounts), gateway.accountSets)
     }
 }
