@@ -82,7 +82,7 @@ class ResponseComposer(
     private fun asksDate(prompt: String): Boolean = TriggerLexicon.matches(prompt, TriggerLexicon.PERGUNTAS_DATA)
     private fun looksLikeFactualQuestion(prompt: String): Boolean =
         (TriggerLexicon.matches(prompt, TriggerLexicon.INTERROGATIVOS) &&
-            TriggerLexicon.matches(prompt, TriggerLexicon.TEMAS_TEMPO_REAL)) ||
+            TriggerLexicon.matches(prompt, TriggerLexicon.TEMAS_CLIMA)) ||
             TriggerLexicon.matches(prompt, TriggerLexicon.CONSULTAS_TEMPO_REAL_SEM_INTERROGATIVO)
 
     private fun synthesizeResearch(prompt: String, raw: String): String {

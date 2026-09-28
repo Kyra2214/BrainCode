@@ -110,6 +110,14 @@ object TriggerLexicon {
         "neste momento", "recente", "recentes", "última", "ultima", "últimas", "ultimas", "mais recente"
     )
 
+    /** Sinais exclusivos de clima; os demais sinais de TEMAS_TEMPO_REAL seguem para pesquisa. */
+    val TEMAS_CLIMA = listOf(
+        "temperatura", "clima", "tempo vai fazer", "previsão do tempo", "previsao do tempo",
+        "tempo hoje", "tempo agora", "como está o tempo", "como esta o tempo", "tempo em",
+        "clima em", "temperatura em", "vai fazer sol", "vai fazer frio", "vai fazer calor",
+        "chuva", "vai chover", "sol", "umidade", "vento"
+    )
+
     val CONSULTAS_TEMPO_REAL_SEM_INTERROGATIVO = listOf(
         "tempo hoje", "tempo agora", "tempo em", "clima em", "temperatura em"
     )

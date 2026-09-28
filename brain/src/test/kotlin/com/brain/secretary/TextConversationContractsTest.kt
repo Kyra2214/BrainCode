@@ -126,6 +126,34 @@ class TextConversationContractsTest {
         assertEquals(BlockReason.INCOMPLETE_RESPONSE, result.reason)
     }
 
+    @Test
+    fun `conversa social curta aceita resposta sem overlap lexical`() {
+        val result = gate.evaluate(
+            ConversationResult("Tudo bem! E você?", ConversationStatus.ANSWERED_LOCAL, prompt = "como vai"),
+            recoveryAvailable = true
+        )
+        assertEquals(SecretaryDecision.ACCEPT, result.decision)
+    }
+
+    @Test
+    fun `pergunta factual continua bloqueada quando resposta nao tem relacao`() {
+        val result = gate.evaluate(
+            ConversationResult("O céu é azul.", ConversationStatus.ANSWERED_LOCAL, prompt = "qual a capital da França"),
+            recoveryAvailable = false
+        )
+        assertEquals(SecretaryDecision.BLOCK, result.decision)
+        assertEquals(BlockReason.INCOMPLETE_RESPONSE, result.reason)
+    }
+
+    @Test
+    fun `ola preserva isencao social`() {
+        val result = gate.evaluate(
+            ConversationResult("Olá! Como posso ajudar?", ConversationStatus.ANSWERED_LOCAL, prompt = "ola"),
+            recoveryAvailable = false
+        )
+        assertEquals(SecretaryDecision.ACCEPT, result.decision)
+    }
+
 
     @Test
     fun `promocao preserva pesquisa para resposta factual sem overlap lexical`() {

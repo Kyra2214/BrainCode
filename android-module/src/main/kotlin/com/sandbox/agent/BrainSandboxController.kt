@@ -299,10 +299,12 @@ class BrainSandboxController(
         objective: String,
         runId: String = "chat-${System.currentTimeMillis()}",
         onPasso: (ResultadoPasso) -> Unit = {},
-        intent: OrderIntent? = null
+        intent: OrderIntent? = null,
+        currentPrompt: String? = null
     ): ResultadoCiclo {
-        val designatedIntent = intent ?: secretary.classify(objective)
-        val envelope = inputInterpreter.interpret(objective, designatedIntent)
+        val routingPrompt = currentPrompt?.trim()?.takeIf { it.isNotBlank() } ?: objective
+        val designatedIntent = intent ?: secretary.classify(routingPrompt)
+        val envelope = inputInterpreter.interpret(routingPrompt, designatedIntent)
         emit(runId, "chat", "TaskCreated", mapOf("objective" to objective.take(500)))
         emit(runId, "interpreter", "IntentEnvelopeCreated", envelopePayload(envelope))
         val resolvedCapability = brainRouter.resolveCapability(envelope, capabilities)

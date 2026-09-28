@@ -86,7 +86,8 @@ class DeterministicSecretaryGate {
     }
 
     private fun isSemanticallyRelated(prompt: String, response: String): Boolean {
-        if (Regex("(?i)\\b(oi|olá|ola|bom dia|boa tarde|boa noite)\\b").containsMatchIn(prompt)) return true
+        if (isShortSocial(prompt)) return true
+        if (isShortNonFactualPrompt(prompt)) return true
 
         // Respostas aritméticas determinísticas não precisam compartilhar tokens com a
         // expressão de entrada: "35 × 2" -> "70" é semanticamente correto mesmo sem
@@ -107,6 +108,17 @@ class DeterministicSecretaryGate {
 
     private fun tokens(value: String): Set<String> = Regex("[\\p{L}\\p{N}]{3,}")
         .findAll(value.lowercase()).map { it.value }.toSet()
+
+    private fun isShortSocial(prompt: String): Boolean =
+        Regex("(?i)^\\s*(?:oi|olá|ola|bom dia|boa tarde|boa noite|como vai|tudo bem|e aí|e ai|beleza|obrigado|obrigada|valeu|tchau)(?:[.!?]\\s*)*$")
+            .matches(prompt)
+
+    private fun isShortNonFactualPrompt(prompt: String): Boolean {
+        val normalized = prompt.trim()
+        if (normalized.isEmpty() || normalized.length > 48) return false
+        if (normalized.contains('?')) return false
+        return !com.brain.text.TriggerLexicon.matches(normalized, com.brain.text.TriggerLexicon.INTERROGATIVOS)
+    }
 }
 
 /** Resposta final: somente este tipo pode atravessar a fronteira Conversation → UI. */

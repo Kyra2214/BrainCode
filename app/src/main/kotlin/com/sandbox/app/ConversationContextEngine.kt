@@ -1,7 +1,5 @@
 package com.sandbox.app
 
-import com.brain.prompt.ImprovementVocabulary
-
 data class ConversationContext(
     val idea: String? = null,
     val requirements: List<String> = emptyList(),
@@ -31,7 +29,8 @@ class ConversationContextEngine {
         val continuidade = REFERENCE_PATTERN.containsMatchIn(prompt.lowercase())
         val contextoAnterior = if (continuidade) prior else emptyList()
         val userText = contextoAnterior.filter { it.role == ChatRole.USER }.map { it.content.trim() }.filter(String::isNotBlank)
-        val assistantText = contextoAnterior.filter { it.role == ChatRole.ASSISTANT }.map { it.content.trim() }.filter(String::isNotBlank)
+        val assistantMessages = contextoAnterior.filter { it.role == ChatRole.ASSISTANT && it.content.trim().isNotBlank() }
+        val assistantText = assistantMessages.map { it.content.trim() }
         val all = userText + assistantText
         val idea = all.lastOrNull { IDEA_MARKERS.any { marker -> it.lowercase().contains(marker) } }
         val discarded = compact(all.filter { DISCARDED_MARKERS.any { marker -> it.lowercase().contains(marker) } })
@@ -41,7 +40,12 @@ class ConversationContextEngine {
         val requirements = compact(all.filter { REQUIREMENT_MARKERS.any { marker -> it.lowercase().contains(marker) } }
             .filterNot { discarded.any { rejected -> overlaps(it, rejected) } })
         // O artefato é só o prompt/entrega — sem o invólucro "Encontrei um prompt ... (qualidade 81%):".
-        val artifacts = compact(assistantText.map(PromptEnvelope::extrairPrompt).filter(::isArtifact), 12000)
+        val artifacts = compact(
+            assistantMessages
+                .filter { it.contentType != GeneratedContentType.TEXT || PromptEnvelope.temInvolucro(it.content) || isArtifact(it.content) }
+                .map { PromptEnvelope.extrairPrompt(it.content) },
+            12000
+        )
         val references = if (REFERENCE_PATTERN.containsMatchIn(prompt.lowercase()) || artifacts.lastOrNull()?.let { overlaps(prompt, it) } == true) {
             // Sem o invólucro, o artefato deixou de conter a palavra "prompt", e era ela que roteava o follow-up
             // para o gerador de prompts (e para a pesquisa). Marcamos o tipo explicitamente, ANTES do artefato
@@ -93,11 +97,19 @@ class ConversationContextEngine {
         return aTokens.intersect(bTokens).size >= 2
     }
 
-    private fun isArtifact(text: String): Boolean = text.length > 120 ||
-        listOf("```", "prompt", "especificação", "implementação", "arquivo").any { it in text.lowercase() }
+    private fun isArtifact(text: String): Boolean =
+        listOf("```", "prompt:", "especificação:", "implementação:", "arquivo:", "download:", "anexo:").any {
+            it in text.lowercase()
+        }
 
     companion object {
-        private val REFERENCE_PATTERN = Regex("\\b(?:isso|isso aí|ele|ela|aquele|aquela|continua|aquilo|${ImprovementVocabulary.regex})\\p{L}*\\b|vamos\\s+fazer|agora\\s+(?:implement|quero\\s+(?:o|a|um|uma)\\s+(?:fundo|ambiente|elemento|objeto))")
+        private val REFERENCE_PATTERN = Regex(
+            "(?i)\\b(?:isso|isso aí|ele|ela|aquele|aquela|continua|aquilo|melhore|melhorar|melhora|" +
+                "otimize|otimizar|refaça|refaca|refazer|aprimore|aprimorar|reescreva|reescrever|" +
+                "reformule|reformular|capriche|ajuste|ajustar)\\p{L}*\\b|" +
+                "\\b(?:faça|faca|faz|fazer)\\s+(?:isso|ele|ela|algo\\s+)?melhor\\b|" +
+                "vamos\\s+fazer|agora\\s+(?:implement|quero\\s+(?:o|a|um|uma)\\s+(?:fundo|ambiente|elemento|objeto))"
+        )
         private val IDEA_MARKERS = listOf("tenho uma ideia", "projeto", "aplicativo", "aplicação", "produto")
         private val REQUIREMENT_MARKERS = listOf("precisa", "deve", "requisito", "quero também", "não quero", "poderá", "offline")
         private val DECISION_MARKERS = listOf("vamos usar", "decidimos", "escolhemos", "mudamos", "usar ")

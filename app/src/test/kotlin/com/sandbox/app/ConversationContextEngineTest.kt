@@ -104,6 +104,32 @@ class ConversationContextEngineTest {
         assertTrue(resolved.context.artifacts.isEmpty())
     }
 
+    @Test
+    fun `adjetivo melhor nao anexa historico a pergunta independente`() {
+        val history = listOf(
+            ChatMessage(ChatRole.USER, "qual o tempo em Macaé"),
+            ChatMessage(ChatRole.ASSISTANT, "Agora em Macaé: umidade 92%, vento 12 km/h e previsão de chuva.")
+        )
+
+        val resolved = engine.resolve(history, "qual a melhor linguagem de programação pra iniciar aprender")
+
+        assertTrue(resolved.objective == "qual a melhor linguagem de programação pra iniciar aprender")
+        assertTrue(resolved.context.references.isEmpty())
+        assertTrue(resolved.context.artifacts.isEmpty())
+    }
+
+    @Test
+    fun `melhore ele continua usando contexto de artefato gerado`() {
+        val history = listOf(
+            ChatMessage(ChatRole.USER, "crie um prompt de foguete"),
+            ChatMessage(ChatRole.ASSISTANT, "foguete hiper-realista orbitando Saturno", contentType = GeneratedContentType.PROMPT)
+        )
+
+        val resolved = engine.resolve(history, "melhore ele")
+
+        assertTrue(resolved.context.references.any { it.contains("artefato anterior") })
+    }
+
     // O envelope removido continha a palavra "prompt", que roteava o follow-up para o gerador de prompts.
     @Test
     fun `follow-up de artefato gerado pelo gerador de prompts continua marcado como prompt`() {

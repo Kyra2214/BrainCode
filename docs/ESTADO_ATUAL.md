@@ -6,6 +6,12 @@ Sem HEAD fixo: este documento é atualizado incrementalmente a cada fase, não a
 
 Capability Registry/Discovery, PolicyBroker, ActionGateway, Dispatcher, Agents bounded, SkillRegistry, ReasoningEngine, RequirementDiscovery, AssumptionManager, ContextPack, Planner, AcceptanceCriteria, PlanningGate, AuthorizedPlan, BrainSandboxController, CicloExecucaoPlano, DurableJobRunner/WorkflowEngine, PostExecutionGate, Verification, UniversalCritic, Revision/Fix, Readiness, ValidatedLearning, LayeredMemory e EventStore/BehaviorTrace.
 
+## Correção de roteamento e gate do chat — 2026-09-28
+
+Aplicada a correção incremental do plano `PLANO_CORRECAO_ROTEAMENTO_CHAT.md`: o executor de clima agora recebe somente sinais específicos de clima; sinais gerais de tempo real (placar, notícias, atualidade e similares) seguem para pesquisa. O contexto de conversa não trata o adjetivo isolado "melhor" como continuidade e artefatos são identificados por entrega gerada, envelope de prompt, código ou arquivo, não pelo tamanho da resposta. A classificação usa `ResolvedObjective.currentPrompt` para decidir o domínio, mantendo o objetivo enriquecido apenas para execução. O gate do Secretário isenta conversa social curta e prompts curtos não factuais, mas continua bloqueando respostas sem relação para perguntas factuais.
+
+Regressões adicionadas para futebol/programação versus clima, continuidade explícita (`melhore ele`) e resposta social (`como vai`). Testes focados do módulo `brain` passaram; testes Android e build APK dependem do Android SDK e permanecem como gate do CI.
+
 ## Atualização da Fase 6/7 — branch `phase6-apk` (2026-09-24)
 
 No HEAD `97f9fbf`, foram aplicadas as correções do segundo cenário de `BrainSandboxControllerExecutionTraceTest`, removido o teste de desenho TOCTOU redundante em favor da cobertura de `SandboxResourceManagerDnsPinningTest`, adicionados os gates Python/architecture/doc/orphan ao CI, removido o grader Roofts duplicado e disponibilizado o job manual de release readiness. Também foi corrigido o fixture de proveniência do `SpecialistCapabilitiesTest`, o fixture de readiness de `SpecialistExecutionWiringTest` e o limite de processos do teste Python para não conflitar com threads do runner.

@@ -48,6 +48,11 @@ class IntentEnvelopeTest {
             ,Case("Qual o melhor mecanismo pra criar um app de IPTV?", Door.CHAT, IntentCategory.INFORMATION, Route.CONVERSATION, null)
             ,Case("Como funciona um app de IPTV?", Door.CHAT, IntentCategory.INFORMATION, Route.CONVERSATION, null)
             ,Case("Quais tecnologias posso usar para fazer um app de IPTV?", Door.CHAT, IntentCategory.INFORMATION, Route.CONVERSATION, null)
+            ,Case("Qual o elenco titular do time atual do Real Madrid?", Door.CHAT, IntentCategory.RESEARCH, Route.CAPABILITY, "network.research")
+            ,Case("Qual a melhor linguagem de programação pra iniciar aprender?", Door.CHAT, IntentCategory.RESEARCH, Route.CAPABILITY, "network.research")
+            ,Case("Qual o tempo em Macaé?", Door.CHAT, IntentCategory.WEATHER, Route.CAPABILITY, "weather")
+            ,Case("Qual a temperatura hoje em Macaé?", Door.CHAT, IntentCategory.WEATHER, Route.CAPABILITY, "weather")
+            ,Case("Qual o placar do jogo?", Door.CHAT, IntentCategory.RESEARCH, Route.CAPABILITY, "network.research")
             ,Case("Crie um app de IPTV", Door.CREATE, IntentCategory.CREATION, Route.CREATION, "brain.plan")
         )
 

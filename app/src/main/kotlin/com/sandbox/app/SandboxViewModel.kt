@@ -1024,7 +1024,8 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                             resolved.toBrainObjective(),
                             "chat-${System.currentTimeMillis()}",
                             onPasso = { passo -> viewModelScope.launch(Dispatchers.Main.immediate) { publishStep(passo) } },
-                            intent = intent
+                            intent = intent,
+                            currentPrompt = resolved.currentPrompt
                         )
                         cycle.passos.firstOrNull { it.status == com.sandbox.agent.StatusPasso.AGUARDANDO_APROVACAO && it.approvalId != null }?.let { pending ->
                             pendingApprovalPlan = com.brain.planner.PlanoExecucao(resolved.toBrainObjective(), listOf(com.brain.planner.PassoPlano(pending.passoId, pending.capacidade ?: "workspace.generate", "execução aprovada", parametros = listOf(resolved.toBrainObjective()))))
