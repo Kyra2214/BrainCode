@@ -33,6 +33,10 @@ jobs:
           cache: gradle
       - name: Make Gradle executable
         run: chmod +x ./gradlew
+
+      - name: Enable KVM
+        run: sudo chmod 666 /dev/kvm
+
       - name: Run compatibility instrumentation
         id: ed25519-instrumentation
         continue-on-error: true
