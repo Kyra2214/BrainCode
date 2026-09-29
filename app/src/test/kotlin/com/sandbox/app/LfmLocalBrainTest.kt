@@ -142,7 +142,14 @@ class LfmLocalBrainTest {
         try {
             val timed = runCatching {
                 runner.run {
-                    Thread.sleep(200L)
+                    val finishAt = System.nanoTime() + 200_000_000L
+                    while (System.nanoTime() < finishAt) {
+                        try {
+                            Thread.sleep(10L)
+                        } catch (_: InterruptedException) {
+                            // JNI inference can continue after Future.cancel(true).
+                        }
+                    }
                     "late"
                 }
             }

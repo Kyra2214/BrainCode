@@ -495,9 +495,9 @@ class LfmEntityInterpreter(private val gateway: BrainApiGateway) : ConversationI
 
     override fun extrairEstrutura(prompt: String, context: ConversationContext): EstruturaExtraida {
         val base = deterministic.extrairEstrutura(prompt, context)
-        val shouldExtractEntities = prompt.length >= 20 && ENTITY_CUES.any { cue ->
-            prompt.contains(cue, ignoreCase = true)
-        }
+        val hasEntityCue = ENTITY_CUES.any { cue -> prompt.contains(cue, ignoreCase = true) }
+        val hasProperLocation = PROPER_LOCATION_PATTERN.containsMatchIn(prompt)
+        val shouldExtractEntities = prompt.length >= 20 && (hasEntityCue || hasProperLocation)
         if (!shouldExtractEntities) return base
 
         val entities = runCatching {
@@ -514,6 +514,9 @@ class LfmEntityInterpreter(private val gateway: BrainApiGateway) : ConversationI
     }
 
     private companion object {
+        private val PROPER_LOCATION_PATTERN = Regex(
+            "(?i:\\b(?:em|na|no|para|perto de)\\s+)\\p{Lu}[\\p{L}'-]{2,}"
+        )
         val ENTITY_CUES = setOf(
             "cidade", "estado", "país", "nome", "empresa", "data",
             "endereço", "endereco", "bairro", "rua", "avenida", "cep",

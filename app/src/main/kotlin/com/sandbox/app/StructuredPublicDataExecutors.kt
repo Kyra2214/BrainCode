@@ -89,7 +89,9 @@ class BrasilApiExecutor(
             JSONObject(json(response, "BrasilAPI CEP"))
         }.recoverCatching {
             val viaUrl = "https://viacep.com.br/ws/$cep/json/"
-            val viaResponse = fallbackHttp.get(viaUrl)
+            val viaResponse = runCatching { fallbackHttp.get(viaUrl) }.getOrElse {
+                throw IllegalStateException("ViaCEP indisponível: ${it.message ?: "falha sem detalhe"}", it)
+            }
             val via = JSONObject(json(viaResponse, "ViaCEP"))
             if (via.optBoolean("erro")) error("CEP não encontrado no ViaCEP")
             via.put("city", via.optString("localidade")); via.put("state", via.optString("uf")); via.put("neighborhood", via.optString("bairro")); via.put("street", via.optString("logradouro")); via
@@ -366,7 +368,9 @@ private data class CurrencyPair(val base: String, val quote: String, val amount:
         fun parse(query: String): CurrencyPair {
             val lower = query.lowercase()
             val amount = Regex("(?<!\\w)(\\d+(?:[.,]\\d+)?)").find(lower)?.groupValues?.get(1)?.replace(',', '.')?.toDoubleOrNull()
-            val found = codes.entries.filter { Regex("(?i)\\b${Regex.escape(it.key)}\\b").containsMatchIn(lower) }.distinctBy { it.value }.map { it.value }
+            val found = codes.entries.mapNotNull { entry ->
+                Regex("(?i)\\b${Regex.escape(entry.key)}\\b").find(lower)?.let { it.range.first to entry.value }
+            }.sortedBy { it.first }.map { it.second }.distinct()
             val base = found.firstOrNull() ?: error("informe a moeda de origem")
             val quote = when {
                 found.size >= 2 -> found[1]
