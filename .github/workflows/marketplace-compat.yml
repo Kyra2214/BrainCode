@@ -17,7 +17,7 @@ concurrency:
 jobs:
   ed25519-android:
     name: Ed25519 API ${{ matrix.api-level }}
-    runs-on: macos-14
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -34,6 +34,9 @@ jobs:
       - name: Make Gradle executable
         run: chmod +x ./gradlew
 
+      - name: Enable KVM
+        run: sudo chmod 666 /dev/kvm
+
       - name: Run compatibility instrumentation
         id: ed25519-instrumentation
         continue-on-error: true
@@ -41,9 +44,8 @@ jobs:
         with:
           api-level: ${{ matrix.api-level }}
           target: default
-          # macos-14 é um runner Apple Silicon (ARM64), compatível com a imagem
-          # do emulador e com as bibliotecas nativas arm64-v8a do APK.
-          arch: arm64-v8a
+          # O runner Ubuntu x86_64 com KVM segue o mesmo host/emulador do UI E2E.
+          arch: x86_64
           profile: pixel_2
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
