@@ -32,7 +32,7 @@ class LfmLocalBrainTest {
             OrderIntent("teste", Door.CHAT, com.brain.secretary.CreatePhase.CHAT)
         )
         assertEquals(Door.CHAT, result.door)
-        assertEquals(0.91, result.confidence, 0.0)
+        assertEquals(0.91, requireNotNull(result.confidence), 0.0)
         assertEquals(listOf(PapelPipeline.CONVERSACAO), gateway.pipelines)
     }
 
@@ -77,8 +77,8 @@ class LfmLocalBrainTest {
             }
         }
 
-        val local = CountingAdvisor(OrderIntentSugerido(Door.CHAT, 0.95))
-        val cloud = CountingAdvisor(OrderIntentSugerido(Door.PROMPT, 0.99))
+        val local = CountingAdvisor(OrderIntentSugerido(door = Door.CHAT, confidence = 0.95))
+        val cloud = CountingAdvisor(OrderIntentSugerido(door = Door.PROMPT, confidence = 0.99))
         val advisor = HybridIntentAdvisor(local, cloud)
 
         advisor.revisarClassificacao("capability", OrderIntent("capability", Door.CHAT, com.brain.secretary.CreatePhase.CHAT))
@@ -95,7 +95,7 @@ class LfmLocalBrainTest {
         val metrics = ConversationMetrics()
         val local = object : IntentAdvisor {
             override fun revisarClassificacao(prompt: String, classificacaoTentativa: OrderIntent): OrderIntentSugerido =
-                OrderIntentSugerido(Door.CHAT, 0.5)
+                OrderIntentSugerido(door = Door.CHAT, confidence = 0.5)
         }
         val cloud = object : IntentAdvisor {
             override fun revisarClassificacao(prompt: String, classificacaoTentativa: OrderIntent): OrderIntentSugerido =
@@ -121,7 +121,7 @@ class LfmLocalBrainTest {
             OrderIntent("execute isso", Door.CHAT, com.brain.secretary.CreatePhase.CHAT)
         )
         assertEquals(Door.CHAT, result.door)
-        assertEquals(0.0, result.confidence, 0.0)
+        assertEquals(0.0, requireNotNull(result.confidence), 0.0)
         assertEquals("local-fallback", result.rationale)
     }
 
@@ -142,7 +142,14 @@ class LfmLocalBrainTest {
         try {
             val timed = runCatching {
                 runner.run {
-                    Thread.sleep(200L)
+                    val finishAt = System.nanoTime() + 200_000_000L
+                    while (System.nanoTime() < finishAt) {
+                        try {
+                            Thread.sleep(10L)
+                        } catch (_: InterruptedException) {
+                            // JNI inference can continue after Future.cancel(true).
+                        }
+                    }
                     "late"
                 }
             }
@@ -163,15 +170,15 @@ class LfmLocalBrainTest {
     fun advisorRouting_uses_cloud_only_when_account_is_configured() {
         val local = object : IntentAdvisor {
             override fun revisarClassificacao(prompt: String, classificacaoTentativa: OrderIntent): OrderIntentSugerido =
-                OrderIntentSugerido(Door.CHAT, 0.95)
+                OrderIntentSugerido(door = Door.CHAT, confidence = 0.95)
         }
         val localOnly = object : IntentAdvisor {
             override fun revisarClassificacao(prompt: String, classificacaoTentativa: OrderIntent): OrderIntentSugerido =
-                OrderIntentSugerido(Door.CHAT, 0.0, "local-fallback")
+                OrderIntentSugerido(door = Door.CHAT, confidence = 0.0, rationale = "local-fallback")
         }
         val cloud = object : IntentAdvisor {
             override fun revisarClassificacao(prompt: String, classificacaoTentativa: OrderIntent): OrderIntentSugerido =
-                OrderIntentSugerido(Door.PROMPT, 0.99)
+                OrderIntentSugerido(door = Door.PROMPT, confidence = 0.99)
         }
         val noAccount = IntentAdvisorRouting.select(local, localOnly, cloud, false)
         val withAccount = IntentAdvisorRouting.select(local, localOnly, cloud, true)

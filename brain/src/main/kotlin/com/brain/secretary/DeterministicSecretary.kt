@@ -39,7 +39,7 @@ class DeterministicSecretary(
             door = door,
             phase = phase,
             restrictions = restrictions,
-            externalAccountsAllowed = DoorPolicy.externalAccountsAllowed(door)
+            externalAccountsAllowed = DoorPolicy.externalAccountsAllowed(door) && Restriction.NO_EXTERNAL_APIS !in restrictions
         )
         return OrderIntent(
             original, door, phase, restrictions, scope,
@@ -54,7 +54,12 @@ class DeterministicSecretary(
         if (IntentNegation.hasNegatedOccurrence(text, TriggerLexicon.WEB_TERMS)) add(Restriction.NO_WEB)
         if (IntentNegation.hasNegatedOccurrence(text, TriggerLexicon.VERBOS_CRIACAO + TriggerLexicon.SUBSTANTIVOS_ENTREGAVEL)) add(Restriction.NO_PRODUCE)
         if (IntentNegation.hasNegatedOccurrence(text, TriggerLexicon.EXECUTION_TERMS)) add(Restriction.NO_EXECUTE)
+        if (hasExplicitNoExternalApis(text)) add(Restriction.NO_EXTERNAL_APIS)
     }
+
+    private fun hasExplicitNoExternalApis(text: String): Boolean = Regex(
+        "(?i)\\b(?:sem|não|nao|nunca|evite)\\s+(?:(?:quero|preciso)\\s+)?(?:(?:usar|use|chamar|chame|acessar|acesse|consumir|consuma)\\s+)?(?:(?:a|uma|um)\\s+)?(?:(?:chamada|consulta|uso)\\s+(?:de\\s+)?)?(?:api(?:s)?(?:\\s+extern[ao]s?)?|provedor(?:es)?\\s+extern[ao]s?|modelo(?:s)?\\s+extern[ao]s?)\\b"
+    ).containsMatchIn(text)
 
     private fun isPrompt(text: String): Boolean {
         if (text.startsWith("/")) return true

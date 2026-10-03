@@ -107,13 +107,8 @@ object ApiKeyCatalogLoader {
             DynamicApiProvider(
                 providerId = provider.id,
                 modelsEndpoint = modelsEndpoint,
-                papers = provider.models.flatMap { model ->
-                    buildList {
-                        if ("chat" in model.capabilities) add(PapelPipeline.ESCRITA_DE_PROMPT)
-                        if ("coding" in model.capabilities || "agent" in model.capabilities) add(PapelPipeline.EXECUCAO_CODIGO)
-                        if ("reasoning" in model.capabilities) add(PapelPipeline.PLANEJAMENTO)
-                    }
-                }.distinct().ifEmpty { PapelPipeline.entries.toList() },
+                papers = provider.models.flatMap { model -> apiRolesForCapabilities(model.capabilities) }
+                    .distinct().ifEmpty { PapelPipeline.entries.toList() },
                 providerFreeTier = true
             )
         }
@@ -140,3 +135,12 @@ object ApiKeyCatalogLoader {
         )
     }
 }
+
+internal fun apiRolesForCapabilities(capabilities: Collection<String>): List<PapelPipeline> = buildList {
+    if ("chat" in capabilities) {
+        add(PapelPipeline.ESCRITA_DE_PROMPT)
+        add(PapelPipeline.CONVERSACAO)
+    }
+    if ("coding" in capabilities || "agent" in capabilities) add(PapelPipeline.EXECUCAO_CODIGO)
+    if ("reasoning" in capabilities) add(PapelPipeline.PLANEJAMENTO)
+}.distinct().ifEmpty { PapelPipeline.entries.toList() }

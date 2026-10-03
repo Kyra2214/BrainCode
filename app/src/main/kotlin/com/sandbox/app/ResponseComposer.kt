@@ -15,6 +15,12 @@ class ResponseComposer(
     private val clock: Clock = Clock.systemDefaultZone(),
     private val conversationEngine: NoInferenceConversationEngine? = null
 ) {
+    /** Data/hora são atalhos locais determinísticos e nunca precisam de provider externo. */
+    fun isLocalClockQuestion(prompt: String): Boolean {
+        val normalized = prompt.lowercase(Locale.ROOT)
+        return asksTime(normalized) || asksDate(normalized)
+    }
+
     fun compose(
         prompt: String,
         research: String = "",
@@ -86,8 +92,14 @@ class ResponseComposer(
             TriggerLexicon.matches(prompt, TriggerLexicon.CONSULTAS_TEMPO_REAL_SEM_INTERROGATIVO)
 
     private fun synthesizeResearch(prompt: String, raw: String): String {
+        val normalizedPrompt = prompt.lowercase(Locale.ROOT)
+        val weatherTerms = if (TriggerLexicon.matches(normalizedPrompt, TriggerLexicon.TEMAS_CLIMA)) {
+            setOf("temperatura", "chuva", "vento", "umidade", "precipitação", "precipitacao", "nublado", "nublada", "céu", "minima", "mínima", "maxima", "máxima")
+        } else emptySet()
         val topicTerms = Regex("[\\p{L}\\p{N}]{4,}").findAll(prompt.lowercase(Locale.ROOT))
-            .map { it.value }.filterNot { it in setOf("como", "funciona", "sobre", "explique", "fale", "qual", "quais") }.toSet()
+            .map { it.value }.filterNot {
+                it in setOf("como", "funciona", "sobre", "explique", "fale", "qual", "quais", "resumo", "resultado", "informacao", "informação", "trecho")
+            }.toSet() + weatherTerms
         val cleaned = raw
             .replace(Regex("<[^>]+>"), " ")
             .replace(Regex("https?://\\S+"), "")

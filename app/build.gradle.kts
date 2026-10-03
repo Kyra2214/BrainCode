@@ -8,6 +8,7 @@ val configuredVersionCode = System.getenv("BRAINCODE_VERSION_CODE")?.toIntOrNull
 val resolvedVersionCode = maxOf(7, configuredVersionCode ?: ciVersionCode ?: 7)
 val e2eFakeRootfs = providers.gradleProperty("braincode.e2e.fakeRootfs").orNull == "true"
 val e2eOfflineAi = providers.gradleProperty("braincode.e2e.offlineAi").orNull == "true"
+val marketplaceCompatNoNative = providers.gradleProperty("braincode.marketplaceCompat.noNative").orNull == "true"
 
 android {
     namespace = "com.sandbox.app"
@@ -52,6 +53,9 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            // The Ed25519 instrumentation checks Android's JCA provider only; native
+            // LFM/proot libraries are irrelevant and would block x86_64 API 26 images.
+            if (marketplaceCompatNoNative) excludes.add("**/*.so")
             keepDebugSymbols += "**/libproot.so"
             keepDebugSymbols += "**/libapp_proot_loader.so"
             keepDebugSymbols += "**/libandroid-shmem.so"

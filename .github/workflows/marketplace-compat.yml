@@ -33,6 +33,10 @@ jobs:
           cache: gradle
       - name: Make Gradle executable
         run: chmod +x ./gradlew
+
+      - name: Enable KVM
+        run: sudo chmod 666 /dev/kvm
+
       - name: Run compatibility instrumentation
         id: ed25519-instrumentation
         continue-on-error: true
@@ -40,13 +44,12 @@ jobs:
         with:
           api-level: ${{ matrix.api-level }}
           target: default
-          # O APK empacota as bibliotecas nativas do sandbox somente em arm64-v8a.
-          # x86_64 falha antes do teste com INSTALL_FAILED_NO_MATCHING_ABIS.
-          arch: arm64-v8a
+          # O runner Ubuntu x86_64 com KVM segue o mesmo host/emulador do UI E2E.
+          arch: x86_64
           profile: pixel_2
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
-          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.sandbox.app.Ed25519CompatibilityInstrumentedTest --no-daemon --stacktrace
+          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.sandbox.app.Ed25519CompatibilityInstrumentedTest -Pbraincode.marketplaceCompat.noNative=true -Pbraincode.e2e.fakeRootfs=true --no-daemon --stacktrace
 
       # O teste usa org.junit.Assume para virar "skip" (não "fail") quando o
       # provider JCA Ed25519 não existe nesta imagem de emulador. O runner do

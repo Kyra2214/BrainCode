@@ -46,6 +46,9 @@ class FunctionSplitterTest {
         listOf("não pesquise referências", "sem pesquisar referências", "evite pesquisar referências").forEach { objetivo ->
             assertFalse(objetivo, "network.research" in KeywordFunctionSplitter().split(objetivo).map { it.capacidade })
         }
+        assertFalse(
+            "network.research" in KeywordFunctionSplitter().split("não pesquise a cotação do dólar agora").map { it.capacidade }
+        )
     }
 
     @Test

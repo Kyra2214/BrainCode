@@ -30,10 +30,13 @@ class KeywordFunctionSplitter : FunctionSplitter {
         val pedidoVisualDePrompt = PromptDomain.classificar(normalizado) == PromptDomain.IMAGEM &&
             IntentNegation.hasAllowedOccurrence(normalizado, "transforme", "transformar", "transformando", "alteração", "alteracao", "altere", "modifique", "modificar", "edite", "editar", "converta", "converter", "recrie", "recriar", "aplique", "aplicar")
         val pedidoDePrompt = pedidoLiteralDePrompt || pedidoVisualDePrompt
+        val pesquisaNegada = IntentNegation.hasNegatedOccurrence(normalizado, TriggerLexicon.VERBOS_PESQUISA)
         val pesquisaExplicita = IntentNegation.hasAllowedOccurrence(normalizado, TriggerLexicon.VERBOS_PESQUISA)
-        val perguntaFactual = (TriggerLexicon.matches(normalizado, TriggerLexicon.INTERROGATIVOS) &&
-            TriggerLexicon.matches(normalizado, TriggerLexicon.TEMAS_CLIMA)) ||
-            TriggerLexicon.matches(normalizado, TriggerLexicon.CONSULTAS_TEMPO_REAL_SEM_INTERROGATIVO)
+        val perguntaFactual = !pesquisaNegada && (
+            (TriggerLexicon.matches(normalizado, TriggerLexicon.INTERROGATIVOS) &&
+                TriggerLexicon.matches(normalizado, TriggerLexicon.TEMAS_TEMPO_REAL)) ||
+                TriggerLexicon.matches(normalizado, TriggerLexicon.CONSULTAS_TEMPO_REAL_SEM_INTERROGATIVO)
+            )
         // Prompts visuais se beneficiam de referências técnicas mesmo quando o usuário
         // não escreve literalmente "pesquise"; prompts de arquitetura/texto não devem
         // ganhar uma etapa de rede apenas por conter a palavra "prompt".

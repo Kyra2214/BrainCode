@@ -52,6 +52,12 @@ Roofts 0.6 está integrado ao runtime de descoberta: `RooftsSkillLoader` mantém
 
 CI/E2E devem ser considerados somente após execução comprovada no HEAD deste documento.
 
+## Migração de APIs por porta — 28/09/2026
+
+**Fase 1 (em validação):** `Door.CHAT` pode expor contas ao executor; `ChatResponseExecutor` tenta primeiro memória/engine local e os atalhos determinísticos (cálculo e data/hora), e somente em miss local chama o `LlmConversationDrafter` via `BrainApiGateway` com `decision.authorizedAccountIds`. A resposta continua sendo rascunho, passa pelo gate do Secretário e cai para WebResearch se a API falhar ou o rascunho for rejeitado. O mapeamento de modelos com capability `chat` inclui `PapelPipeline.CONVERSACAO`. A restrição explícita `NO_EXTERNAL_APIS` mantém contas externas ocultas. O LFM permanece no repositório e não é mais wired na Porta 1; E2E fake/offline não chama API.
+
+**Fases 2–4 não concluídas:** retrieval universal ainda não está conectado às três portas; o request/client atual não envia `tools` nem lê `tool_calls`, portanto tool-calling não foi habilitado. O catálogo contém dez providers, mas suporte por provider/modelo precisa de auditoria documental/contratual e testes de integração antes de qualquer loop de tools. LFM, `HybridIntentAdvisor` e partes do léxico permanecem ativos até estabilidade real da Fase 1/2. Não há evidência de quota/latência ou estabilidade em produção neste HEAD; CI/E2E/readiness e validação com credenciais reais continuam gates.
+
 ## Fase 1 — implementação incremental em 20/09/2026
 
 O primeiro módulo da consolidação das três portas foi implementado sem substituir o Brain Core. O pacote `com.brain.secretary` agora contém `Door`, `CreatePhase`, `Restriction`, `DoorScope`, `OrderIntent`, `SecretaryState`, `DeterministicSecretary` e `DoorPolicy`. O `DoorAwareSplitter` aplica a intenção antes de criar o `PlanoExecucao`.
@@ -70,7 +76,7 @@ A decisão D1 permanece na opção A. **Atualização de 23/09/2026:** o gating 
 
 ## Fase 2 — Porta 1: Chat / Plano
 
-`chat.respond` foi registrado como capability local e o `DoorAwareSplitter` passou a produzir o passo conversacional para intenções `CHAT`, mantendo `network.research` como dependência apenas quando a Policy permite. O `ChatResponseExecutor` responde data/hora local, contexto da sessão em modo somente leitura e resumos de pesquisa recebidos como evidência; não chama API, provider, shell, workspace ou execução.
+`chat.respond` foi registrado como capability local e o `DoorAwareSplitter` passou a produzir o passo conversacional para intenções `CHAT`, mantendo `network.research` como dependência apenas quando a Policy permite. O `ChatResponseExecutor` responde data/hora local, contexto da sessão em modo somente leitura e resumos de pesquisa recebidos como evidência. A migração registrada ao final deste documento agora habilita rascunho API pós-miss local pelo mesmo executor autorizado; não chama shell, workspace ou execução.
 
 ### Evidências locais executadas
 

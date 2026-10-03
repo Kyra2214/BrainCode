@@ -14,6 +14,7 @@ import com.brain.research.ResearchResult
 import com.brain.research.SearchProvider
 import com.brain.research.WebProviderSet
 import com.brain.research.WebResearchAgent
+import com.brain.conversation.ConversationDrafter
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
@@ -175,6 +176,52 @@ class ChatResponseExecutorTest {
         assertTrue(result.evidence.contains("chat:websearch:evidence"))
         assertTrue(result.evidence.contains("chat:conversation:synthesis"))
         assertTrue(result.evidence.contains("chat:secretary:accept"))
+    }
+
+    @Test
+    fun `miss local usa rascunho API com as contas aprovadas pela Policy`() {
+        var receivedAccounts: Set<String>? = null
+        val drafter = object : ConversationDrafter {
+            override fun rascunhar(prompt: String, context: com.brain.conversation.ConversationContext): String =
+                error("o caminho de produção deve fornecer as contas autorizadas")
+
+            override fun rascunhar(
+                prompt: String,
+                context: com.brain.conversation.ConversationContext,
+                authorizedAccountIds: Set<String>
+            ): String {
+                receivedAccounts = authorizedAccountIds
+                return "Kotlin é uma linguagem de programação."
+            }
+        }
+        val authorized = setOf("android:groq")
+        val result = ChatResponseExecutor(conversationEngine = engine(), drafter = drafter)
+            .execute(request("O que é Kotlin?"), capability, decision.copy(authorizedAccountIds = authorized))
+
+        assertTrue(result.success)
+        assertEquals(authorized, receivedAccounts)
+        assertTrue(result.result!!.contains("linguagem de programação"))
+        assertTrue(result.evidence.contains("chat:llm:implementer:accepted"))
+    }
+
+    @Test
+    fun `saudacao calculo e data hora nao chamam a API`() {
+        var calls = 0
+        val drafter = ConversationDrafter { _, _ -> calls++; "resposta externa" }
+        val executor = ChatResponseExecutor(
+            clock = Clock.fixed(Instant.parse("2026-09-21T18:30:00Z"), ZoneId.of("UTC")),
+            conversationEngine = engine(),
+            drafter = drafter
+        )
+
+        val greeting = executor.execute(request("oi"), capability, decision)
+        val calculation = executor.execute(request("7×5"), capability, decision)
+        val clock = executor.execute(request("Que horas são?"), capability, decision)
+
+        assertTrue(greeting.success)
+        assertEquals("35", calculation.result)
+        assertTrue(clock.result!!.contains("18:30"))
+        assertEquals(0, calls)
     }
 
     @Test

@@ -61,6 +61,14 @@ data class EstruturaExtraida(
  */
 fun interface ConversationDrafter {
     fun rascunhar(prompt: String, context: ConversationContext): String
+
+    /**
+     * Variante por execução: adapters externos devem respeitar somente as contas
+     * aprovadas pela Policy para esta chamada. Implementações locais continuam
+     * compatíveis com o contrato sem contas.
+     */
+    fun rascunhar(prompt: String, context: ConversationContext, authorizedAccountIds: Set<String>): String =
+        rascunhar(prompt, context)
 }
 
 /** QC da saída bruta do agente; não toma decisão de aprovação. */
