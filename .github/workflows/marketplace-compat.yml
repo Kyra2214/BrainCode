@@ -49,7 +49,7 @@ jobs:
           profile: pixel_2
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           disable-animations: true
-          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.sandbox.app.Ed25519CompatibilityInstrumentedTest --no-daemon --stacktrace
+          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.sandbox.app.Ed25519CompatibilityInstrumentedTest -Pbraincode.marketplaceCompat.noNative=true -Pbraincode.e2e.fakeRootfs=true --no-daemon --stacktrace
 
       # O teste usa org.junit.Assume para virar "skip" (não "fail") quando o
       # provider JCA Ed25519 não existe nesta imagem de emulador. O runner do
