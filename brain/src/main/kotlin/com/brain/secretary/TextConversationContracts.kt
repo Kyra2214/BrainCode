@@ -117,7 +117,7 @@ class DeterministicSecretaryGate {
         val normalized = prompt.trim()
         if (normalized.isEmpty() || normalized.length > 48) return false
         if (normalized.contains('?')) return false
-        return !com.brain.text.TriggerLexicon.matches(normalized, com.brain.text.TriggerLexicon.INTERROGATIVOS)
+        return !normalized.contains('?') && !normalized.startsWith("/")
     }
 }
 

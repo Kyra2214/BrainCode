@@ -76,52 +76,6 @@ object TriggerLexicon {
         "(?i)ainda\\s+não\\s+quero\\s+(criar|desenvolver|implementar|construir)"
     )
 
-    // Pesquisa e perguntas factuais que dependem de informação externa.
-    val VERBOS_PESQUISA = listOf(
-        "pesquisar", "pesquise", "pesquisa", "pesquisando",
-        "procurar", "procure", "procura", "buscar", "busque", "busca",
-        "verificar", "verifique", "confira", "conferir", "checar", "cheque", "checagem",
-        "consultar", "consulte", "consulta", "atualizar", "atualize", "atualização", "atualizacao",
-        "descobrir", "descubra", "investigar", "investigue", "investigação", "investigacao",
-        "analisar", "analise", "análise", "comparar", "compare", "comparação", "comparacao",
-        "encontrar", "encontre", "documentar", "documente", "rastrear", "rastreie",
-        "monitorar", "monitore", "acompanhar", "acompanhe", "avaliar", "avalie",
-        "informar-se", "se informar", "saber sobre", "quero saber", "me diga", "me fala",
-        "me conta", "mostrar", "mostre", "mais atual", "mais recentes", "mudanças recentes", "técnicas atuais"
-    )
-
-    val INTERROGATIVOS = listOf(
-        "qual", "quais", "quanto", "quanta", "quantos", "quantas", "quando", "onde", "aonde",
-        "quem", "por que", "por quê", "porque", "como está", "como esta", "tem como saber"
-    )
-
-    val TEMAS_TEMPO_REAL = listOf(
-        "temperatura", "clima", "tempo vai fazer", "previsão do tempo", "previsao do tempo",
-        "tempo hoje", "tempo agora", "como está o tempo", "como esta o tempo", "tempo em", "clima em", "temperatura em",
-        "vai fazer sol", "vai fazer frio", "vai fazer calor",
-        "chuva", "vai chover", "sol", "umidade", "vento", "cotação", "cotacao", "dólar", "dolar",
-        "euro", "bitcoin", "cripto", "criptomoeda", "bolsa de valores",
-        "preço", "preco", "valor atual", "quanto custa", "promoção", "promocao", "desconto",
-        "placar", "resultado do jogo", "campeonato", "jogo de hoje", "quem ganhou",
-        "notícia", "noticia", "notícias", "noticias", "novidade", "manchete",
-        "horário de funcionamento", "horario de funcionamento", "está aberto", "esta aberto",
-        "funciona hoje", "feriado hoje", "é feriado", "e feriado", "trânsito", "transito",
-        "voo", "status do voo", "atraso do voo", "hoje", "agora", "atual", "atualmente",
-        "neste momento", "recente", "recentes", "última", "ultima", "últimas", "ultimas", "mais recente"
-    )
-
-    /** Sinais exclusivos de clima; os demais sinais de TEMAS_TEMPO_REAL seguem para pesquisa. */
-    val TEMAS_CLIMA = listOf(
-        "temperatura", "clima", "tempo vai fazer", "previsão do tempo", "previsao do tempo",
-        "tempo hoje", "tempo agora", "como está o tempo", "como esta o tempo", "tempo em",
-        "clima em", "temperatura em", "vai fazer sol", "vai fazer frio", "vai fazer calor",
-        "chuva", "vai chover", "sol", "umidade", "vento"
-    )
-
-    val CONSULTAS_TEMPO_REAL_SEM_INTERROGATIVO = listOf(
-        "tempo hoje", "tempo agora", "tempo em", "clima em", "temperatura em"
-    )
-
     val PERGUNTAS_HORA = listOf(
         "que horas", "qual a hora", "qual hora", "horário", "horario", "que horas são", "que horas sao",
         "horas agora", "me diz a hora", "hora atual", "hora certa"
