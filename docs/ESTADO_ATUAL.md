@@ -1,5 +1,8 @@
 # BrainCode — Estado Atual
 
+## Fase 2.2 — delegação semântica para tools — 2026-10-04
+O `TriggerLexicon` deixou de decidir domínios semânticos como clima, pesquisa, esporte e atualidade. Essas regras foram preservadas somente em `brain/src/main/kotlin/com/brain/legado/LegacySemanticLexicon.kt` para proveniência, sem participação no roteamento ativo. O `KeywordPlanner`, o `BrainInputInterpreter` e o `ResponseComposer` mantêm apenas atalhos determinísticos locais; consultas semânticas seguem para o chat/provider, que pode acionar `network.research` ou outra tool autorizada. O gate Gradle local não foi executado por ausência de Java 17 no sandbox; a validação desta fase será feita pelo CI do GitHub.
+
 Sem HEAD fixo: este documento é atualizado incrementalmente a cada fase, não a cada commit. Cada seção abaixo registra o commit e as evidências verificadas na época; o estado consolidado mais recente é o das últimas seções ("Fase conversacional", "Research Harness e Web Access" e "Ciclo textual").
 
 ## Consolidado
