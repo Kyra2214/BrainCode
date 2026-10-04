@@ -32,11 +32,36 @@ object ApiCatalogLoader {
                     modeloId = modelo.getString("id"),
                     papeisSugeridos = papeisPara(modelo.optJSONArray("capabilities")),
                     janela = JanelaLimite(),
-                    contextoMaximoTokens = null
+                    contextoMaximoTokens = null,
+                    toolCalling = auditoriaTools(modelo.optJSONObject("toolCalling"))
                 )
             }
         }
         return resultado
+    }
+
+    private fun auditoriaTools(json: JSONObject?): ToolCallingAudit {
+        if (json == null) return ToolCallingAudit()
+        fun status(key: String) = runCatching {
+            ToolSupportStatus.valueOf(json.optString(key, "UNKNOWN").uppercase())
+        }.getOrDefault(ToolSupportStatus.UNKNOWN)
+        fun arguments() = runCatching {
+            ToolArgumentPolicy.valueOf(json.optString("arguments", "UNKNOWN").uppercase())
+        }.getOrDefault(ToolArgumentPolicy.UNKNOWN)
+        val sources = json.optJSONArray("sources")?.let { array ->
+            (0 until array.length()).map { array.getString(it) }
+        } ?: emptyList()
+        return ToolCallingAudit(
+            request = status("request"),
+            response = status("response"),
+            modelVerified = json.optBoolean("modelVerified", false),
+            arguments = arguments(),
+            fallbackInstruction = json.optString(
+                "fallbackInstruction",
+                ToolCallingAudit.DEFAULT_FALLBACK_INSTRUCTION
+            ),
+            sources = sources
+        )
     }
 
     /**

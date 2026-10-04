@@ -1,16 +1,368 @@
 {
-  "version": "2026-09-23.1",
+  "version": "2026-10-04.1",
   "focus": "ai-api-free-only",
   "providers": [
-    {"id":"qwen","name":"Qwen / Alibaba Model Studio","region":"CHINA","officialUrl":"https://www.alibabacloud.com/en/model-studio","documentationUrl":"https://platform.qianwenai.com/docs/api-reference/chat/dashscope","modelsEndpoint":"https://dashscope-intl.aliyuncs.com/api/v1/models","models":[{"id":"qwen-bootstrap","name":"Dynamic free models","capabilities":["chat","reasoning","coding","agent","multimodal"],"access":"FREE_TIER","endpoint":"https://dashscope-intl.aliyuncs.com/compatible-mode/v1","requiresKey":true}]},
-    {"id":"moonshot","name":"Moonshot AI / Kimi","region":"CHINA","officialUrl":"https://www.moonshot.ai","documentationUrl":"https://platform.moonshot.ai/docs","models":[{"id":"moonshot-bootstrap","name":"Dynamic free models","capabilities":["chat","reasoning","coding","agent","long-context"],"access":"FREE_TIER","endpoint":"https://api.moonshot.ai/v1","requiresKey":true}]},
-    {"id":"volcengine","name":"Volcano Engine / Doubao","region":"CHINA","officialUrl":"https://www.volcengine.com","documentationUrl":"https://www.volcengine.com/docs/82379","models":[{"id":"volcengine-bootstrap","name":"Dynamic free models","capabilities":["chat","reasoning","agent","multimodal"],"access":"FREE_TIER","endpoint":"https://ark.cn-beijing.volces.com/api/v3","requiresKey":true}]},
-    {"id":"siliconflow","name":"SiliconFlow","region":"CHINA","officialUrl":"https://siliconflow.cn","documentationUrl":"https://docs.siliconflow.cn","models":[{"id":"siliconflow-bootstrap","name":"Dynamic free models","capabilities":["chat","coding"],"access":"FREE_TIER","endpoint":"https://api.siliconflow.cn/v1","requiresKey":true}]},
-    {"id":"modelscope","name":"ModelScope Inference","region":"CHINA","officialUrl":"https://modelscope.cn","documentationUrl":"https://www.modelscope.cn/docs","models":[{"id":"modelscope-bootstrap","name":"Dynamic free models","capabilities":["chat","coding"],"access":"FREE_TIER","endpoint":"https://api-inference.modelscope.cn/v1","requiresKey":true}]},
-    {"id":"openrouter","name":"OpenRouter","region":"GLOBAL","officialUrl":"https://openrouter.ai","documentationUrl":"https://openrouter.ai/docs","models":[{"id":"openrouter-free","name":"Free models pool","capabilities":["chat","reasoning","coding"],"access":"FREE_TIER","endpoint":"https://openrouter.ai/api/v1","requiresKey":true}]},
-    {"id":"groq","name":"Groq API","region":"GLOBAL","officialUrl":"https://groq.com","documentationUrl":"https://console.groq.com/docs","models":[{"id":"groq-bootstrap","name":"Dynamic free models","capabilities":["chat","reasoning","coding","agent"],"access":"FREE_TIER","endpoint":"https://api.groq.com/openai/v1","requiresKey":true}]},
-    {"id":"gemini","name":"Google Gemini API","region":"GLOBAL","officialUrl":"https://ai.google.dev","documentationUrl":"https://ai.google.dev/gemini-api/docs","models":[{"id":"gemini-bootstrap","name":"Dynamic free models","capabilities":["chat","reasoning","coding","agent","multimodal"],"access":"FREE_TIER","endpoint":"https://generativelanguage.googleapis.com/v1beta/openai","requiresKey":true}]},
-    {"id":"mistral","name":"Mistral AI API","region":"EUROPE","officialUrl":"https://mistral.ai","documentationUrl":"https://docs.mistral.ai","models":[{"id":"mistral-bootstrap","name":"Dynamic free models","capabilities":["chat","reasoning","coding","agent"],"access":"FREE_PERMANENT","endpoint":"https://api.mistral.ai/v1","requiresKey":true}]},
-    {"id":"zai","name":"Z.ai / GLM","region":"CHINA","officialUrl":"https://z.ai","documentationUrl":"https://docs.z.ai","models":[{"id":"glm-4.7-flash","name":"GLM-4.7-Flash","capabilities":["chat","coding","agent"],"access":"FREE_TIER","endpoint":"https://api.z.ai/api/paas/v4","requiresKey":true},{"id":"glm-4.5-flash","name":"GLM-4.5-Flash","capabilities":["chat","coding","agent"],"access":"FREE_TIER","endpoint":"https://api.z.ai/api/paas/v4","requiresKey":true}]}
+    {
+      "id": "qwen",
+      "name": "Qwen / Alibaba Model Studio",
+      "region": "CHINA",
+      "officialUrl": "https://www.alibabacloud.com/en/model-studio",
+      "documentationUrl": "https://platform.qianwenai.com/docs/api-reference/chat/dashscope",
+      "modelsEndpoint": "https://dashscope-intl.aliyuncs.com/api/v1/models",
+      "models": [
+        {
+          "id": "qwen-bootstrap",
+          "name": "Dynamic free models",
+          "capabilities": [
+            "chat",
+            "reasoning",
+            "coding",
+            "agent",
+            "multimodal"
+          ],
+          "access": "FREE_TIER",
+          "endpoint": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+          "requiresKey": true,
+          "toolCalling": {
+            "request": "CONFIRMED",
+            "response": "CONFIRMED",
+            "modelVerified": false,
+            "arguments": "CLIENT_VALIDATES",
+            "fallbackInstruction": "Responda somente em texto natural; não simule tool_calls nem alegue execução externa.",
+            "sources": [
+              "https://www.alibabacloud.com/help/en/model-studio/qwen-api-via-openai-chat-completions",
+              "https://www.alibabacloud.com/help/en/model-studio/qwen-function-calling"
+            ],
+            "auditNote": "Endpoint documentado; alias bootstrap/dinâmico sem modelo concreto verificado. Tools bloqueadas até sondagem runtime autorizada."
+          }
+        }
+      ]
+    },
+    {
+      "id": "moonshot",
+      "name": "Moonshot AI / Kimi",
+      "region": "CHINA",
+      "officialUrl": "https://www.moonshot.ai",
+      "documentationUrl": "https://platform.moonshot.ai/docs",
+      "models": [
+        {
+          "id": "moonshot-bootstrap",
+          "name": "Dynamic free models",
+          "capabilities": [
+            "chat",
+            "reasoning",
+            "coding",
+            "agent",
+            "long-context"
+          ],
+          "access": "FREE_TIER",
+          "endpoint": "https://api.moonshot.ai/v1",
+          "requiresKey": true,
+          "toolCalling": {
+            "request": "CONFIRMED",
+            "response": "CONFIRMED",
+            "modelVerified": false,
+            "arguments": "CLIENT_VALIDATES",
+            "fallbackInstruction": "Responda somente em texto natural; não emita pseudo-tool-calls nem alegue execução externa.",
+            "sources": [
+              "https://platform.moonshot.ai/docs/api/chat",
+              "https://platform.kimi.ai/docs/api/tool-use"
+            ],
+            "auditNote": "Endpoint documentado; alias bootstrap/dinâmico sem modelo concreto verificado. Tools bloqueadas até sondagem runtime autorizada."
+          }
+        }
+      ]
+    },
+    {
+      "id": "volcengine",
+      "name": "Volcano Engine / Doubao",
+      "region": "CHINA",
+      "officialUrl": "https://www.volcengine.com",
+      "documentationUrl": "https://www.volcengine.com/docs/82379",
+      "models": [
+        {
+          "id": "volcengine-bootstrap",
+          "name": "Dynamic free models",
+          "capabilities": [
+            "chat",
+            "reasoning",
+            "agent",
+            "multimodal"
+          ],
+          "access": "FREE_TIER",
+          "endpoint": "https://ark.cn-beijing.volces.com/api/v3",
+          "requiresKey": true,
+          "toolCalling": {
+            "request": "CONFIRMED",
+            "response": "CONFIRMED",
+            "modelVerified": false,
+            "arguments": "CLIENT_VALIDATES",
+            "fallbackInstruction": "Responda somente em texto natural; não interprete texto como comando e não alegue execução externa.",
+            "sources": [
+              "https://www.volcengine.com/docs/ark/chat-api",
+              "https://www.volcengine.com/docs/ark/function-calling"
+            ],
+            "auditNote": "Endpoint documentado; alias bootstrap/dinâmico sem modelo concreto verificado. Tools bloqueadas até sondagem runtime autorizada."
+          }
+        }
+      ]
+    },
+    {
+      "id": "siliconflow",
+      "name": "SiliconFlow",
+      "region": "CHINA",
+      "officialUrl": "https://siliconflow.cn",
+      "documentationUrl": "https://docs.siliconflow.cn",
+      "models": [
+        {
+          "id": "siliconflow-bootstrap",
+          "name": "Dynamic free models",
+          "capabilities": [
+            "chat",
+            "coding"
+          ],
+          "access": "FREE_TIER",
+          "endpoint": "https://api.siliconflow.cn/v1",
+          "requiresKey": true,
+          "toolCalling": {
+            "request": "CONFIRMED",
+            "response": "CONFIRMED",
+            "modelVerified": false,
+            "arguments": "CLIENT_VALIDATES",
+            "fallbackInstruction": "Responda somente em texto natural; não simule chamadas nem alegue execução externa.",
+            "sources": [
+              "https://docs.siliconflow.com/en/api-reference/chat-completions/chat-completions",
+              "https://docs.siliconflow.com/en/userguide/guides/function-calling"
+            ],
+            "auditNote": "Endpoint documentado; alias bootstrap/dinâmico sem modelo concreto verificado. Tools bloqueadas até sondagem runtime autorizada."
+          }
+        }
+      ]
+    },
+    {
+      "id": "modelscope",
+      "name": "ModelScope Inference",
+      "region": "CHINA",
+      "officialUrl": "https://modelscope.cn",
+      "documentationUrl": "https://www.modelscope.cn/docs",
+      "models": [
+        {
+          "id": "modelscope-bootstrap",
+          "name": "Dynamic free models",
+          "capabilities": [
+            "chat",
+            "coding"
+          ],
+          "access": "FREE_TIER",
+          "endpoint": "https://api-inference.modelscope.cn/v1",
+          "requiresKey": true,
+          "toolCalling": {
+            "request": "CONFIRMED",
+            "response": "CONFIRMED",
+            "modelVerified": false,
+            "arguments": "CLIENT_VALIDATES",
+            "fallbackInstruction": "Responda somente em texto natural; se precisar de ferramenta, informe que ela não está disponível.",
+            "sources": [
+              "https://www.modelscope.ai/docs/model-service/API-Inference/intro",
+              "https://modelscope.cn/models/moonshotai/Kimi-K2-Instruct-0905"
+            ],
+            "auditNote": "Endpoint documentado; alias bootstrap/dinâmico sem modelo concreto verificado. Tools bloqueadas até sondagem runtime autorizada."
+          }
+        }
+      ]
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "region": "GLOBAL",
+      "officialUrl": "https://openrouter.ai",
+      "documentationUrl": "https://openrouter.ai/docs",
+      "models": [
+        {
+          "id": "openrouter-free",
+          "name": "Free models pool",
+          "capabilities": [
+            "chat",
+            "reasoning",
+            "coding"
+          ],
+          "access": "FREE_TIER",
+          "endpoint": "https://openrouter.ai/api/v1",
+          "requiresKey": true,
+          "toolCalling": {
+            "request": "CONFIRMED",
+            "response": "CONFIRMED",
+            "modelVerified": false,
+            "arguments": "CLIENT_VALIDATES",
+            "fallbackInstruction": "Responda somente em texto natural; não simule tool_calls nem alegue execução externa.",
+            "sources": [
+              "https://openrouter.ai/docs/guides/features/tool-calling",
+              "https://openrouter.ai/docs/api_reference/errors-and-debugging"
+            ],
+            "auditNote": "Endpoint documentado; alias bootstrap/dinâmico sem modelo concreto verificado. Tools bloqueadas até sondagem runtime autorizada."
+          }
+        }
+      ]
+    },
+    {
+      "id": "groq",
+      "name": "Groq API",
+      "region": "GLOBAL",
+      "officialUrl": "https://groq.com",
+      "documentationUrl": "https://console.groq.com/docs",
+      "models": [
+        {
+          "id": "groq-bootstrap",
+          "name": "Dynamic free models",
+          "capabilities": [
+            "chat",
+            "reasoning",
+            "coding",
+            "agent"
+          ],
+          "access": "FREE_TIER",
+          "endpoint": "https://api.groq.com/openai/v1",
+          "requiresKey": true,
+          "toolCalling": {
+            "request": "CONFIRMED",
+            "response": "CONFIRMED",
+            "modelVerified": false,
+            "arguments": "CLIENT_VALIDATES",
+            "fallbackInstruction": "Responda somente em texto natural; não alegue execução de ferramenta nem invente resultados.",
+            "sources": [
+              "https://console.groq.com/docs/tool-use/overview",
+              "https://console.groq.com/docs/errors"
+            ],
+            "auditNote": "Endpoint documentado; alias bootstrap/dinâmico sem modelo concreto verificado. Tools bloqueadas até sondagem runtime autorizada."
+          }
+        }
+      ]
+    },
+    {
+      "id": "gemini",
+      "name": "Google Gemini API",
+      "region": "GLOBAL",
+      "officialUrl": "https://ai.google.dev",
+      "documentationUrl": "https://ai.google.dev/gemini-api/docs",
+      "models": [
+        {
+          "id": "gemini-bootstrap",
+          "name": "Dynamic free models",
+          "capabilities": [
+            "chat",
+            "reasoning",
+            "coding",
+            "agent",
+            "multimodal"
+          ],
+          "access": "FREE_TIER",
+          "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai",
+          "requiresKey": true,
+          "toolCalling": {
+            "request": "CONFIRMED",
+            "response": "CONFIRMED",
+            "modelVerified": false,
+            "arguments": "CLIENT_VALIDATES",
+            "fallbackInstruction": "Responda somente em texto natural; não emita pseudo-tool-calls nem alegue ações externas.",
+            "sources": [
+              "https://ai.google.dev/gemini-api/docs/openai",
+              "https://ai.google.dev/gemini-api/docs/function-calling"
+            ],
+            "auditNote": "Endpoint documentado; alias bootstrap/dinâmico sem modelo concreto verificado. Tools bloqueadas até sondagem runtime autorizada."
+          }
+        }
+      ]
+    },
+    {
+      "id": "mistral",
+      "name": "Mistral AI API",
+      "region": "EUROPE",
+      "officialUrl": "https://mistral.ai",
+      "documentationUrl": "https://docs.mistral.ai",
+      "models": [
+        {
+          "id": "mistral-bootstrap",
+          "name": "Dynamic free models",
+          "capabilities": [
+            "chat",
+            "reasoning",
+            "coding",
+            "agent"
+          ],
+          "access": "FREE_PERMANENT",
+          "endpoint": "https://api.mistral.ai/v1",
+          "requiresKey": true,
+          "toolCalling": {
+            "request": "CONFIRMED",
+            "response": "CONFIRMED",
+            "modelVerified": false,
+            "arguments": "CLIENT_VALIDATES",
+            "fallbackInstruction": "Responda somente em texto natural; não simule chamadas de ferramenta nem alegue execução.",
+            "sources": [
+              "https://docs.mistral.ai/api/endpoint/chat",
+              "https://docs.mistral.ai/studio/conversations/function-calling"
+            ],
+            "auditNote": "Endpoint documentado; alias bootstrap/dinâmico sem modelo concreto verificado. Tools bloqueadas até sondagem runtime autorizada."
+          }
+        }
+      ]
+    },
+    {
+      "id": "zai",
+      "name": "Z.ai / GLM",
+      "region": "CHINA",
+      "officialUrl": "https://z.ai",
+      "documentationUrl": "https://docs.z.ai",
+      "models": [
+        {
+          "id": "glm-4.7-flash",
+          "name": "GLM-4.7-Flash",
+          "capabilities": [
+            "chat",
+            "coding",
+            "agent"
+          ],
+          "access": "FREE_TIER",
+          "endpoint": "https://api.z.ai/api/paas/v4",
+          "requiresKey": true,
+          "toolCalling": {
+            "request": "CONFIRMED",
+            "response": "CONFIRMED",
+            "modelVerified": false,
+            "arguments": "CLIENT_VALIDATES",
+            "fallbackInstruction": "Responda somente em texto natural; não simule chamadas de ferramenta nem alegue execução externa.",
+            "sources": [
+              "https://docs.z.ai/api-reference/llm/chat-completion",
+              "https://docs.z.ai/guides/capabilities/function-calling"
+            ],
+            "auditNote": "Endpoint documentado; alias bootstrap/dinâmico sem modelo concreto verificado. Tools bloqueadas até sondagem runtime autorizada."
+          }
+        },
+        {
+          "id": "glm-4.5-flash",
+          "name": "GLM-4.5-Flash",
+          "capabilities": [
+            "chat",
+            "coding",
+            "agent"
+          ],
+          "access": "FREE_TIER",
+          "endpoint": "https://api.z.ai/api/paas/v4",
+          "requiresKey": true,
+          "toolCalling": {
+            "request": "CONFIRMED",
+            "response": "CONFIRMED",
+            "modelVerified": false,
+            "arguments": "CLIENT_VALIDATES",
+            "fallbackInstruction": "Responda somente em texto natural; não simule chamadas de ferramenta nem alegue execução externa.",
+            "sources": [
+              "https://docs.z.ai/api-reference/llm/chat-completion",
+              "https://docs.z.ai/guides/capabilities/function-calling"
+            ],
+            "auditNote": "Endpoint documentado; alias bootstrap/dinâmico sem modelo concreto verificado. Tools bloqueadas até sondagem runtime autorizada."
+          }
+        }
+      ]
+    }
   ]
 }
