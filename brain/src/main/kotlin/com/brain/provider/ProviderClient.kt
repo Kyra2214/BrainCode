@@ -46,8 +46,8 @@ class HttpProviderClient(
                     "{\"type\":\"function\",\"function\":{" +
                         "\"name\":${json(tool.name)}," +
                         "\"description\":${json(tool.description)}," +
-                        "\"parameters\":${tool.parametersJson}"
-                        + "}}"
+                        "\"parameters\":${tool.parametersJson}" +
+                        "}}"
                 }
                 append("]")
                 request.toolChoice?.let { append(",\"tool_choice\":${json(it)}") }
