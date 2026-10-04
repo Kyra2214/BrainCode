@@ -18,7 +18,7 @@ object LegacySemanticLexicon {
         "monitorar", "monitore", "acompanhar", "acompanhe", "avaliar", "avalie", "me diga",
         "me fala", "me conta", "mostrar", "mostre", "mais atual", "mais recentes",
         "mudanças recentes", "mudancas recentes", "técnicas atuais", "tecnicas atuais",
-        "informar-se", "se informar", "saber sobre", "quero saber"
+        "informar-se", "se informar", "saber sobre", "quero saber", "atual"
     )
 
     val interrogatives = listOf(
@@ -40,5 +40,9 @@ object LegacySemanticLexicon {
         "umidade", "vento"
     )
 
-    val realtimeWithoutInterrogative = listOf("tempo hoje", "tempo agora", "tempo em", "clima em", "temperatura em")
+    val realtimeWithoutInterrogative = listOf(
+        "tempo hoje", "tempo agora", "tempo em", "clima em", "temperatura em",
+        "cotação", "cotacao", "dólar", "dolar", "euro", "bitcoin", "placar",
+        "notícia", "noticia", "notícias", "noticias", "atual", "atualmente", "recente"
+    )
 }
