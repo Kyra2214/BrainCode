@@ -43,6 +43,6 @@ object LegacySemanticLexicon {
     val realtimeWithoutInterrogative = listOf(
         "tempo hoje", "tempo agora", "tempo em", "clima em", "temperatura em",
         "cotação", "cotacao", "dólar", "dolar", "euro", "bitcoin", "placar",
-        "notícia", "noticia", "notícias", "noticias", "atual", "atualmente", "recente"
+        "notícia", "noticia", "notícias", "noticias"
     )
 }
