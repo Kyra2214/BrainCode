@@ -11,6 +11,8 @@ import com.brain.provider.ProviderClient
 import com.brain.provider.ProviderDispatcher
 import com.brain.provider.ProviderRequest
 import com.brain.provider.ProviderResponse
+import com.brain.provider.ProviderToolCall
+import com.brain.provider.ProviderToolDefinition
 import com.brain.provider.AccountAwareProviderClient
 import com.brain.provider.CredentialProvider
 import com.brain.account.Account
@@ -51,7 +53,9 @@ class BrainApiGateway(
         val fromMemory: Boolean = false,
         val knowledgeValidated: Boolean = false,
         /** Tier de custo real do provider/modelo que respondeu (FREE quando veio da memória). */
-        val costClass: CostClass = CostClass.FREE
+        val costClass: CostClass = CostClass.FREE,
+        /** Chamadas propostas pelo modelo; nunca são executadas neste ponto. */
+        val toolCalls: List<ProviderToolCall> = emptyList()
     )
 
     /**
@@ -61,7 +65,8 @@ class BrainApiGateway(
     internal fun complete(
         prompt: String,
         papel: PapelPipeline = PapelPipeline.ESCRITA_DE_PROMPT,
-        authorizedAccountIds: Set<String> = emptySet()
+        authorizedAccountIds: Set<String> = emptySet(),
+        tools: List<ProviderToolDefinition> = emptyList()
     ): GatewayResult {
         require(prompt.isNotBlank()) { "prompt não pode ser vazio" }
 
@@ -160,10 +165,16 @@ class BrainApiGateway(
                     mapOf("Authorization" to "Bearer $apiKey")
                 }
             )
-            val request = ProviderRequest(model.modeloId, prompt, accountId = accountId)
+            val request = ProviderRequest(model.modeloId, prompt, accountId = accountId, tools = tools)
             val response = ProviderDispatcher(catalog).dispatch(model, client, request).getOrNull()
             if (response != null && response.statusCode in 200..299) {
                 val text = extractText(response.body)
+                if (text.isBlank() && response.toolCalls.isNotEmpty() && tools.isNotEmpty()) {
+                    return GatewayResult(
+                        text = "", providerId = model.providerId, modelId = model.modeloId,
+                        attempts = attempts, costClass = model.cost, toolCalls = response.toolCalls
+                    )
+                }
                 if (text.isNotBlank()) {
                     val source = buildSource(response, model, text)
                     val urls = extractUrls(response.body + "\n" + text)
@@ -260,6 +271,14 @@ private class AndroidProviderClient(
         val payload = JSONObject().apply {
             put("model", request.model)
             put("messages", org.json.JSONArray().put(JSONObject().put("role", "user").put("content", request.prompt)))
+            if (request.tools.isNotEmpty()) {
+                put("tools", org.json.JSONArray(request.tools.map { tool ->
+                    JSONObject().put("type", "function").put("function", JSONObject()
+                        .put("name", tool.name)
+                        .put("description", tool.description)
+                        .put("parameters", JSONObject(tool.parametersJson)))
+                }))
+            }
         }.toString()
         val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
@@ -275,7 +294,21 @@ private class AndroidProviderClient(
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            ProviderResponse(status, body, (System.nanoTime() - started) / 1_000_000, providerId)
+            ProviderResponse(status, body, (System.nanoTime() - started) / 1_000_000, providerId, parseToolCalls(body))
         } finally { connection.disconnect() }
     }
+
+    private fun parseToolCalls(body: String): List<ProviderToolCall> = runCatching {
+        val choice = JSONObject(body).optJSONArray("choices")?.optJSONObject(0) ?: return emptyList()
+        val calls = choice.optJSONObject("message")?.optJSONArray("tool_calls") ?: return emptyList()
+        (0 until calls.length()).mapNotNull { index ->
+            val call = calls.optJSONObject(index) ?: return@mapNotNull null
+            val function = call.optJSONObject("function") ?: return@mapNotNull null
+            val id = call.optString("id").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val name = function.optString("name").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val args = function.optString("arguments", "{}").takeIf { runCatching { JSONObject(it) }.isSuccess }
+                ?: return@mapNotNull null
+            ProviderToolCall(id, name, args)
+        }
+    }.getOrDefault(emptyList())
 }
