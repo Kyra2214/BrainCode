@@ -16,7 +16,9 @@ object LegacySemanticLexicon {
         "descobrir", "descubra", "investigar", "investigue", "analisar", "analise", "comparar",
         "compare", "encontrar", "encontre", "documentar", "documente", "rastrear", "rastreie",
         "monitorar", "monitore", "acompanhar", "acompanhe", "avaliar", "avalie", "me diga",
-        "me fala", "me conta", "mostrar", "mostre"
+        "me fala", "me conta", "mostrar", "mostre", "mais atual", "mais recentes",
+        "mudanças recentes", "mudancas recentes", "técnicas atuais", "tecnicas atuais",
+        "informar-se", "se informar", "saber sobre", "quero saber"
     )
 
     val interrogatives = listOf(

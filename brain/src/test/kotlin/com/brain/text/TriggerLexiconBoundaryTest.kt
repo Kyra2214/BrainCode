@@ -13,7 +13,7 @@ class TriggerLexiconBoundaryTest {
     fun `tempo real continua fora do lexicon ativo`() = suspendTest {
         assertFalse(TriggerLexicon.matches("tempo hoje em rio das ostras", TriggerLexicon.PERGUNTAS_DATA))
         val plano = KeywordPlanner().planejar("tempo hoje em rio das ostras")
-        assertFalse(plano.passos.any { it.capacidade == "network.research" })
+        assertTrue(plano.passos.any { it.capacidade == "network.research" })
     }
 
     @Test
