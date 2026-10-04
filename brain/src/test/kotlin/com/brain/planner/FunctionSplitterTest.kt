@@ -11,9 +11,9 @@ class FunctionSplitterTest {
     fun `splitter divide aplicativo em funcoes com capabilities distintas`() {
         val functions = KeywordFunctionSplitter().split("pesquisar referências, criar aplicativo, compilar e testar")
 
-        assertEquals(listOf("produzir", "executar"), functions.map { it.id })
-        assertEquals(listOf("workspace.write", "sandbox.code"), functions.map { it.capacidade })
-        assertEquals(listOf(emptyList<String>(), listOf("produzir")), functions.map { it.dependeDe })
+        assertEquals(listOf("pesquisar", "produzir", "executar"), functions.map { it.id })
+        assertEquals(listOf("network.research", "workspace.write", "sandbox.code"), functions.map { it.capacidade })
+        assertEquals(listOf(emptyList<String>(), listOf("pesquisar"), listOf("pesquisar", "produzir")), functions.map { it.dependeDe })
         assertTrue(functions.all { it.capacidade.isNotBlank() })
     }
 
@@ -42,7 +42,7 @@ class FunctionSplitterTest {
 
     @Test
     fun `nega pesquisa nas formas nao sem e evite`() {
-        assertFalse("network.research" in KeywordFunctionSplitter().split("pesquise referências").map { it.capacidade })
+        assertEquals(listOf("network.research"), KeywordFunctionSplitter().split("pesquise referências").map { it.capacidade })
         listOf("não pesquise referências", "sem pesquisar referências", "evite pesquisar referências").forEach { objetivo ->
             assertFalse(objetivo, "network.research" in KeywordFunctionSplitter().split(objetivo).map { it.capacidade })
         }
@@ -60,13 +60,13 @@ class FunctionSplitterTest {
     @Test
     fun `combinacoes preservam acoes positivas e bloqueiam as negadas`() {
         val pesquisaSemExecucao = KeywordFunctionSplitter().split("pesquise e não execute")
-        assertFalse("network.research" in pesquisaSemExecucao.map { it.capacidade })
+        assertEquals(listOf("network.research"), pesquisaSemExecucao.map { it.capacidade })
 
         val execucaoSemPesquisa = KeywordFunctionSplitter().split("não pesquise e execute o teste local")
         assertEquals(listOf("sandbox.code"), execucaoSemPesquisa.map { it.capacidade })
 
         val pesquisaProducaoSemExecucao = KeywordFunctionSplitter().split("pesquise, produza o artefato, mas não execute")
-        assertEquals(listOf("workspace.write"), pesquisaProducaoSemExecucao.map { it.capacidade })
+        assertEquals(listOf("network.research", "workspace.write"), pesquisaProducaoSemExecucao.map { it.capacidade })
     }
 
     @Test
@@ -83,8 +83,8 @@ class FunctionSplitterTest {
 
     @Test
     fun `perguntas factuais de tempo real geram pesquisa`() {
-        assertFalse(KeywordFunctionSplitter().split("qual a temperatura de rio das ostras hoje").any { it.capacidade == "network.research" })
-        assertFalse(KeywordFunctionSplitter().split("quanto está o dólar agora").any { it.capacidade == "network.research" })
+        assertTrue(KeywordFunctionSplitter().split("qual a temperatura de rio das ostras hoje").any { it.capacidade == "network.research" })
+        assertTrue(KeywordFunctionSplitter().split("quanto está o dólar agora").any { it.capacidade == "network.research" })
     }
 
     @Test

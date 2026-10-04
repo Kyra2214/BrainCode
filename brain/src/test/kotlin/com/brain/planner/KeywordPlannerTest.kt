@@ -5,7 +5,6 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine
 import com.brain.router.PapelPipeline
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -34,7 +33,7 @@ class KeywordPlannerTest {
         assertEquals("produzir", produzir.id)
         assertEquals("prompt.library.write", produzir.capacidade)
         assertEquals(PapelPipeline.ESCRITA_DE_PROMPT, produzir.papel)
-        assertFalse(plano.passos.any { it.capacidade == "network.research" })
+        assertTrue(plano.passos.any { it.capacidade == "network.research" })
     }
 
     @Test fun `transformacao de foto sem palavra prompt gera prompt e nao diagnostico`() = suspendTest {
@@ -54,13 +53,13 @@ class KeywordPlannerTest {
 
     @Test fun `pedidos de pesquisa mais amplos disparam o passo pesquisar`() = suspendTest {
         val comparar = KeywordPlanner().planejar("compare as abordagens disponíveis atualmente para X")
-        assertFalse(comparar.passos.any { it.capacidade == "network.research" })
+        assertTrue(comparar.passos.any { it.capacidade == "network.research" })
 
         val documentacao = KeywordPlanner().planejar("qual é a documentação atual da API X?")
-        assertFalse(documentacao.passos.any { it.capacidade == "network.research" })
+        assertTrue(documentacao.passos.any { it.capacidade == "network.research" })
 
         val encontrar = KeywordPlanner().planejar("encontre a documentação oficial para implementar X")
-        assertFalse(encontrar.passos.any { it.capacidade == "network.research" })
+        assertTrue(encontrar.passos.any { it.capacidade == "network.research" })
     }
 
     @Test fun `pedidos comuns de prompt visual pesquisam e codigo nao pesquisa`() = suspendTest {
