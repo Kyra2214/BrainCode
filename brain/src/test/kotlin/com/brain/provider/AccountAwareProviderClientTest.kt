@@ -7,6 +7,26 @@ import kotlin.test.assertTrue
 
 class AccountAwareProviderClientTest {
     @Test
+    fun `provider request preserva tools sem misturar credenciais`() {
+        val tool = ProviderToolDefinition(
+            name = "weather",
+            description = "Consulta clima atual",
+            parametersJson = "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}"
+        )
+        val request = ProviderRequest("model-a", "qual o clima", accountId = "account-a", tools = listOf(tool))
+        assertEquals("weather", request.tools.single().name)
+        assertEquals("object", org.json.JSONObject(request.tools.single().parametersJson).optString("type"))
+    }
+
+    @Test
+    fun `tool call exige argumentos JSON objeto`() {
+        val call = ProviderToolCall("call-1", "weather", "{\"city\":\"Niterói\"}")
+        assertEquals("weather", call.name)
+        assertEquals("Niterói", org.json.JSONObject(call.argumentsJson).optString("city"))
+        assertFailsWith<IllegalArgumentException> { ProviderToolCall("call-2", "weather", "[]") }
+    }
+
+    @Test
     fun `resolve credencial apenas para accountId e nao expõe segredo ao caller`() {
         var received: ProviderRequest? = null
         val delegate = object : ProviderClient {

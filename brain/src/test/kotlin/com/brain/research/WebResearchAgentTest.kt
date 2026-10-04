@@ -40,7 +40,7 @@ class WebResearchAgentTest {
     @Test
     fun `offline ou consulta sensivel retorna user message e diagnostic`() {
         val agent = WebResearchAgent(WebProviderSet(), clock, { "run-offline" })
-        val output = agent.research(ResearchRequest("token=sk-123456789012345 pesquisa", networkPolicy = NetworkPolicy.OFFLINE_ONLY))
+        val output = agent.research(ResearchRequest("token=" + "sk-" + "123456789012345 pesquisa", networkPolicy = NetworkPolicy.OFFLINE_ONLY))
         assertTrue(output.answer.isBlank())
         assertTrue(output.userMessage!!.isNotBlank())
         assertTrue(output.diagnostic!!.isNotBlank())

@@ -118,7 +118,7 @@ Não iniciar a integração de APIs externas antes de Porta 1 e Porta 2 estarem 
 [x] separar claramente Chat/Plano das capacidades de Prompt e Criação.
 [x] preservar conversa, contexto, memória, análise, planejamento e Web.
 [x] Web permitida conforme Policy.
-[x] APIs externas bloqueadas nesta fase.
+[ ] Validar a exceção restrita de API conversacional pós-miss local em `chat.respond` (migração iniciada em 28/09/2026; ver `docs/ESTADO_ATUAL.md`); as demais APIs/capabilities continuam limitadas pela Policy.
 [x] impedir vazamento de intenção para pesquisa, produção ou execução quando a ordem/restrição do usuário não permitir.
 [x] consolidar regras de negação/restrição no planejamento.
 [x] validar transições de estado e permissões da Porta 1.
@@ -143,7 +143,7 @@ Não iniciar a integração de APIs externas antes de Porta 1 e Porta 2 estarem 
 
 ### Marco 5.3 — Integração de APIs externas — após Portas 1 e 2
 
-**Nota:** a fatia de gating booleano por porta (`externalAccountsAllowed`) já foi adiantada — ver exceção documentada na regra de execução do Marco 5 e `docs/LEGADO_E_DECISOES.md, "Escalonamento da Porta 2 e DoorPolicy"`, seção 2. Os itens abaixo, referentes à camada completa de integração (Provider/API, registro/descoberta/seleção, testes de contrato), seguem como estavam, sem evidência de avanço além do já registrado.
+**Nota:** a fatia de gating booleano por porta (`externalAccountsAllowed`) já foi adiantada — ver exceção documentada na regra de execução do Marco 5 e `docs/LEGADO_E_DECISOES.md, "Escalonamento da Porta 2 e DoorPolicy"`, seção 2. A chamada de rascunho conversacional da Porta 1, pelo gateway/API já existente e ainda condicionada a validação, é uma exceção incremental desta migração; não equivale à integração completa nem antecipa tool-calling nas três portas. Os demais itens abaixo continuam pendentes.
 
 [ ] somente iniciar quando Porta 1 e Porta 2 estiverem formalmente consolidadas.
 [ ] criar camada de Provider/API sem contaminar o Brain Core.

@@ -807,12 +807,12 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 val webResearchExecutor = WebResearchExecutor(provider = webResearchProvider, researchAgent = automaticConversationResearch)
                 val publicDataCapabilities = PublicDataCapabilityProvider()
                 val conversationKnowledgeCycle = com.brain.memory.KnowledgeLearningCycle()
-                // Porta 1 (CHAT): local → llm → web (sem api — a camada llm usa só o LFM
-                // on-device, gratuito e sem rede; LfmConversationDrafter.rascunhar() devolve ""
-                // se o modelo não estiver carregado, e o fluxo cai direto pra camada 3, como
-                // antes). O revisor da camada 2 é o Secretário determinístico (secretaryGate,
-                // dentro do próprio ChatResponseExecutor) — nenhuma chamada de api entra aqui.
-                val localLlmGateway = (getApplication<BrainCodeApplication>()).localLlmGateway
+                val conversationGatewayAdapter = ConversationBrainGatewayAdapter(brainApiGateway)
+                // Porta 1 (CHAT): atalhos/memória locais → rascunho por API autorizada → WebResearch.
+                // ChatResponseExecutor só chama este drafter após miss local, e o gateway recebe
+                // exclusivamente decision.authorizedAccountIds já filtradas por Secretário/Policy.
+                // E2E offline/fake permanece sem chamadas externas. O LFM legado segue no código,
+                // mas deixou de ser chamado pela Porta 1 nesta fase.
                 val chatResponseExecutor = ChatResponseExecutor(
                     contextProvider = {
                         sessions.firstOrNull { it.id == activeSessionId }?.conversationContext ?: ConversationContext()
@@ -822,7 +822,22 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     knowledgeCycle = conversationKnowledgeCycle,
                     knowledgePromoter = com.brain.memory.ResearchKnowledgePromoter(),
                     structuredInterpreter = null,
-                    drafter = localLlmGateway?.let { LfmConversationDrafter(it) },
+                    drafter = if (BuildConfig.E2E_FAKE_ROOTFS || BuildConfig.E2E_OFFLINE_AI) null else
+                        com.brain.conversation.LlmConversationDrafter(conversationGatewayAdapter),
+                    toolLoop = if (BuildConfig.E2E_FAKE_ROOTFS || BuildConfig.E2E_OFFLINE_AI) null else { prompt, policyContext ->
+                        brainController?.runToolCalling(
+                            prompt,
+                            policyContext,
+                            com.brain.provider.ToolCompletionClient { toolPrompt, tools ->
+                                conversationGatewayAdapter.completeWithTools(
+                                    toolPrompt,
+                                    com.brain.router.PapelPipeline.CONVERSACAO,
+                                    policyContext.authorizedAccountIds,
+                                    tools
+                                )
+                            }
+                        )
+                    },
                     outputReviewer = null
                 )
                 brainController = BrainSandboxController(

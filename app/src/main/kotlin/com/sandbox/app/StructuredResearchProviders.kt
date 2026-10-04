@@ -79,11 +79,11 @@ class WikidataSearchProvider(
 
     private fun readFacts(entityId: String, query: String): List<String> {
         val properties = when {
-            Regex("(?i)\b(nasceu|nascimento|born|birth)\b").containsMatchIn(query) -> listOf("P569")
-            Regex("(?i)\b(morreu|morte|falecimento|died|death)\b").containsMatchIn(query) -> listOf("P570")
-            Regex("(?i)\b(popula|habitantes|population)\b").containsMatchIn(query) -> listOf("P1082")
-            Regex("(?i)\b(capital)\b").containsMatchIn(query) -> listOf("P36")
-            Regex("(?i)\b(fundad|fundação|founded)\b").containsMatchIn(query) -> listOf("P571")
+            Regex("(?i)\\b(nasceu|nascimento|born|birth)\\b").containsMatchIn(query) -> listOf("P569")
+            Regex("(?i)\\b(morreu|morte|falecimento|died|death)\\b").containsMatchIn(query) -> listOf("P570")
+            Regex("(?i)\\b(popula|habitantes|population)\\b").containsMatchIn(query) -> listOf("P1082")
+            Regex("(?i)\\b(capital)\\b").containsMatchIn(query) -> listOf("P36")
+            Regex("(?i)\\b(fundad|fundação|founded)\\b").containsMatchIn(query) -> listOf("P571")
             else -> emptyList()
         }
         if (properties.isEmpty()) return emptyList()
