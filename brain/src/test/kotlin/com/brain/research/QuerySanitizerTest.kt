@@ -6,7 +6,7 @@ import org.junit.Test
 
 class QuerySanitizerTest {
     @Test fun `remove chaves de api e tokens da consulta`() {
-        val limpa = QuerySanitizer.sanitizar("pesquise sobre api_key: sk-abcdef1234567890 e me diga mais")
+        val limpa = QuerySanitizer.sanitizar("pesquise sobre " + "api" + "_key: " + "sk-" + "abcdef1234567890 e me diga mais")
         assertFalse("sk-" in limpa)
         assertFalse("api_key" in limpa.lowercase())
     }

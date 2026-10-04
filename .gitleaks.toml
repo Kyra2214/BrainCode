@@ -1,0 +1,8 @@
+# O corpus é conteúdo textual importado para a biblioteca de prompts.
+# Ele contém exemplos de pedidos sobre credenciais e identificadores de serviços,
+# mas não é código de configuração nem é executado como credencial.
+[allowlist]
+description = "Corpus textual de prompts, sem credenciais de runtime"
+paths = [
+  '''app/src/main/assets/prompts_library\.sql'''
+]
