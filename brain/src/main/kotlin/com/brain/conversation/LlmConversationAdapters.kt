@@ -2,6 +2,8 @@ package com.brain.conversation
 
 import com.brain.provider.ProviderClient
 import com.brain.provider.ProviderRequest
+import com.brain.provider.ProviderToolDefinition
+import com.brain.provider.ToolCompletionTurn
 import com.brain.router.PapelPipeline
 import com.brain.secretary.Door
 import com.brain.secretary.OrderIntent
@@ -21,6 +23,16 @@ data class BrainCompletion(
 /** Gateway abstrato; a implementação de produção pode ser ligada ao BrainApiGateway do app. */
 fun interface BrainApiGateway {
     fun complete(prompt: String, pipeline: PapelPipeline, authorizedAccountIds: Set<String>): BrainCompletion
+}
+
+/** Extensão opcional: gateways antigos continuam funcionando no modo texto-puro. */
+interface ToolAwareBrainApiGateway : BrainApiGateway {
+    fun completeWithTools(
+        prompt: String,
+        pipeline: PapelPipeline,
+        authorizedAccountIds: Set<String>,
+        tools: List<ProviderToolDefinition>
+    ): ToolCompletionTurn
 }
 
 class ProviderBrainApiGateway(
