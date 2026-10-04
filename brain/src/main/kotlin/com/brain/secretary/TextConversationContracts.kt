@@ -1,4 +1,5 @@
 package com.brain.secretary
+import com.brain.legado.LegacySemanticLexicon
 
 /** Decisão única do gate de saída humana. */
 enum class SecretaryDecision { ACCEPT, BLOCK }
@@ -117,7 +118,7 @@ class DeterministicSecretaryGate {
         val normalized = prompt.trim()
         if (normalized.isEmpty() || normalized.length > 48) return false
         if (normalized.contains('?')) return false
-        return !normalized.contains('?') && !normalized.startsWith("/")
+        return !com.brain.text.TriggerLexicon.matches(normalized, LegacySemanticLexicon.interrogatives)
     }
 }
 

@@ -1,4 +1,5 @@
 package com.sandbox.app
+import com.brain.legado.LegacySemanticLexicon
 
 import com.brain.text.TriggerLexicon
 import java.time.Clock
@@ -66,8 +67,13 @@ class ResponseComposer(
                 "Não tenho conhecimento suficiente para responder a essa solicitação com segurança neste momento."
             }
             else -> {
-                evidence += "chat:conversation"
-                "Entendi o pedido: $prompt\nPosso ajudar a organizar a ideia, os requisitos, as decisões e as pendências sem criar ou executar nada."
+                if (looksLikeFactualQuestion(lower)) {
+                    evidence += "chat:conversation:local-miss"
+                    "Não tenho conhecimento suficiente para responder a essa pergunta com segurança neste momento."
+                } else {
+                    evidence += "chat:conversation"
+                    "Entendi o pedido: $prompt\nPosso ajudar a organizar a ideia, os requisitos, as decisões e as pendências sem criar ou executar nada."
+                }
             }
         }
         return ComposedChatResponse(text, evidence)
@@ -75,6 +81,10 @@ class ResponseComposer(
 
     private fun asksTime(prompt: String): Boolean = TriggerLexicon.matches(prompt, TriggerLexicon.PERGUNTAS_HORA)
     private fun asksDate(prompt: String): Boolean = TriggerLexicon.matches(prompt, TriggerLexicon.PERGUNTAS_DATA)
+    private fun looksLikeFactualQuestion(prompt: String): Boolean =
+        (TriggerLexicon.matches(prompt, LegacySemanticLexicon.interrogatives) &&
+            TriggerLexicon.matches(prompt, LegacySemanticLexicon.weatherTopics)) ||
+            TriggerLexicon.matches(prompt, LegacySemanticLexicon.realtimeWithoutInterrogative)
 
     private fun synthesizeResearch(prompt: String, raw: String): String {
         val topicTerms = Regex("[\\p{L}\\p{N}]{4,}").findAll(prompt.lowercase(Locale.ROOT))
@@ -90,7 +100,8 @@ class ResponseComposer(
         val related = sentences.filter { sentence ->
             topicTerms.isEmpty() || topicTerms.any { term -> sentence.lowercase(Locale.ROOT).contains(term) }
         }
-        val factual = false
+        val factual = looksLikeFactualQuestion(prompt.lowercase(Locale.ROOT)) ||
+            Regex("(?i)\\b(tempo|clima|temperatura|previsão|previsao|cotação|cotacao|preço|preco|data|horário|horario)\\b").containsMatchIn(prompt)
         val concrete = related.filter(::hasConcreteFact)
         val selected = when {
             factual && concrete.isNotEmpty() -> concrete.take(2)

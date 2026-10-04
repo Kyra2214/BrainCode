@@ -8,7 +8,7 @@ package com.brain.legado
  * executados através das tools autorizadas, não por listas de palavras.
  */
 @Deprecated("Legado: não usar para classificar ou rotear requisições")
-internal object LegacySemanticLexicon {
+object LegacySemanticLexicon {
     val researchVerbs = listOf(
         "pesquisar", "pesquise", "pesquisa", "pesquisando", "procurar", "procure", "procura",
         "buscar", "busque", "busca", "verificar", "verifique", "confira", "conferir",

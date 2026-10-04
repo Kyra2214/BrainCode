@@ -1,4 +1,5 @@
 package com.brain.planner
+import com.brain.legado.LegacySemanticLexicon
 
 import com.brain.execution.RiskClass
 import com.brain.prompt.PromptDomain
@@ -8,6 +9,7 @@ import com.brain.secretary.DeterministicSecretary
 import com.brain.secretary.DoorPolicy
 import com.brain.secretary.OrderIntent
 import com.brain.text.IntentNegation
+import com.brain.text.TriggerLexicon
 
 /** Decompõe objetivo em funções declarativas; não autoriza nem executa. */
 fun interface FunctionSplitter {
@@ -29,14 +31,15 @@ class KeywordFunctionSplitter : FunctionSplitter {
         val pedidoVisualDePrompt = PromptDomain.classificar(normalizado) == PromptDomain.IMAGEM &&
             IntentNegation.hasAllowedOccurrence(normalizado, "transforme", "transformar", "transformando", "alteração", "alteracao", "altere", "modifique", "modificar", "edite", "editar", "converta", "converter", "recrie", "recriar", "aplique", "aplicar")
         val pedidoDePrompt = pedidoLiteralDePrompt || pedidoVisualDePrompt
-        // Domínios semânticos (pesquisa, clima, esporte e atualidade) não são
-        // decididos por palavras-chave. O chat/provider decide e, quando necessário,
-        // chama a tool autorizada network.research.
+        val pesquisaExplicita = IntentNegation.hasAllowedOccurrence(normalizado, LegacySemanticLexicon.researchVerbs)
+        val perguntaFactual = (TriggerLexicon.matches(normalizado, LegacySemanticLexicon.interrogatives) &&
+            TriggerLexicon.matches(normalizado, LegacySemanticLexicon.weatherTopics)) ||
+            TriggerLexicon.matches(normalizado, LegacySemanticLexicon.realtimeWithoutInterrogative)
         // Prompts visuais se beneficiam de referências técnicas mesmo quando o usuário
         // não escreve literalmente "pesquise"; prompts de arquitetura/texto não devem
         // ganhar uma etapa de rede apenas por conter a palavra "prompt".
         val promptVisual = pedidoDePrompt && PromptDomain.classificar(normalizado) == PromptDomain.IMAGEM
-        val pesquisaNecessaria = false
+        val pesquisaNecessaria = pesquisaExplicita || perguntaFactual || promptVisual
         if (!normalizado.contains("criar documento") && pesquisaNecessaria) {
             passos += PassoPlano(
                 "pesquisar", "network.research", "evidência de pesquisa disponível",
