@@ -1,4 +1,5 @@
 package com.sandbox.app
+import com.brain.legado.LegacySemanticLexicon
 
 import com.brain.text.TriggerLexicon
 import java.time.Clock
@@ -81,9 +82,9 @@ class ResponseComposer(
     private fun asksTime(prompt: String): Boolean = TriggerLexicon.matches(prompt, TriggerLexicon.PERGUNTAS_HORA)
     private fun asksDate(prompt: String): Boolean = TriggerLexicon.matches(prompt, TriggerLexicon.PERGUNTAS_DATA)
     private fun looksLikeFactualQuestion(prompt: String): Boolean =
-        (TriggerLexicon.matches(prompt, TriggerLexicon.INTERROGATIVOS) &&
-            TriggerLexicon.matches(prompt, TriggerLexicon.TEMAS_CLIMA)) ||
-            TriggerLexicon.matches(prompt, TriggerLexicon.CONSULTAS_TEMPO_REAL_SEM_INTERROGATIVO)
+        (TriggerLexicon.matches(prompt, LegacySemanticLexicon.interrogatives) &&
+            TriggerLexicon.matches(prompt, LegacySemanticLexicon.weatherTopics)) ||
+            TriggerLexicon.matches(prompt, LegacySemanticLexicon.realtimeWithoutInterrogative)
 
     private fun synthesizeResearch(prompt: String, raw: String): String {
         val topicTerms = Regex("[\\p{L}\\p{N}]{4,}").findAll(prompt.lowercase(Locale.ROOT))

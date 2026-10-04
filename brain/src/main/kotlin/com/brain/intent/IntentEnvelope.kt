@@ -1,4 +1,5 @@
 package com.brain.intent
+import com.brain.legado.LegacySemanticLexicon
 
 import com.brain.secretary.Door
 import com.brain.secretary.DeterministicSecretary
@@ -113,10 +114,10 @@ class BrainInputInterpreter(
         val weather = !specificLiveData && isWeather(normalized)
         val calculation = isCalculation(normalized) && !specificLiveData
         val navigation = isNavigation(normalized)
-        val liveDataQuestion = !weather && TriggerLexicon.matches(normalized, TriggerLexicon.INTERROGATIVOS) &&
-            TriggerLexicon.matches(normalized, TriggerLexicon.TEMAS_TEMPO_REAL)
+        val liveDataQuestion = !weather && TriggerLexicon.matches(normalized, LegacySemanticLexicon.interrogatives) &&
+            TriggerLexicon.matches(normalized, LegacySemanticLexicon.realtimeTopics)
         val research = !weather && !calculation && !navigation &&
-            (IntentNegation.hasAllowedOccurrence(normalized, TriggerLexicon.VERBOS_PESQUISA) || liveDataQuestion)
+            (IntentNegation.hasAllowedOccurrence(normalized, LegacySemanticLexicon.researchVerbs) || liveDataQuestion)
         val codeExecution = !weather && !calculation && !navigation && !brazilData && !brazilEconomy && !brazilGeography && !currency && !research &&
             IntentNegation.hasAllowedOccurrence(normalized, TriggerLexicon.EXECUTION_TERMS) &&
             TriggerLexicon.matches(normalized, listOf("código", "codigo", "script", "programa", "função", "funcao"))
@@ -270,9 +271,9 @@ class BrainInputInterpreter(
     }
 
     private fun isWeather(text: String): Boolean =
-        (TriggerLexicon.matches(text, TriggerLexicon.TEMAS_CLIMA) &&
-            TriggerLexicon.matches(text, TriggerLexicon.INTERROGATIVOS)) ||
-            TriggerLexicon.matches(text, TriggerLexicon.CONSULTAS_TEMPO_REAL_SEM_INTERROGATIVO) ||
+        (TriggerLexicon.matches(text, LegacySemanticLexicon.weatherTopics) &&
+            TriggerLexicon.matches(text, LegacySemanticLexicon.interrogatives)) ||
+            TriggerLexicon.matches(text, LegacySemanticLexicon.realtimeWithoutInterrogative) ||
             Regex("(?i)\\b(vai chover|quanto está fazendo|quanto esta fazendo)\\b").containsMatchIn(text)
 
     private fun isCalculation(text: String): Boolean =

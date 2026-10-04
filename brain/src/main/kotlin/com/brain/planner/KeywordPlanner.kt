@@ -1,4 +1,5 @@
 package com.brain.planner
+import com.brain.legado.LegacySemanticLexicon
 
 import com.brain.execution.RiskClass
 import com.brain.prompt.PromptDomain
@@ -30,10 +31,10 @@ class KeywordFunctionSplitter : FunctionSplitter {
         val pedidoVisualDePrompt = PromptDomain.classificar(normalizado) == PromptDomain.IMAGEM &&
             IntentNegation.hasAllowedOccurrence(normalizado, "transforme", "transformar", "transformando", "alteração", "alteracao", "altere", "modifique", "modificar", "edite", "editar", "converta", "converter", "recrie", "recriar", "aplique", "aplicar")
         val pedidoDePrompt = pedidoLiteralDePrompt || pedidoVisualDePrompt
-        val pesquisaExplicita = IntentNegation.hasAllowedOccurrence(normalizado, TriggerLexicon.VERBOS_PESQUISA)
-        val perguntaFactual = (TriggerLexicon.matches(normalizado, TriggerLexicon.INTERROGATIVOS) &&
-            TriggerLexicon.matches(normalizado, TriggerLexicon.TEMAS_CLIMA)) ||
-            TriggerLexicon.matches(normalizado, TriggerLexicon.CONSULTAS_TEMPO_REAL_SEM_INTERROGATIVO)
+        val pesquisaExplicita = IntentNegation.hasAllowedOccurrence(normalizado, LegacySemanticLexicon.researchVerbs)
+        val perguntaFactual = (TriggerLexicon.matches(normalizado, LegacySemanticLexicon.interrogatives) &&
+            TriggerLexicon.matches(normalizado, LegacySemanticLexicon.weatherTopics)) ||
+            TriggerLexicon.matches(normalizado, LegacySemanticLexicon.realtimeWithoutInterrogative)
         // Prompts visuais se beneficiam de referências técnicas mesmo quando o usuário
         // não escreve literalmente "pesquise"; prompts de arquitetura/texto não devem
         // ganhar uma etapa de rede apenas por conter a palavra "prompt".

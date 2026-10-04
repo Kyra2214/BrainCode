@@ -14,7 +14,8 @@ data class ProviderModel(
     val papeisSugeridos: List<PapelPipeline>,
     val janela: JanelaLimite,
     val contextoMaximoTokens: Int? = null,
-    val cost: CostClass = CostClass.FREE
+    val cost: CostClass = CostClass.FREE,
+    val toolCalling: ToolCallingAudit = ToolCallingAudit()
 )
 
 data class JanelaLimite(
