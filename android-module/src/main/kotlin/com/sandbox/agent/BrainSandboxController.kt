@@ -187,6 +187,14 @@ class BrainSandboxController(
     fun workflowRunPort(allowExternalAccountsWhenScheduled: Boolean = false): com.brain.workflow.WorkflowRunPort =
         GatewayWorkflowRunPort(policy, actionGateway, actor, authorizedAccountIds, allowExternalAccountsWhenScheduled)
 
+    /** Executa tool-calling com o mesmo Registry, Policy, auditoria e executor do controller. */
+    fun runToolCalling(
+        prompt: String,
+        context: com.brain.policy.PolicyContext,
+        completion: com.brain.provider.ToolCompletionClient
+    ): com.brain.provider.ToolCallingResult =
+        com.brain.provider.ToolCallingLoop(actionGateway, completion).run(prompt, context)
+
     /** Recalcula metadados dinâmicos, como disponibilidade de plugins instalados. */
     fun refreshCapabilities() {
         dynamicCapabilityProviders

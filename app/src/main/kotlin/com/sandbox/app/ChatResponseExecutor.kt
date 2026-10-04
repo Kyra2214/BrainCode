@@ -22,6 +22,8 @@ import com.brain.conversation.ConversationKnowledgeFlow
 import com.brain.conversation.ConversationInterpreter
 import com.brain.conversation.ConversationDrafter
 import com.brain.conversation.OutputReviewer
+import com.brain.provider.ToolCallingResult
+import com.brain.policy.PolicyContext
 import java.time.Clock
 
 /**
@@ -39,6 +41,8 @@ class ChatResponseExecutor(
     private val structuredInterpreter: ConversationInterpreter? = null,
     /** Camada 2 (API LLM) do fallback local→llm→web: só após miss local e com contas autorizadas pela Policy. */
     private val drafter: ConversationDrafter? = null,
+    /** Loop opcional ligado ao ActionGateway único do controller; nulo mantém texto puro. */
+    private val toolLoop: ((String, PolicyContext) -> ToolCallingResult?)? = null,
     private val outputReviewer: OutputReviewer? = null,
     private val secretaryGate: DeterministicSecretaryGate = DeterministicSecretaryGate(),
     val metrics: ConversationMetrics = ConversationMetrics(),
@@ -83,12 +87,18 @@ class ChatResponseExecutor(
         // Se falhar/reprovar, o ciclo segue normalmente para a camada 3 (web).
         var llmDraftText: String? = null
         if (localMiss && localCalculation == null && !composer.isLocalClockQuestion(prompt) && !isClarification && drafter != null) {
+            val toolResult = toolLoop?.invoke(prompt, request.context)
+            if (toolResult?.text?.isNotBlank() == true) {
+                llmDraftText = toolResult.text
+                evidence += "chat:llm:tools"
+                evidence += toolResult.evidence
+            }
             val draft = runCatching {
-                drafter?.rascunhar(
-                    prompt,
-                    com.brain.conversation.ConversationContext(requestId = request.actionId),
-                    decision.authorizedAccountIds
-                )
+                if (llmDraftText == null) drafter?.rascunhar(
+                        prompt,
+                        com.brain.conversation.ConversationContext(requestId = request.actionId),
+                        decision.authorizedAccountIds
+                    ) else null
             }
                 .getOrNull()?.takeIf { it.isNotBlank() }
             if (draft != null) {

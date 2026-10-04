@@ -807,6 +807,7 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                 val webResearchExecutor = WebResearchExecutor(provider = webResearchProvider, researchAgent = automaticConversationResearch)
                 val publicDataCapabilities = PublicDataCapabilityProvider()
                 val conversationKnowledgeCycle = com.brain.memory.KnowledgeLearningCycle()
+                val conversationGatewayAdapter = ConversationBrainGatewayAdapter(brainApiGateway)
                 // Porta 1 (CHAT): atalhos/memória locais → rascunho por API autorizada → WebResearch.
                 // ChatResponseExecutor só chama este drafter após miss local, e o gateway recebe
                 // exclusivamente decision.authorizedAccountIds já filtradas por Secretário/Policy.
@@ -822,7 +823,21 @@ class SandboxViewModel(application: Application) : AndroidViewModel(application)
                     knowledgePromoter = com.brain.memory.ResearchKnowledgePromoter(),
                     structuredInterpreter = null,
                     drafter = if (BuildConfig.E2E_FAKE_ROOTFS || BuildConfig.E2E_OFFLINE_AI) null else
-                        com.brain.conversation.LlmConversationDrafter(ConversationBrainGatewayAdapter(brainApiGateway)),
+                        com.brain.conversation.LlmConversationDrafter(conversationGatewayAdapter),
+                    toolLoop = if (BuildConfig.E2E_FAKE_ROOTFS || BuildConfig.E2E_OFFLINE_AI) null else { prompt, policyContext ->
+                        brainController?.runToolCalling(
+                            prompt,
+                            policyContext,
+                            com.brain.provider.ToolCompletionClient { toolPrompt, tools ->
+                                conversationGatewayAdapter.completeWithTools(
+                                    toolPrompt,
+                                    com.brain.router.PapelPipeline.CONVERSACAO,
+                                    policyContext.authorizedAccountIds,
+                                    tools
+                                )
+                            }
+                        )
+                    },
                     outputReviewer = null
                 )
                 brainController = BrainSandboxController(
