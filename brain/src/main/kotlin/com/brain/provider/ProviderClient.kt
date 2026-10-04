@@ -31,7 +31,7 @@ data class ProviderToolCall(
     init {
         require(id.isNotBlank()) { "id de tool call não pode ser vazio" }
         require(name.isNotBlank()) { "nome de tool call não pode ser vazio" }
-        require(JSONObject(argumentsJson).toString().isNotBlank()) { "argumentos de tool call inválidos" }
+        require(runCatching { JSONObject(argumentsJson) }.isSuccess) { "argumentos de tool call inválidos" }
     }
 }
 
