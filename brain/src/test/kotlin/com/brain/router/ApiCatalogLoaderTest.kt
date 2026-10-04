@@ -55,4 +55,18 @@ class ApiCatalogLoaderTest {
 
         assertEquals(listOf("a", "b"), modelos.map { it.modeloId })
     }
+
+    @Test
+    fun `matriz de tools e carregada mas alias nao auditado fica bloqueado`() {
+        val modelos = ApiCatalogLoader.fromJson(
+            json("""{"id":"provider","models":[{"id":"m","toolCalling":{"request":"CONFIRMED","response":"CONFIRMED","modelVerified":false,"arguments":"CLIENT_VALIDATES","sources":["https://docs.example/tools"]}}]}""")
+        )
+
+        val auditoria = modelos.single().toolCalling
+        assertEquals(ToolSupportStatus.CONFIRMED, auditoria.request)
+        assertEquals(ToolSupportStatus.CONFIRMED, auditoria.response)
+        assertEquals(ToolArgumentPolicy.CLIENT_VALIDATES, auditoria.arguments)
+        assertTrue(auditoria.sources.single().startsWith("https://"))
+        assertTrue(!auditoria.allowsTools())
+    }
 }

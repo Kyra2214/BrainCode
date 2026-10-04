@@ -6,11 +6,20 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 
+data class ToolDefinition(
+    val name: String,
+    val description: String = "",
+    /** JSON Schema do objeto de argumentos. */
+    val parametersJson: String = "{\"type\":\"object\",\"properties\":{}}"
+)
+
 data class ProviderRequest(
     val model: String,
     val prompt: String,
     val headers: Map<String, String> = emptyMap(),
-    val accountId: String? = null
+    val accountId: String? = null,
+    val tools: List<ToolDefinition> = emptyList(),
+    val toolChoice: String? = null
 )
 data class ProviderResponse(val statusCode: Int, val body: String, val latencyMs: Long, val providerId: String)
 
@@ -29,12 +38,31 @@ class HttpProviderClient(
         require(request.model.isNotBlank()) { "model não pode ser vazio" }
         require(request.prompt.isNotBlank()) { "prompt não pode ser vazio" }
         val started = System.nanoTime()
-        val body = "{\"model\":${json(request.model)},\"prompt\":${json(request.prompt)}}"
-        val builder = HttpRequest.newBuilder(endpoint).timeout(timeout).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body))
-        request.headers.filterKeys { it.lowercase() !in setOf("host", "content-length") }.forEach { (key, value) -> builder.header(key, value) }
+        val body = buildString {
+            append("{\"model\":${json(request.model)},\"prompt\":${json(request.prompt)}")
+            if (request.tools.isNotEmpty()) {
+                append(",\"tools\":[")
+                request.tools.joinTo(this, separator = ",") { tool ->
+                    "{\"type\":\"function\",\"function\":{" +
+                        "\"name\":${json(tool.name)}," +
+                        "\"description\":${json(tool.description)}," +
+                        "\"parameters\":${tool.parametersJson}" +
+                        "}}"
+                }
+                append("]")
+                request.toolChoice?.let { append(",\"tool_choice\":${json(it)}") }
+            }
+            append("}")
+        }
+        val builder = HttpRequest.newBuilder(endpoint).timeout(timeout)
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(body))
+        request.headers.filterKeys { it.lowercase() !in setOf("host", "content-length") }
+            .forEach { (key, value) -> builder.header(key, value) }
         val response = http.send(builder.build(), HttpResponse.BodyHandlers.ofString())
         ProviderResponse(response.statusCode(), response.body(), (System.nanoTime() - started) / 1_000_000, providerId)
     }
 
-    private fun json(value: String): String = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\""
+    private fun json(value: String): String =
+        "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\""
 }
